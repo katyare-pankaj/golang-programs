@@ -2,59 +2,148 @@ package main
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
+	"unsafe"
 )
 
-// Task represents a transaction or task for analysis
-type Task struct {
-	name      string
-	startTime time.Time
-	endTime   time.Time
-	cost      float64
+// HighPerformanceRingBuffer is a high-performance ring buffer designed for concurrent use.
+type HighPerformanceRingBuffer struct {
+	data     []byte // Use byte slice for raw memory access
+	writePos uint64
+	readPos  uint64
+	mask     uint64
+	size     int
 }
 
-// Analyzer provides methods to analyze transaction data
-type Analyzer struct {
-	tasks []Task
-}
-
-// NewAnalyzer creates a new Analyzer instance
-func NewAnalyzer() *Analyzer {
-	return &Analyzer{tasks: []Task{}}
-}
-
-// AddTask adds a new task to the analyzer
-func (a *Analyzer) AddTask(task Task) {
-	a.tasks = append(a.tasks, task)
-}
-
-// CalculateTotalCost calculates the total cost of all tasks
-func (a *Analyzer) CalculateTotalCost() float64 {
-	totalCost := 0.0
-	for _, task := range a.tasks {
-		totalCost += task.cost
+// NewHighPerformanceRingBuffer creates a new high-performance ring buffer.
+func NewHighPerformanceRingBuffer(size int) *HighPerformanceRingBuffer {
+	if size <= 0 {
+		panic("Ring buffer size must be positive")
 	}
-	return totalCost
+
+	// Calculate the next power of 2 for efficient masking
+	size--
+	size |= size >> 1
+	size |= size >> 2
+	size |= size >> 4
+	size |= size >> 8
+	size |= size >> 16
+	size |= size >> 32
+	size++
+
+	rb := &HighPerformanceRingBuffer{
+		data: make([]byte, size),
+		mask: uint64(size - 1),
+		size: size,
+	}
+
+	return rb
+}
+
+// Capacity returns the maximum number of events the ring buffer can hold.
+func (rb *HighPerformanceRingBuffer) Capacity() int {
+	return rb.size
+}
+
+// WriteEvent writes an event into the ring buffer. Returns true if successful, false if the buffer is full.
+func (rb *HighPerformanceRingBuffer) WriteEvent(event []byte) bool {
+	eventSize := len(event)
+	if eventSize == 0 {
+		return false // Ignore empty events
+	}
+
+	nextWritePos := (rb.writePos + uint64(eventSize)) & rb.mask
+	if nextWritePos <= rb.readPos {
+		// Buffer is full if next write position would overwrite read position
+		return false
+	}
+
+	// Copy the event size into the buffer at the write position
+	writeIndex := int(rb.writePos) % rb.size
+	if writeIndex+4 <= rb.size {
+		copy(rb.data[writeIndex:], event[:eventSize])
+		*(*uint32)(unsafe.Pointer(&rb.data[writeIndex])) = uint32(eventSize) // Store event size
+	} else {
+		// Handle wrap around
+		copy(rb.data[writeIndex:], event[:rb.size-writeIndex])
+		copy(rb.data[:eventSize-(rb.size-writeIndex)], event[rb.size-writeIndex:])
+		*(*uint32)(unsafe.Pointer(&rb.data[writeIndex])) = uint32(eventSize) // Store event size
+	}
+
+	atomic.StoreUint64(&rb.writePos, nextWritePos)
+	return true
+}
+
+// ReadEvent reads an event from the ring buffer. Returns the event data and true if an event was read, false if the buffer is empty.
+func (rb *HighPerformanceRingBuffer) ReadEvent() ([]byte, bool) {
+	if atomic.LoadUint64(&rb.writePos) == rb.readPos {
+		// Buffer is empty
+		return nil, false
+	}
+
+	// Read the event size first
+	readIndex := int(rb.readPos) % rb.size
+	eventSize := int(*(*uint32)(unsafe.Pointer(&rb.data[readIndex])))
+	if eventSize <= 0 {
+		return nil, false // Corrupted data, return false
+	}
+
+	nextReadPos := (rb.readPos + uint64(eventSize)) & rb.mask
+
+	// Copy the event data into a slice for return
+	eventData := make([]byte, eventSize)
+	if readIndex+4 <= rb.size {
+		copy(eventData, rb.data[readIndex:readIndex+eventSize])
+	} else {
+		// Handle wrap around
+		copy(eventData, rb.data[readIndex:])
+		copy(eventData[eventSize-readIndex:], rb.data[:eventSize-(rb.size-readIndex)])
+	}
+
+	atomic.StoreUint64(&rb.readPos, nextReadPos)
+	return eventData, true
 }
 
 func main() {
-	// Agile principle: Independent development teams (small modules)
-	taskAnalyzer := NewAnalyzer()
+	const numEvents = 1000
+	eventSizes := []int{10, 20, 30, 40, 50} // Variable event sizes for simulation
+	events := make([][]byte, numEvents)
+	for i := range events {
+		eventSize := eventSizes[i%len(eventSizes)]
+		events[i] = make([]byte, eventSize+4) // +4 for storing event size
+		*(*uint32)(unsafe.Pointer(&events[i][0])) = uint32(eventSize)
+	}
 
-	// Agile principle: Incremental Development
-	addTasks(taskAnalyzer)
+	bufferSize := 1024 * 1024 // 1MB buffer
+	ringBuffer := NewHighPerformanceRingBuffer(bufferSize)
 
-	// Perform analysis
-	totalCost := taskAnalyzer.CalculateTotalCost()
-	fmt.Printf("Total Cost: $%.2f\n", totalCost)
+	// Producer goroutine
+	go func() {
+		for i := 0; i < numEvents; i++ {
+			event := events[i]
+			for !ringBuffer.WriteEvent(event) {
+				// Buffer is full, wait for some space
+				time.Sleep(time.Microsecond)
+			}
+		}
+	}()
 
-	// Agile principle: Frequent Releases and Feedback
-	// Continuous Improvement can be implemented here by adding user input or new requirements
-}
+	// Consumer goroutine
+	go func() {
+		for i := 0; i < numEvents; i++ {
+			eventData, ok := ringBuffer.ReadEvent()
+			if !ok {
+				// Buffer is empty, wait for some events
+				time.Sleep(time.Microsecond)
+				continue
+			}
+			// Process the event data
+			_ = eventData
+		}
+	}()
 
-func addTasks(analyzer *Analyzer) {
-	// Simulate adding tasks in increments
-	analyzer.AddTask(Task{name: "Task 1", startTime: time.Now(), endTime: time.Now().Add(time.Minute), cost: 10.0})
-	analyzer.AddTask(Task{name: "Task 2", startTime: time.Now().Add(time.Minute), endTime: time.Now().Add(2 * time.Minute), cost: 20.0})
-	// Add more tasks as needed
+	// Let the goroutines run for a while to process all events
+	time.Sleep(time.Second)
+	fmt.Println("Ring buffer test completed.")
 }
