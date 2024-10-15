@@ -2,60 +2,38 @@ package main
 
 import (
 	"fmt"
-	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/asaskevich/govalidator"
 )
 
-// ImmutableUser data structure
-type ImmutableUser struct {
-	ID    int
-	Name  string
-	Email string
-	// Other fields
-}
-
-func (u ImmutableUser) UpdateName(newName string) ImmutableUser {
-	// Create a new instance with the updated name
-	return ImmutableUser{
-		ID:    u.ID,
-		Name:  newName,
-		Email: u.Email,
-		// Other fields remain the same
+// Example function with multiple paths
+func divide(a, b int) (int, error) {
+	if b == 0 {
+		return 0, fmt.Errorf("division by zero is not allowed")
 	}
-}
 
-// Synchronization function signature
-type Synchronizer func(user ImmutableUser) ImmutableUser
-
-func TestSynchronizationLogic(t *testing.T) {
-	// BDD Scenario: Synchronizing user data should update the name
-	t.Run("Update name during synchronization", func(t *testing.T) {
-		// Given an initial user data
-		initialUser := ImmutableUser{
-			ID:    1,
-			Name:  "Alice",
-			Email: "alice@example.com",
-		}
-
-		// When synchronizing the user data with a function that updates the name
-		synchronizer := updateNameSynchronizer("Bob")
-		synchronizedUser := synchronizer(initialUser)
-
-		// Then the name in the synchronized user data should be updated
-		assert.Equal(t, "Bob", synchronizedUser.Name, "Name should be updated during synchronization")
-		// And the original user data should remain unchanged
-		assert.Equal(t, initialUser.ID, synchronizedUser.ID, "ID should remain the same")
-	})
-}
-
-func updateNameSynchronizer(newName string) Synchronizer {
-	return func(user ImmutableUser) ImmutableUser {
-		// Return a new user with the updated name
-		return user.UpdateName(newName)
+	// Add a check for negative divisor
+	if b < 0 {
+		return 0, fmt.Errorf("division by a negative number is not allowed")
 	}
+
+	return a / b, nil
+}
+
+const (
+	IntMax = int(^uint(0) >> 1)
+	IntMin = -IntMax - 1
+)
+
+type User struct {
+	Name string `valid:"required,length(3|20)"`
+	Age  uint   `valid:"required,min(18)"`
 }
 
 func main() {
-	fmt.Println("Data synchronization tests using immutable data structures")
+	user := User{Name: "John", Age: 17}
+	_, err := govalidator.ValidateStruct(user)
+	if err != nil {
+		fmt.Println("Validation error:", err)
+	}
 }
