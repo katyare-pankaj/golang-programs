@@ -2,60 +2,59 @@ package main
 
 import (
 	"fmt"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
+	"time"
 )
 
-// ImmutableUser data structure
-type ImmutableUser struct {
-	ID    int
-	Name  string
-	Email string
-	// Other fields
+// TCAAnalyzer represents the main class for TCA analysis
+type TCAAnalyzer struct {
+	transactionRecords []Transaction
+	// Other state variables as needed
 }
 
-func (u ImmutableUser) UpdateName(newName string) ImmutableUser {
-	// Create a new instance with the updated name
-	return ImmutableUser{
-		ID:    u.ID,
-		Name:  newName,
-		Email: u.Email,
-		// Other fields remain the same
-	}
-}
-
-// Synchronization function signature
-type Synchronizer func(user ImmutableUser) ImmutableUser
-
-func TestSynchronizationLogic(t *testing.T) {
-	// BDD Scenario: Synchronizing user data should update the name
-	t.Run("Update name during synchronization", func(t *testing.T) {
-		// Given an initial user data
-		initialUser := ImmutableUser{
-			ID:    1,
-			Name:  "Alice",
-			Email: "alice@example.com",
-		}
-
-		// When synchronizing the user data with a function that updates the name
-		synchronizer := updateNameSynchronizer("Bob")
-		synchronizedUser := synchronizer(initialUser)
-
-		// Then the name in the synchronized user data should be updated
-		assert.Equal(t, "Bob", synchronizedUser.Name, "Name should be updated during synchronization")
-		// And the original user data should remain unchanged
-		assert.Equal(t, initialUser.ID, synchronizedUser.ID, "ID should remain the same")
-	})
-}
-
-func updateNameSynchronizer(newName string) Synchronizer {
-	return func(user ImmutableUser) ImmutableUser {
-		// Return a new user with the updated name
-		return user.UpdateName(newName)
-	}
+// Transaction represents a single transaction record
+type Transaction struct {
+	timestamp time.Time
+	cost      float64
 }
 
 func main() {
-	fmt.Println("Data synchronization tests using immutable data structures")
+	// Create a new TCA analyzer
+	analyzer := NewTCAAnalyzer()
+
+	// Process new transactions in an incremental manner
+	analyzer.ProcessTransaction(Transaction{time.Now(), 10.0})
+	analyzer.ProcessTransaction(Transaction{time.Now(), 20.0})
+	// ... and so on
+
+	// Generate reports and analysis
+	fmt.Println("Total Transaction Cost:", analyzer.CalculateTotalCost())
+	fmt.Println("Average Transaction Cost:", analyzer.CalculateAverageCost())
+}
+
+// NewTCAAnalyzer creates a new instance of TCAAnalyzer
+func NewTCAAnalyzer() *TCAAnalyzer {
+	return &TCAAnalyzer{}
+}
+
+// ProcessTransaction adds a new transaction to the analyzer
+func (a *TCAAnalyzer) ProcessTransaction(transaction Transaction) {
+	a.transactionRecords = append(a.transactionRecords, transaction)
+}
+
+// CalculateTotalCost sums up the costs of all transactions
+func (a *TCAAnalyzer) CalculateTotalCost() float64 {
+	totalCost := 0.0
+	for _, transaction := range a.transactionRecords {
+		totalCost += transaction.cost
+	}
+	return totalCost
+}
+
+// CalculateAverageCost calculates the average cost of transactions
+func (a *TCAAnalyzer) CalculateAverageCost() float64 {
+	totalCost := a.CalculateTotalCost()
+	if len(a.transactionRecords) == 0 {
+		return 0.0
+	}
+	return totalCost / float64(len(a.transactionRecords))
 }

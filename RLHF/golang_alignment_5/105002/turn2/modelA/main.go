@@ -2,51 +2,59 @@ package main
 
 import (
 	"fmt"
+	"time"
 )
 
-// Immutable User data structure
-type User struct {
-	ID      int
-	Name    string
-	Email   string
-	version int
+// Task represents a transaction or task for analysis
+type Task struct {
+	name      string
+	startTime time.Time
+	endTime   time.Time
+	cost      float64
 }
 
-func (u User) WithName(name string) User {
-	return User{
-		ID:      u.ID,
-		Name:    name,
-		Email:   u.Email,
-		version: u.version + 1,
-	}
+// Analyzer provides methods to analyze transaction data
+type Analyzer struct {
+	tasks []Task
 }
 
-func (u User) WithEmail(email string) User {
-	return User{
-		ID:      u.ID,
-		Name:    u.Name,
-		Email:   email,
-		version: u.version + 1,
-	}
+// NewAnalyzer creates a new Analyzer instance
+func NewAnalyzer() *Analyzer {
+	return &Analyzer{tasks: []Task{}}
 }
 
-// Synchronization logic using immutable data
-func synchronizeUser(existingUser User, updatedFields map[string]string) User {
-	syncedUser := existingUser
-	for key, value := range updatedFields {
-		switch key {
-		case "name":
-			syncedUser = syncedUser.WithName(value)
-		case "email":
-			syncedUser = syncedUser.WithEmail(value)
-		}
+// AddTask adds a new task to the analyzer
+func (a *Analyzer) AddTask(task Task) {
+	a.tasks = append(a.tasks, task)
+}
+
+// CalculateTotalCost calculates the total cost of all tasks
+func (a *Analyzer) CalculateTotalCost() float64 {
+	totalCost := 0.0
+	for _, task := range a.tasks {
+		totalCost += task.cost
 	}
-	return syncedUser
+	return totalCost
 }
 
 func main() {
-	existingUser := User{ID: 1, Name: "Alice", Email: "alice@example.com", version: 0}
-	updatedFields := map[string]string{"name": "Bob", "email": "bob@example.com"}
-	syncedUser := synchronizeUser(existingUser, updatedFields)
-	fmt.Printf("Synchronized user: %+v\n", syncedUser)
+	// Agile principle: Independent development teams (small modules)
+	taskAnalyzer := NewAnalyzer()
+
+	// Agile principle: Incremental Development
+	addTasks(taskAnalyzer)
+
+	// Perform analysis
+	totalCost := taskAnalyzer.CalculateTotalCost()
+	fmt.Printf("Total Cost: $%.2f\n", totalCost)
+
+	// Agile principle: Frequent Releases and Feedback
+	// Continuous Improvement can be implemented here by adding user input or new requirements
+}
+
+func addTasks(analyzer *Analyzer) {
+	// Simulate adding tasks in increments
+	analyzer.AddTask(Task{name: "Task 1", startTime: time.Now(), endTime: time.Now().Add(time.Minute), cost: 10.0})
+	analyzer.AddTask(Task{name: "Task 2", startTime: time.Now().Add(time.Minute), endTime: time.Now().Add(2 * time.Minute), cost: 20.0})
+	// Add more tasks as needed
 }
