@@ -1,75 +1,63 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 )
 
-const threshold = 10 // Threshold for switching to insertion sort
+// Replica represents a single replica of the data store.
+type Replica struct {
+	data     map[string]int64
+	updating bool
+	mu       sync.Mutex
+}
 
-// hybridSort function: uses quicksort for large arrays and insertion sort for small arrays.
-func hybridSort(arr []int, low int, high int) {
-	if low < high {
-		size := high - low + 1
-		if size <= threshold {
-			insertionSort(arr, low, high)
-		} else {
-			p := partition(arr, low, high)
-			hybridSort(arr, low, p-1)
-			hybridSort(arr, p+1, high)
+// NewReplica creates a new Replica.
+func NewReplica() *Replica {
+	return &Replica{
+		data:     make(map[string]int64),
+		updating: false,
+	}
+}
+
+// AsyncUpdate updates the replica's data asynchronously after a delay.
+func (r *Replica) AsyncUpdate(key string, value int64) {
+	go func() {
+		time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond) // Random delay
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.data[key] = value
+		r.updating = false
+	}()
+}
+
+// BestEffortUpdate attempts to update the replica's data best-effort.
+func (r *Replica) BestEffortUpdate(key string, value int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.data[key] = value
+}
+
+// ReadRepair performs read repair by checking if any replicas have newer data.
+func (r *Replica) ReadRepair(otherReplicas ...*Replica) {
+	for _, replica := range otherReplicas {
+		replica.mu.Lock()
+		defer replica.mu.Unlock()
+		for key, value := range replica.data {
+			if r.updating || r.data[key] < value {
+				r.data[key] = value
+				r.updating = false
+			}
 		}
 	}
 }
 
-// partition function: This now handles the pivot and element swaps correctly.
-func partition(arr []int, low int, high int) int {
-	pivot := arr[high]
-	i := low
-
-	for j := low; j < high; j++ {
-		if arr[j] < pivot { // Ensure we're comparing correctly
-			arr[i], arr[j] = arr[j], arr[i]
-			i++
-		}
-	}
-	arr[i], arr[high] = arr[high], arr[i]
-	return i
+// GetData retrieves the data from the replica.
+func (r *Replica) GetData(key string) int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.data[key]
 }
 
-// Insertion sort function
-func insertionSort(arr []int, low int, high int) {
-	for i := low + 1; i <= high; i++ {
-		key := arr[i]
-		j := i - 1
-		for j >= low && arr[j] > key {
-			arr[j+1] = arr[j]
-			j--
-		}
-		arr[j+1] = key
-	}
-}
-
-// Generate random array of sensor data
-func generateSensorData(size int) []int {
-	data := make([]int, size)
-	rand.Seed(time.Now().UnixNano())
-	for i := 0; i < size; i++ {
-		data[i] = rand.Intn(1000) + 1 // Generate random integers between 1 and 1000 to avoid zeros
-	}
-	return data
-}
-
-func main() {
-	sensorDataSize := 100000 // Change the size as needed
-	sensorData := generateSensorData(sensorDataSize)
-
-	fmt.Println("Before sorting (first 10 elements): ", sensorData[0:10]) // Print first 10 elements
-
-	startTime := time.Now()
-	hybridSort(sensorData, 0, len(sensorData)-1)
-	endTime := time.Now()
-
-	fmt.Println("After sorting (first 10 elements): ", sensorData[0:10]) // Print first 10 elements
-	fmt.Println("Sorting time: ", endTime.Sub(startTime))
-}
+// DistributedDataStore is a fault-tolerant data store that leverages best-effort replication and read repair.
