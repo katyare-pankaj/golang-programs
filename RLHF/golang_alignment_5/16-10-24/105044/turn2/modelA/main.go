@@ -2,75 +2,73 @@ package main
 
 import (
 	"fmt"
-	"strings"
-
-	"github.com/jdkato/prose/v2"
+	"math/rand"
+	"time"
 )
 
-func posTaggingAndCompression(text string) string {
-	doc := prose.NewDocument(text)
-	tokens := doc.Tokens()
-	compressedText := []string{}
+const threshold = 10 // Threshold for switching to insertion sort
 
-	for _, token := range tokens {
-		pos := token.Tag
-		// Perform compression based on POS tags
-		switch pos {
-		case "DT": // Determiner
-			continue // Skip articles
-		default:
-			compressedText = append(compressedText, token.Text)
+func hybridSort(arr []int, low, high int) {
+	if low < high {
+		size := high - low + 1
+		if size <= threshold {
+			insertionSort(arr, low, high)
+		} else {
+			p := partition(arr, low, high)
+			hybridSort(arr, low, p-1)
+			hybridSort(arr, p+1, high)
 		}
 	}
-	return strings.Join(compressedText, " ")
 }
 
-func namedEntityRecognitionAndCompression(text string) string {
-	doc := prose.NewDocument(text)
-	entities := doc.Entities()
-	compressedText := []string{}
-	seenEntities := make(map[string]bool)
+func insertionSort(arr []int, low, high int) {
+	for i := low + 1; i <= high; i++ {
+		key := arr[i]
+		j := i - 1
+		for j >= low && arr[j] > key {
+			arr[j+1] = arr[j]
+			j--
+		}
+		arr[j+1] = key
+	}
+}
 
-	for _, ent := range entities {
-		if !seenEntities[ent.Text] {
-			compressedText = append(compressedText, ent.Text)
-			seenEntities[ent.Text] = true
+func partition(arr []int, low, high int) int {
+	pivot := arr[high]
+	i := low - 1
+	for j := low; j < high; j++ {
+		if arr[j] <= pivot {
+			i++
+			arr[i], arr[j] = arr[j], arr[i]
 		}
 	}
-	return strings.Join(compressedText, " ")
+	arr[i+1], arr[high] = arr[high], arr[i+1]
+	return i + 1
 }
 
-func stemmingCompression(text string) string {
-	t := tokenizer.New()
-	tokens := t.Tokenize(text)
-	stemmer := stem.NewPorterStemmer()
-	compressedText := []string{}
-
-	for _, token := range tokens {
-		stemmed := stemmer.Stem(token.Text())
-		compressedText = append(compressedText, stemmed)
+func generateRandomArray(size int) []int {
+	arr := make([]int, size)
+	for i := 0; i < size; i++ {
+		arr[i] = rand.Intn(1000)
 	}
-	return strings.Join(compressedText, " ")
+	return arr
 }
 
 func main() {
-	sampleText := `
-	Welcome to our exciting new website! We are thrilled to launch it and provide you with the best online shopping experience.
-	Shop now and discover a wide range of products at unbeatable prices. Our team of experts is dedicated to ensuring you find the perfect item for your needs.
-	`
+	rand.Seed(time.Now().UnixNano())
 
-	fmt.Println("Original Text:")
-	fmt.Println(sampleText)
+	arrSize := 10000
+	arr := generateRandomArray(arrSize)
 
-	fmt.Println("\nText after POS Tagging and Compression:")
-	compressedText := posTaggingAndCompression(sampleText)
-	fmt.Println(compressedText)
+	fmt.Println("Before sorting:")
+	fmt.Println(arr)
 
-	fmt.Println("\nText after Named Entity Recognition and Compression:")
-	compressedText = namedEntityRecognitionAndCompression(sampleText)
-	fmt.Println(compressedText)
+	startTime := time.Now()
+	hybridSort(arr, 0, len(arr)-1)
+	endTime := time.Now()
 
-	fmt.Println("\nText after Stemming Compression:")
-	compressedText = stemmingCompression(sampleText)
-	fmt.Println(compressedText)
+	fmt.Println("\nAfter sorting:")
+	fmt.Println(arr)
+
+	fmt.Println("\nExecution time:", endTime.Sub(startTime))
 }
