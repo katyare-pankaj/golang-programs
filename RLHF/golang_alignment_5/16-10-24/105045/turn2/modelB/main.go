@@ -2,105 +2,90 @@ package main
 
 import (
 	"fmt"
+	"strings"
+
+	"github.com/ikawaha/kagome/tokenizer"
 )
 
-// Account interface defines the common behavior that all accounts should follow
-type Account interface {
-	CalculateInterest() float64
-	Deposit(amount float64)
-	Withdraw(amount float64)
-	Balance() float64
-}
-
-// SavingsAccount represents a savings account with a fixed interest rate
-type SavingsAccount struct {
-	balance      float64
-	interestRate float64
-}
-
-// CalculateInterest implements the Account interface for SavingsAccount
-func (s *SavingsAccount) CalculateInterest() float64 {
-	return s.balance * s.interestRate
-}
-
-func (s *SavingsAccount) Deposit(amount float64) {
-	s.balance += amount
-}
-
-func (s *SavingsAccount) Withdraw(amount float64) {
-	s.balance -= amount
-}
-
-func (s *SavingsAccount) Balance() float64 {
-	return s.balance
-}
-
-// CurrentAccount represents a current account with no interest
-type CurrentAccount struct {
-	balance float64
-}
-
-// CalculateInterest implements the Account interface for CurrentAccount
-func (c *CurrentAccount) CalculateInterest() float64 {
-	return 0
-}
-
-func (c *CurrentAccount) Deposit(amount float64) {
-	c.balance += amount
-}
-
-func (c *CurrentAccount) Withdraw(amount float64) {
-	c.balance -= amount
-}
-
-func (c *CurrentAccount) Balance() float64 {
-	return c.balance
-}
-
-// BusinessAccount represents a business account with a varying interest rate
-type BusinessAccount struct {
-	balance      float64
-	interestRate float64
-}
-
-// CalculateInterest implements the Account interface for BusinessAccount
-func (b *BusinessAccount) CalculateInterest() float64 {
-	return b.balance * b.interestRate
-}
-
-func (b *BusinessAccount) Deposit(amount float64) {
-	b.balance += amount
-}
-
-func (b *BusinessAccount) Withdraw(amount float64) {
-	b.balance -= amount
-}
-
-func (b *BusinessAccount) Balance() float64 {
-	return b.balance
-}
-
-// calculateInterestForAccounts takes a slice of Accounts and calculates the total interest earned
-func calculateInterestForAccounts(accounts []Account) float64 {
-	totalInterest := 0.0
-	for _, account := range accounts {
-		totalInterest += account.CalculateInterest()
-	}
-	return totalInterest
-}
-
 func main() {
-	// Create instances of different account types
-	savings := &SavingsAccount{balance: 1000, interestRate: 0.05}
-	current := &CurrentAccount{balance: 500}
-	business := &BusinessAccount{balance: 2000, interestRate: 0.03}
+	// Sample input text
+	text := "The quick brown fox jumps over the lazy dog. The quick brown fox is really fast."
 
-	// Store accounts in a slice of Accounts using interface values
-	accounts := []Account{savings, current, business}
+	// Text Compression using Linguistic Methods
+	compressedText := compressText(text)
 
-	// Calculate interest for all accounts using the interface method
-	totalInterest := calculateInterestForAccounts(accounts)
+	// Display the compressed text
+	fmt.Println("Compressed Text:", compressedText)
+}
 
-	fmt.Println("Total interest earned:", totalInterest)
-	// Output: Total interest earned: 150
+func compressText(text string) string {
+	// Load a Japanese tokenizer
+	t := kagome.New()
+	defer t.Close()
+
+	// Tokenize the text
+	tokens := t.Tokenize(text)
+
+	// Perform NER
+	nerTokens := ner(tokens)
+
+	// Perform POS tagging and build phrase dictionary
+	phraseDict := buildPhraseDict(nerTokens)
+
+	// Compress the text using phrase dictionary
+	compressedText := compressTextWithPhrases(text, phraseDict)
+
+	return compressedText
+}
+
+func ner(tokens []tokenizer.Token) []tokenizer.Token {
+	// NER simulation using simple heuristics (In real-world scenarios, use dedicated NER tools)
+	nerTokens := make([]tokenizer.Token, 0, len(tokens))
+	for _, token := range tokens {
+		if strings.HasPrefix(token.Surface, "The") {
+			nerTokens = append(nerTokens, tokenizer.Token{Surface: "DT", POS: "DT", Lemma: "DT"})
+		} else if strings.HasPrefix(token.Surface, "quick") {
+			nerTokens = append(nerTokens, tokenizer.Token{Surface: "JJ", POS: "JJ", Lemma: "JJ"})
+		} else {
+			nerTokens = append(nerTokens, token)
+		}
+	}
+	return nerTokens
+}
+
+func buildPhraseDict(tokens []tokenizer.Token) map[string]int {
+	phraseDict := make(map[string]int)
+
+	for i := 0; i < len(tokens); i++ {
+		for j := i; j < len(tokens); j++ {
+			phrase := strings.Join(tokenizer.TokensToString(tokens[i:j+1]), " ")
+			phraseDict[phrase]++
+		}
+	}
+
+	// Remove common words and frequent phrases (can be adjusted based on requirements)
+	delete(phraseDict, " ")
+	delete(phraseDict, "The")
+	delete(phraseDict, "is")
+	delete(phraseDict, "quick brown fox")
+
+	return phraseDict
+}
+
+func compressTextWithPhrases(text string, phraseDict map[string]int) string {
+	// Split the text into phrases
+	phrases := strings.Split(text, " ")
+
+	compressedText := make([]string, 0, len(phrases))
+
+	for _, phrase := range phrases {
+		if count, ok := phraseDict[phrase]; ok && count > 1 {
+			// Compressed phrase: Use a code to represent the frequent phrase
+			compressedText = append(compressedText, fmt.Sprintf("%d", len(phraseDict)))
+		} else {
+			// Retain the original phrase if it's not frequent
+			compressedText = append(compressedText, phrase)
+		}
+	}
+	return strings.Join(compressedText, " ")
 }
