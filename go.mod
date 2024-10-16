@@ -33,8 +33,8 @@ require (
 	github.com/ziutek/blas v0.0.0-20190227122918-da4ca23e90bb // indirect
 	go.etcd.io/bbolt v1.3.5 // indirect
 	golang.org/x/net v0.0.0-20190620200207-3b0461eec859 // indirect
-	golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5 // indirect
-	golang.org/x/text v0.3.2 // indirect
+	golang.org/x/sys v0.19.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 	gonum.org/v1/gonum v0.7.0 // indirect
 	google.golang.org/genproto v0.0.0-20190425155659-357c62f0e4bb // indirect
 	google.golang.org/grpc v1.23.0 // indirect
@@ -43,6 +43,7 @@ require (
 
 require (
 	github.com/blevesearch/bleve v1.0.14
+	github.com/cockroachdb/cockroach-go/v2 v2.3.8
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgraph-io/dgo/v2 v2.2.0
 	github.com/ikawaha/kagome v1.11.2
