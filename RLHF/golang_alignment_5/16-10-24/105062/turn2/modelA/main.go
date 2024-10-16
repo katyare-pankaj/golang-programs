@@ -2,59 +2,66 @@ package main
 
 import (
 	"fmt"
-	"time"
 )
 
-// Task represents a transaction or task for analysis
-type Task struct {
-	name      string
-	startTime time.Time
-	endTime   time.Time
-	cost      float64
+// Define an interface for 'Account' with a method 'CalculateInterest()'
+type Account interface {
+	CalculateInterest() float64
 }
 
-// Analyzer provides methods to analyze transaction data
-type Analyzer struct {
-	tasks []Task
+// 'SavingsAccount' struct implements the 'Account' interface
+type SavingsAccount struct {
+	balance      float64
+	interestRate float64
 }
 
-// NewAnalyzer creates a new Analyzer instance
-func NewAnalyzer() *Analyzer {
-	return &Analyzer{tasks: []Task{}}
+func (s SavingsAccount) CalculateInterest() float64 {
+	// Simple interest calculation for Savings
+	return s.balance * s.interestRate * 0.01
 }
 
-// AddTask adds a new task to the analyzer
-func (a *Analyzer) AddTask(task Task) {
-	a.tasks = append(a.tasks, task)
+// 'CurrentAccount' struct implements the 'Account' interface
+type CurrentAccount struct {
+	balance        float64
+	overdraftLimit float64
 }
 
-// CalculateTotalCost calculates the total cost of all tasks
-func (a *Analyzer) CalculateTotalCost() float64 {
-	totalCost := 0.0
-	for _, task := range a.tasks {
-		totalCost += task.cost
+func (c CurrentAccount) CalculateInterest() float64 {
+	// No interest for Current Accounts
+	return 0
+}
+
+// 'BusinessAccount' struct implements the 'Account' interface
+type BusinessAccount struct {
+	balance      float64
+	interestRate float64
+	minBalance   float64
+}
+
+func (b BusinessAccount) CalculateInterest() float64 {
+	// Interest calculation for Business Accounts with min balance check
+	if b.balance > b.minBalance {
+		return b.balance * b.interestRate * 0.01
 	}
-	return totalCost
+	return 0
+}
+
+func totalInterestEarned(accounts []Account) float64 {
+	var totalInterest float64
+	for _, a := range accounts {
+		totalInterest += a.CalculateInterest()
+	}
+	return totalInterest
 }
 
 func main() {
-	// Agile principle: Independent development teams (small modules)
-	taskAnalyzer := NewAnalyzer()
+	// Create instances of different account types
+	savings := SavingsAccount{balance: 1000, interestRate: 5}
+	current := CurrentAccount{balance: 200, overdraftLimit: 500}
+	business := BusinessAccount{balance: 5000, interestRate: 3, minBalance: 1000}
 
-	// Agile principle: Incremental Development
-	addTasks(taskAnalyzer)
+	accounts := []Account{savings, current, business}
 
-	// Perform analysis
-	totalCost := taskAnalyzer.CalculateTotalCost()
-	fmt.Printf("Total Cost: $%.2f\n", totalCost)
-
-	// Agile principle: Frequent Releases and Feedback
-	// Continuous Improvement can be implemented here by adding user input or new requirements
-}
-
-func addTasks(analyzer *Analyzer) {
-	// Simulate adding tasks in increments
-	analyzer.AddTask(Task{name: "Task 1", startTime: time.Now(), endTime: time.Now().Add(time.Minute), cost: 10.0})
-	analyzer.AddTask(Task{name: "Task 2", startTime: time.Now().Add(time.Minute), endTime: time.Now().Add(2 * time.Minute), cost: 20.0})
-	// Add more tasks as needed
+	//Calculate total interest using interface method
+	fmt.Println("Total Interest Earned:", totalInterestEarned(accounts))
 }
