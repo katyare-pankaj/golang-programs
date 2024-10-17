@@ -1,53 +1,79 @@
+// tasks.go
 package main
 
 import (
-	"fmt"
-	"sort"
-	"time"
+	"encoding/json"
+	"errors"
+	"log"
+	"net/http"
 )
 
-// Shipment represents a shipment entry
-type Shipment struct {
-	Timestamp time.Time
-	ProductID string
-	Quantity  int
+// Task represents a single task in the application
+type Task struct {
+	ID          int    `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
 }
 
-func aggregateDailyShipments(shipments []Shipment) map[time.Time]int {
-	dailyAggregates := make(map[time.Time]int)
-
-	// Group shipments by day
-	for _, shipment := range shipments {
-		day := shipment.Timestamp.Truncate(24 * time.Hour)
-		dailyAggregates[day] += shipment.Quantity
-	}
-
-	return dailyAggregates
+// Reusable function to handle errors
+func handleError(w http.ResponseWriter, err error, statusCode int) {
+	http.Error(w, err.Error(), statusCode)
+	log.Println(err)
 }
 
-func processDailyAggregates(dailyAggregates map[time.Time]int) {
-	for day, totalQuantity := range dailyAggregates {
-		fmt.Printf("Date: %s, Total Shipped Quantity: %d\n", day.Format("2006-01-02"), totalQuantity)
-	}
+// nextAvailableID returns the next available ID for a new task
+var nextAvailableID = 1
+
+func getNextAvailableID() int {
+	id := nextAvailableID
+	nextAvailableID++
+	return id
 }
 
-func main() {
-	// Sample shipment data
-	shipments := []Shipment{
-		{Timestamp: time.Now().AddDate(0, 0, -2), ProductID: "P1", Quantity: 100},
-		{Timestamp: time.Now().AddDate(0, 0, -2), ProductID: "P2", Quantity: 50},
-		{Timestamp: time.Now().AddDate(0, 0, -1), ProductID: "P1", Quantity: 80},
-		{Timestamp: time.Now().AddDate(0, 0, -1), ProductID: "P3", Quantity: 30},
-		// Add more shipment data as needed
+// TaskHandler serves the task-related API endpoints
+type TaskHandler struct {
+	tasks []Task
+}
+
+// Reusable function to find the task index by ID
+func (th *TaskHandler) findTaskIndexByID(id int) int {
+	for i, task := range th.tasks {
+		if task.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// ValidateTask checks if a task is valid and returns an error if any field is missing or empty
+func ValidateTask(task Task) error {
+	if task.Title == "" {
+		return errors.New("Title is required")
+	}
+	if task.Description == "" {
+		return errors.New("Description is required")
+	}
+	return nil
+}
+
+func (th *TaskHandler) AddTask(w http.ResponseWriter, r *http.Request) {
+	var task Task
+	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+		handleError(w, err, http.StatusBadRequest)
+		return
 	}
 
-	// Sort shipments by timestamp
-	sort.Slice(shipments, func(i, j int) bool { return shipments[i].Timestamp.Before(shipments[j].Timestamp) })
+	task.ID = getNextAvailableID()
+	if err := ValidateTask(task); err != nil {
+		handleError(w, err, http.StatusBadRequest)
+		return
+	}
 
-	// Aggregate shipments by day
-	dailyAggregates := aggregateDailyShipments(shipments)
+	th.tasks = append(th.tasks, task)
+	w.WriteHeader(http.StatusCreated)
+}
 
-	// Process the aggregated data
-	fmt.Println("Daily Shipment Aggregation:")
-	processDailyAggregates(dailyAggregates)
+func (th *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
+	// Validate and update task logic using reusable functions
+	// (Implementation details omitted)
 }
