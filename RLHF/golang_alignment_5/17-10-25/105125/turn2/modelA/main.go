@@ -2,117 +2,66 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
 )
 
-// Task represents a unit of work to be processed concurrently.
-type Task struct {
-	ID          int
-	Data        string
-	ProcessTime time.Duration
+// Order represents a shipping order
+type Order struct {
+	ID           int
+	Weight       float64
+	ShippingCost float64
 }
 
-// Worker represents a goroutine that processes tasks from a channel.
-type Worker struct {
-	ID          int
-	TaskChannel <-chan Task
-	wg          *sync.WaitGroup
-}
-
-// NewWorker creates a new Worker goroutine.
-func NewWorker(id int, taskChannel <-chan Task, wg *sync.WaitGroup) *Worker {
-	worker := &Worker{
-		ID:          id,
-		TaskChannel: taskChannel,
-		wg:          wg,
-	}
-	wg.Add(1)
-	go worker.run()
-	return worker
-}
-
-// run starts the Worker goroutine, which processes tasks from the channel until it is closed.
-func (w *Worker) run() {
-	defer w.wg.Done()
-	for task := range w.TaskChannel {
-		fmt.Printf("Worker %d started processing task %d\n", w.ID, task.ID)
-		time.Sleep(task.ProcessTime)
-		fmt.Printf("Worker %d finished processing task %d\n", w.ID, task.ID)
-	}
-}
-
-// manageTasks concurrently processes tasks from multiple data sources using goroutines and channels.
-func manageTasks(numWorkers int, taskChannels ...<-chan Task) {
-	var wg sync.WaitGroup
-
-	// Create workers
-	for workerID := 1; workerID <= numWorkers; workerID++ {
-		NewWorker(workerID, mergeChannels(taskChannels...), &wg)
+func aggregateAndCalculateAverageCost(orders []Order) map[string]float64 {
+	weightCategories := map[string][]float64{
+		"Light":  []float64{},
+		"Medium": []float64{},
+		"Heavy":  []float64{},
 	}
 
-	// Wait for all workers to finish
-	wg.Wait()
-}
-
-// mergeChannels merges multiple channels into a single channel that delivers tasks from all sources.
-func mergeChannels(channels ...<-chan Task) <-chan Task {
-	mergedChannel := make(chan Task)
-	var wg sync.WaitGroup
-
-	// Start a goroutine for each input channel to forward tasks to the merged channel
-	for _, channel := range channels {
-		wg.Add(1)
-		go func(c <-chan Task) {
-			defer wg.Done()
-			for task := range c {
-				mergedChannel <- task
-			}
-		}(channel)
+	// Aggregate data by weight category
+	for _, order := range orders {
+		var category string
+		if order.Weight <= 2 {
+			category = "Light"
+		} else if order.Weight <= 10 {
+			category = "Medium"
+		} else {
+			category = "Heavy"
+		}
+		weightCategories[category] = append(weightCategories[category], order.ShippingCost)
 	}
 
-	// Go routine to close the merged channel when all input channels are closed
-	go func() {
-		wg.Wait()
-		close(mergedChannel)
-	}()
-
-	return mergedChannel
+	// Calculate average cost for each category
+	averages := make(map[string]float64)
+	for category, costs := range weightCategories {
+		total := 0.0
+		for _, cost := range costs {
+			total += cost
+		}
+		if len(costs) > 0 {
+			averages[category] = total / float64(len(costs))
+		} else {
+			averages[category] = 0
+		}
+	}
+	return averages
 }
 
 func main() {
-	// Simulate multiple data sources providing tasks
-	dataSource1 := make(chan Task, 10)
-	dataSource2 := make(chan Task, 10)
-	dataSource3 := make(chan Task, 10)
+	// Sample orders data
+	orders := []Order{
+		{ID: 1, Weight: 1.5, ShippingCost: 10.50},
+		{ID: 2, Weight: 8.0, ShippingCost: 18.00},
+		{ID: 3, Weight: 4.0, ShippingCost: 12.00},
+		{ID: 4, Weight: 12.0, ShippingCost: 25.00},
+		{ID: 5, Weight: 6.0, ShippingCost: 15.00},
+		// Add more order data
+	}
 
-	go func() {
-		defer close(dataSource1)
-		for i := 1; i <= 5; i++ {
-			dataSource1 <- Task{ID: i, Data: fmt.Sprintf("Data from Source 1-%d", i), ProcessTime: time.Duration(rand.Intn(500)) * time.Millisecond}
-		}
-	}()
+	fmt.Println("Running batch data aggregation for average shipping costs...")
+	averageCosts := aggregateAndCalculateAverageCost(orders)
 
-	go func() {
-		defer close(dataSource2)
-		for i := 1; i <= 3; i++ {
-			dataSource2 <- Task{ID: i, Data: fmt.Sprintf("Data from Source 2-%d", i), ProcessTime: time.Duration(rand.Intn(500)) * time.Millisecond}
-		}
-	}()
-
-	go func() {
-		defer close(dataSource3)
-		for i := 1; i <= 4; i++ {
-			dataSource3 <- Task{ID: i, Data: fmt.Sprintf("Data from Source 3-%d", i), ProcessTime: time.Duration(rand.Intn(500)) * time.Millisecond}
-		}
-	}()
-
-	// Define the number of workers
-	numWorkers := 3
-
-	// Manage tasks concurrently from multiple data sources
-	manageTasks(numWorkers, dataSource1, dataSource2, dataSource3)
-
-	fmt.Println("All tasks processed concurrently.")
+	for category, averageCost := range averageCosts {
+		fmt.Printf("Average Shipping Cost for %s category: $%.2f\n", category, averageCost)
+	}
 }

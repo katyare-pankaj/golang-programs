@@ -2,84 +2,52 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"sync"
+	"sort"
 	"time"
 )
 
-// Task represents a unit of work to be performed concurrently
-type Task struct {
-	ID   int
-	Data string
+// Shipment represents a shipment entry
+type Shipment struct {
+	Timestamp time.Time
+	ProductID string
+	Quantity  int
 }
 
-// Worker represents a goroutine that processes tasks
-type Worker struct {
-	ID    int
-	tasks chan Task
-	quit  chan bool
-	wg    sync.WaitGroup
-}
+func aggregateDailyShipments(shipments []Shipment) map[time.Time]int {
+	dailyAggregates := make(map[time.Time]int)
 
-// NewWorker creates a new worker goroutine
-func NewWorker(id int, tasks chan Task, quit chan bool) *Worker {
-	worker := &Worker{
-		ID:    id,
-		tasks: tasks,
-		quit:  quit,
+	// Group shipments by day
+	for _, shipment := range shipments {
+		day := shipment.Timestamp.Truncate(24 * time.Hour)
+		dailyAggregates[day] += shipment.Quantity
 	}
-	worker.wg.Add(1)
-	go worker.run()
-	return worker
+
+	return dailyAggregates
 }
 
-// run is the main loop of the worker goroutine
-func (w *Worker) run() {
-	defer w.wg.Done()
-	for {
-		select {
-		case task := <-w.tasks:
-			fmt.Printf("Worker %d started processing task %d\n", w.ID, task.ID)
-			time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
-			fmt.Printf("Worker %d completed task %d\n", w.ID, task.ID)
-		case <-w.quit:
-			return
-		}
+func processDailyAggregates(dailyAggregates map[time.Time]int) {
+	for day, totalQuantity := range dailyAggregates {
+		fmt.Printf("Date: %s, Total Shipped Quantity: %d\n", day.Format("2006-01-02"), totalQuantity)
 	}
 }
 
-// main function sets up the task queue, starts workers, and generates tasks
 func main() {
-	// Create a channel to send tasks to workers
-	taskQueue := make(chan Task)
-
-	// Create a channel to signal worker goroutines to quit
-	quitChan := make(chan bool)
-
-	// Start multiple worker goroutines
-	const numWorkers = 5
-	var workers []*Worker
-	for i := 0; i < numWorkers; i++ {
-		workers = append(workers, NewWorker(i+1, taskQueue, quitChan))
+	// Sample shipment data
+	shipments := []Shipment{
+		{Timestamp: time.Now().AddDate(0, 0, -2), ProductID: "P1", Quantity: 100},
+		{Timestamp: time.Now().AddDate(0, 0, -2), ProductID: "P2", Quantity: 50},
+		{Timestamp: time.Now().AddDate(0, 0, -1), ProductID: "P1", Quantity: 80},
+		{Timestamp: time.Now().AddDate(0, 0, -1), ProductID: "P3", Quantity: 30},
+		// Add more shipment data as needed
 	}
 
-	// Generate and send tasks to the queue
-	const numTasks = 20
-	for i := 0; i < numTasks; i++ {
-		task := Task{ID: i + 1, Data: fmt.Sprintf("Task %d", i+1)}
-		taskQueue <- task
-	}
+	// Sort shipments by timestamp
+	sort.Slice(shipments, func(i, j int) bool { return shipments[i].Timestamp.Before(shipments[j].Timestamp) })
 
-	// Close the task queue to signal workers that no more tasks will be added
-	close(taskQueue)
+	// Aggregate shipments by day
+	dailyAggregates := aggregateDailyShipments(shipments)
 
-	// Wait for all workers to complete their tasks
-	for _, worker := range workers {
-		worker.wg.Wait()
-	}
-
-	// Close the quit channel to stop all worker goroutines
-	close(quitChan)
-
-	fmt.Println("All tasks completed.")
+	// Process the aggregated data
+	fmt.Println("Daily Shipment Aggregation:")
+	processDailyAggregates(dailyAggregates)
 }
