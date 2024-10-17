@@ -3,72 +3,116 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 )
 
-const threshold = 10 // Threshold for switching to insertion sort
+// Task represents a unit of work to be processed concurrently.
+type Task struct {
+	ID          int
+	Data        string
+	ProcessTime time.Duration
+}
 
-func hybridSort(arr []int, low, high int) {
-	if low < high {
-		size := high - low + 1
-		if size <= threshold {
-			insertionSort(arr, low, high)
-		} else {
-			p := partition(arr, low, high)
-			hybridSort(arr, low, p-1)
-			hybridSort(arr, p+1, high)
-		}
+// Worker represents a goroutine that processes tasks from a channel.
+type Worker struct {
+	ID          int
+	TaskChannel <-chan Task
+	wg          *sync.WaitGroup
+}
+
+// NewWorker creates a new Worker goroutine.
+func NewWorker(id int, taskChannel <-chan Task, wg *sync.WaitGroup) *Worker {
+	worker := &Worker{
+		ID:          id,
+		TaskChannel: taskChannel,
+		wg:          wg,
+	}
+	wg.Add(1)
+	go worker.run()
+	return worker
+}
+
+// run starts the Worker goroutine, which processes tasks from the channel until it is closed.
+func (w *Worker) run() {
+	defer w.wg.Done()
+	for task := range w.TaskChannel {
+		fmt.Printf("Worker %d started processing task %d\n", w.ID, task.ID)
+		time.Sleep(task.ProcessTime)
+		fmt.Printf("Worker %d finished processing task %d\n", w.ID, task.ID)
 	}
 }
 
-func insertionSort(arr []int, low, high int) {
-	for i := low + 1; i <= high; i++ {
-		key := arr[i]
-		j := i - 1
-		for j >= low && arr[j] > key {
-			arr[j+1] = arr[j]
-			j--
-		}
-		arr[j+1] = key
+// manageTasks concurrently processes tasks from multiple data sources using goroutines and channels.
+func manageTasks(numWorkers int, taskChannels ...<-chan Task) {
+	var wg sync.WaitGroup
+
+	// Create workers
+	for workerID := 1; workerID <= numWorkers; workerID++ {
+		NewWorker(workerID, mergeChannels(taskChannels...), &wg)
 	}
+
+	// Wait for all workers to finish
+	wg.Wait()
 }
 
-func partition(arr []int, low, high int) int {
-	pivot := arr[high]
-	i := low - 1
-	for j := low; j < high; j++ {
-		if arr[j] <= pivot {
-			i++
-			arr[i], arr[j] = arr[j], arr[i]
-		}
-	}
-	arr[i+1], arr[high] = arr[high], arr[i+1]
-	return i + 1
-}
+// mergeChannels merges multiple channels into a single channel that delivers tasks from all sources.
+func mergeChannels(channels ...<-chan Task) <-chan Task {
+	mergedChannel := make(chan Task)
+	var wg sync.WaitGroup
 
-func generateRandomArray(size int) []int {
-	arr := make([]int, size)
-	for i := 0; i < size; i++ {
-		arr[i] = rand.Intn(1000)
+	// Start a goroutine for each input channel to forward tasks to the merged channel
+	for _, channel := range channels {
+		wg.Add(1)
+		go func(c <-chan Task) {
+			defer wg.Done()
+			for task := range c {
+				mergedChannel <- task
+			}
+		}(channel)
 	}
-	return arr
+
+	// Go routine to close the merged channel when all input channels are closed
+	go func() {
+		wg.Wait()
+		close(mergedChannel)
+	}()
+
+	return mergedChannel
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	// Simulate multiple data sources providing tasks
+	dataSource1 := make(chan Task, 10)
+	dataSource2 := make(chan Task, 10)
+	dataSource3 := make(chan Task, 10)
 
-	arrSize := 10000
-	arr := generateRandomArray(arrSize)
+	go func() {
+		defer close(dataSource1)
+		for i := 1; i <= 5; i++ {
+			dataSource1 <- Task{ID: i, Data: fmt.Sprintf("Data from Source 1-%d", i), ProcessTime: time.Duration(rand.Intn(500)) * time.Millisecond}
+		}
+	}()
 
-	fmt.Println("Before sorting:")
-	fmt.Println(arr)
+	go func() {
+		defer close(dataSource2)
+		for i := 1; i <= 3; i++ {
+			dataSource2 <- Task{ID: i, Data: fmt.Sprintf("Data from Source 2-%d", i), ProcessTime: time.Duration(rand.Intn(500)) * time.Millisecond}
+		}
+	}()
 
-	startTime := time.Now()
-	hybridSort(arr, 0, len(arr)-1)
-	endTime := time.Now()
+	go func() {
+		defer close(dataSource3)
+		for i := 1; i <= 4; i++ {
+			dataSource3 <- Task{ID: i, Data: fmt.Sprintf("Data from Source 3-%d", i), ProcessTime: time.Duration(rand.Intn(500)) * time.Millisecond}
+		}
+	}()
 
-	fmt.Println("\nAfter sorting:")
-	fmt.Println(arr)
+	// Define the number of workers
+	numWorkers := 3
 
-	fmt.Println("\nExecution time:", endTime.Sub(startTime))
+	// Manage tasks concurrently from multiple data sources
+	manageTasks(numWorkers, dataSource1, dataSource2, dataSource3)
+
+	fmt.Println("All tasks processed concurrently.")
 }
