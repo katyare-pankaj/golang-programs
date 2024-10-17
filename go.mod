@@ -9,6 +9,7 @@ require (
 
 require (
 	github.com/RoaringBitmap/roaring v0.4.23 // indirect
+	github.com/apache/airflow v1.8.2 // indirect
 	github.com/blevesearch/go-porterstemmer v1.0.3 // indirect
 	github.com/blevesearch/mmap-go v1.0.2 // indirect
 	github.com/blevesearch/segment v0.9.0 // indirect
@@ -48,6 +49,7 @@ require (
 	github.com/dgraph-io/dgo/v2 v2.2.0
 	github.com/ikawaha/kagome v1.11.2
 	github.com/jdkato/prose/v2 v2.0.0
+	github.com/lib/pq v1.10.9
 	github.com/nlpodyssey/gotokenizers v0.2.0
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sajari/word2vec v1.0.1
