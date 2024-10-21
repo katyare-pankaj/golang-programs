@@ -1,67 +1,34 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
-	"strconv"
 )
 
-// Define our custom error type
-type InvalidRequestError struct {
-	Message string `json:"message"`
-	Status  int    `json:"status"`
-}
-
-func (e *InvalidRequestError) Error() string {
-	return fmt.Sprintf("InvalidRequestError: %s", e.Message)
-}
-
-// We'll use this function to handle invalid requests
-func handleInvalidRequest(w http.ResponseWriter, r *http.Request, err error) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-
-	// Convert the custom error to JSON and write it to the response
-	json.NewEncoder(w).Encode(&InvalidRequestError{Message: err.Error(), Status: http.StatusBadRequest})
-}
-
-func divideHandler(w http.ResponseWriter, r *http.Request) {
-	dividendStr := r.URL.Query().Get("dividend")
-	divisorStr := r.URL.Query().Get("divisor")
-
-	// Validate the request parameters
-	if dividendStr == "" || divisorStr == "" {
-		err := &InvalidRequestError{Message: "Missing required parameters: dividend and divisor", Status: http.StatusBadRequest}
-		handleInvalidRequest(w, r, err)
-		return
+// CalculateSum returns the sum of two integers.
+func CalculateSum(a int, b int) int {
+	// Check for integer overflow
+	if a > 0 && b > (INT_MAX-a) {
+		// Handle overflow scenario
+		return INT_MAX
+	} else if a < 0 && b < (INT_MIN-a) {
+		// Handle underflow scenario
+		return INT_MIN
 	}
-
-	dividend, err := strconv.ParseFloat(dividendStr, 64)
-	if err != nil {
-		handleInvalidRequest(w, r, err)
-		return
-	}
-
-	divisor, err := strconv.ParseFloat(divisorStr, 64)
-	if err != nil {
-		handleInvalidRequest(w, r, err)
-		return
-	}
-
-	// Rest of the handler logic
-	result := dividend / divisor
-	fmt.Fprintf(w, "Result: %.2f\n", result)
+	return a + b
 }
+
+const (
+	INT_MAX = int(^uint(0) >> 1)
+	INT_MIN = -INT_MAX - 1
+)
 
 func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/divide", divideHandler)
+	result := CalculateSum(3, 5)
+	fmt.Println("Sum:", result)
 
-	log.Println("API server running on http://localhost:8080")
-	err := http.ListenAndServe(":8080", mux)
-	if err != nil {
-		log.Fatal("Error starting server:", err)
-	}
+	// Test for overflow and underflow
+	overflowResult := CalculateSum(INT_MAX, 1)
+	underflowResult := CalculateSum(INT_MIN, -1)
+	fmt.Println("Overflow Result:", overflowResult)
+	fmt.Println("Underflow Result:", underflowResult)
 }
