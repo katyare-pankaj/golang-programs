@@ -2,80 +2,56 @@ package main
 
 import (
 	"fmt"
-	"net/http"
-	"strconv"
-
-	"github.com/go-chi/chi"
+	"math/rand"
+	"time"
 )
 
-// Define a custom error type
-type apiError struct {
-	Message string `json:"message"`
-	Status  int    `json:"status"`
+// LazyMap represents a lazy map that applies a function to each element only when needed.
+type LazyMap struct {
+	source []int
+	fn     func(int) int
 }
 
-func (e *apiError) Error() string {
-	return fmt.Sprintf("api error: %s (status %d)", e.Message, e.Status)
+// NewLazyMap creates a new LazyMap.
+func NewLazyMap(source []int, fn func(int) int) *LazyMap {
+	return &LazyMap{source: source, fn: fn}
 }
 
-// Sample function that might encounter errors
-func divide(dividend float64, divisor float64) (float64, error) {
-	if divisor == 0 {
-		return 0, &apiError{Message: "division by zero is not allowed", Status: http.StatusBadRequest}
+// Get applies the function to each element lazily and returns the resulting slice.
+func (lm *LazyMap) Get() []int {
+	result := make([]int, len(lm.source))
+	for i, v := range lm.source {
+		result[i] = lm.fn(v)
 	}
-	result := dividend / divisor
-	return result, nil
-}
-
-func handler(w http.ResponseWriter, r *http.Request) {
-	dividendStr := r.URL.Query().Get("dividend")
-	divisorStr := r.URL.Query().Get("divisor")
-
-	dividend, err := parseFloat(dividendStr)
-	if err != nil {
-		handleError(w, r, err)
-		return
-	}
-
-	divisor, err := parseFloat(divisorStr)
-	if err != nil {
-		handleError(w, r, err)
-		return
-	}
-
-	result, err := divide(dividend, divisor)
-	if err != nil {
-		handleError(w, r, err)
-		return
-	}
-
-	fmt.Fprintf(w, "Result: %.2f\n", result)
-}
-
-func parseFloat(str string) (float64, error) {
-	value, err := strconv.ParseFloat(str, 64)
-	if err != nil {
-		return 0, &apiError{Message: "error parsing float", Status: http.StatusBadRequest}
-	}
-	return value, nil
-}
-
-func handleError(w http.ResponseWriter, r *http.Request, err error) {
-	apiErr, ok := err.(*apiError)
-	if !ok {
-		apiErr = &apiError{Message: "internal server error", Status: http.StatusInternalServerError}
-	}
-
-	http.Error(w, apiErr.Error(), apiErr.Status)
+	return result
 }
 
 func main() {
-	r := chi.NewRouter()
-	r.Get("/divide", handler)
-
-	fmt.Println("API server running on http://localhost:8080")
-	err := http.ListenAndServe(":8080", r)
-	if err != nil {
-		fmt.Printf("Error starting server: %s\n", err)
+	// Generate a large slice of random numbers
+	const size = 1_000_000
+	rand.Seed(time.Now().UnixNano())
+	data := make([]int, size)
+	for i := 0; i < size; i++ {
+		data[i] = rand.Intn(1000)
 	}
+
+	// Define a heavy computation function
+	heavyComputation := func(x int) int {
+		time.Sleep(time.Microsecond * 100) // Simulate computation time
+		return x * x
+	}
+
+	// Create a lazy map without applying the computation
+	lazyResult := NewLazyMap(data, heavyComputation)
+
+	fmt.Println("Lazy Map Created. Memory Usage: Low") // Memory usage is low at this point since computation is lazy
+
+	// Now, let's perform some operations on the lazy map
+	sum := 0
+	for _, v := range lazyResult.Get() {
+		sum += v
+	}
+
+	fmt.Println("Sum:", sum)
+	fmt.Println("Computation Complete. Memory Usage: High (after applying computation)")
 }
