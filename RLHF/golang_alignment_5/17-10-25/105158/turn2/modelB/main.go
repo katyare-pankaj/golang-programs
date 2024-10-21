@@ -48,35 +48,26 @@ func handleSensorReadingsAsync(sensorIDs []int, ch chan<- float64, cont func()) 
 		})
 	}
 
-	go func() {
-		wg.Wait()
-		cont()
-	}()
+	wg.Wait()
+	cont()
 }
 
 func main() {
-	// Sensor IDs and data channel
+	// Continuous loop to handle real-time sensor data
 	sensorIDs := []int{1, 2, 3, 4, 5}
-	dataCh := make(chan float64, len(sensorIDs)) // Buffered channel
+	dataCh := make(chan float64)
 
 	for {
-		// Call handleSensorReadingsAsync and wait for it to complete
-		done := make(chan struct{})
-
 		handleSensorReadingsAsync(sensorIDs, dataCh, func() {
-			close(done) // Signal that reading and processing is done
+			// Loop back to read more sensor data
 		})
 
-		// Wait until all sensor data is processed
-		<-done
-
-		// Consume all the processed data
-		for i := 0; i < len(sensorIDs); i++ {
-			data := <-dataCh
+		// Consume the processed data
+		select {
+		case data := <-dataCh:
 			fmt.Printf("Processed Sensor Data: %.2f\n", data)
+		default:
+			// No data available, keep looping
 		}
-
-		// Simulate a delay before reading more data
-		time.Sleep(500 * time.Millisecond)
 	}
 }
