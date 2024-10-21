@@ -1,67 +1,68 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
-	"strconv"
+	"math/rand"
+	"sync"
+	"time"
 )
 
-// Define our custom error type
-type InvalidRequestError struct {
-	Message string `json:"message"`
-	Status  int    `json:"status"`
+const (
+	numWorkers = 5
+	numTasks   = 20
+)
+
+// task represents a unit of work to be performed concurrently
+type task struct {
+	id int
 }
 
-func (e *InvalidRequestError) Error() string {
-	return fmt.Sprintf("InvalidRequestError: %s", e.Message)
+// worker processes tasks concurrently
+func worker(id int, wg *sync.WaitGroup, tasks <-chan task, results chan<- int) {
+	defer wg.Done()
+	for task := range tasks {
+		result := processTask(task)
+		results <- result
+	}
 }
 
-// We'll use this function to handle invalid requests
-func handleInvalidRequest(w http.ResponseWriter, r *http.Request, err error) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-
-	// Convert the custom error to JSON and write it to the response
-	json.NewEncoder(w).Encode(&InvalidRequestError{Message: err.Error(), Status: http.StatusBadRequest})
-}
-
-func divideHandler(w http.ResponseWriter, r *http.Request) {
-	dividendStr := r.URL.Query().Get("dividend")
-	divisorStr := r.URL.Query().Get("divisor")
-
-	// Validate the request parameters
-	if dividendStr == "" || divisorStr == "" {
-		err := &InvalidRequestError{Message: "Missing required parameters: dividend and divisor", Status: http.StatusBadRequest}
-		handleInvalidRequest(w, r, err)
-		return
-	}
-
-	dividend, err := strconv.ParseFloat(dividendStr, 64)
-	if err != nil {
-		handleInvalidRequest(w, r, err)
-		return
-	}
-
-	divisor, err := strconv.ParseFloat(divisorStr, 64)
-	if err != nil {
-		handleInvalidRequest(w, r, err)
-		return
-	}
-
-	// Rest of the handler logic
-	result := dividend / divisor
-	fmt.Fprintf(w, "Result: %.2f\n", result)
+// processTask simulates work being done on a task
+func processTask(task task) int {
+	time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
+	return task.id * 2
 }
 
 func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/divide", divideHandler)
+	// Initialize random number generator
+	rand.Seed(time.Now().UnixNano())
 
-	log.Println("API server running on http://localhost:8080")
-	err := http.ListenAndServe(":8080", mux)
-	if err != nil {
-		log.Fatal("Error starting server:", err)
+	// Create channels for tasks and results
+	tasks := make(chan task, numTasks)
+	results := make(chan int, numTasks)
+
+	// Create a WaitGroup to wait for all workers to complete
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+
+	// Start worker goroutines
+	for i := 0; i < numWorkers; i++ {
+		go worker(i, &wg, tasks, results)
+	}
+
+	// Generate and send tasks to the workers
+	for i := 0; i < numTasks; i++ {
+		tasks <- task{id: i + 1}
+	}
+
+	// Close the tasks channel to signal workers to stop
+	close(tasks)
+
+	// Wait for all workers to finish
+	wg.Wait()
+
+	// Receive and print results
+	for i := 0; i < numTasks; i++ {
+		result := <-results
+		fmt.Printf("Task %d result: %d\n", i+1, result)
 	}
 }
