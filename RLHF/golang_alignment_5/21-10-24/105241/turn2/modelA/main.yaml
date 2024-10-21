@@ -1,0 +1,41 @@
+# .github/workflows/code_quality.yml
+name: Code Quality Check
+
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+
+jobs:
+  code_quality:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.16
+
+    - name: Install dependencies
+      run: |
+        go get -u github.com/alecthomas/gocyclo
+
+    - name: Run gocyclo
+      run: |
+        gocyclo -min=10 .
+        if [[ $? -ne 0 ]]; then
+          exit 1
+        fi
+
+    - name: Run golint
+      run: |
+        golint .
+        if [[ $? -ne 0 ]]; then
+          exit 1
+        fi

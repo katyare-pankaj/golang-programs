@@ -1,67 +1,43 @@
-package main
+name: CI with Code Review
 
-import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
-	"strconv"
-)
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
-// Define our custom error type
-type InvalidRequestError struct {
-	Message string `json:"message"`
-	Status  int    `json:"status"`
-}
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-func (e *InvalidRequestError) Error() string {
-	return fmt.Sprintf("InvalidRequestError: %s", e.Message)
-}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-// We'll use this function to handle invalid requests
-func handleInvalidRequest(w http.ResponseWriter, r *http.Request, err error) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
 
-	// Convert the custom error to JSON and write it to the response
-	json.NewEncoder(w).Encode(&InvalidRequestError{Message: err.Error(), Status: http.StatusBadRequest})
-}
+      - name: Install dependencies
+        run: go install -v ./...
 
-func divideHandler(w http.ResponseWriter, r *http.Request) {
-	dividendStr := r.URL.Query().Get("dividend")
-	divisorStr := r.URL.Query().Get("divisor")
+      - name: Run tests
+        run: |
+          go test -v ./...
+          if [[ $? -ne 0 ]]; then
+            exit 1
+          fi
 
-	// Validate the request parameters
-	if dividendStr == "" || divisorStr == "" {
-		err := &InvalidRequestError{Message: "Missing required parameters: dividend and divisor", Status: http.StatusBadRequest}
-		handleInvalidRequest(w, r, err)
-		return
-	}
+      - name: Perform code review (Example: Using 'golint')
+        run: |
+          golint .
+          if [[ $? -ne 0 ]]; then
+            exit 1
+          fi
 
-	dividend, err := strconv.ParseFloat(dividendStr, 64)
-	if err != nil {
-		handleInvalidRequest(w, r, err)
-		return
-	}
-
-	divisor, err := strconv.ParseFloat(divisorStr, 64)
-	if err != nil {
-		handleInvalidRequest(w, r, err)
-		return
-	}
-
-	// Rest of the handler logic
-	result := dividend / divisor
-	fmt.Fprintf(w, "Result: %.2f\n", result)
-}
-
-func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/divide", divideHandler)
-
-	log.Println("API server running on http://localhost:8080")
-	err := http.ListenAndServe(":8080", mux)
-	if err != nil {
-		log.Fatal("Error starting server:", err)
-	}
-}
+      - name: Check for documentation
+        run: |
+          find . -name "*.go" -exec grep -q "//" {} \; && echo "No documentation found." || true
