@@ -1,67 +1,115 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
-	"strconv"
 )
 
-// Define our custom error type
-type InvalidRequestError struct {
-	Message string `json:"message"`
-	Status  int    `json:"status"`
+// FuzzySet represents a fuzzy set.
+type FuzzySet struct {
+	name           string
+	membershipFunc func(float64) float64
 }
 
-func (e *InvalidRequestError) Error() string {
-	return fmt.Sprintf("InvalidRequestError: %s", e.Message)
+// TriangularMembershipFunc creates a triangular membership function.
+func TriangularMembershipFunc(min, peak, max float64) func(float64) float64 {
+	return func(x float64) float64 {
+		if x < min || x > max {
+			return 0
+		}
+		if x <= peak {
+			return (x - min) / (peak - min)
+		}
+		return (max - x) / (max - peak)
+	}
 }
 
-// We'll use this function to handle invalid requests
-func handleInvalidRequest(w http.ResponseWriter, r *http.Request, err error) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-
-	// Convert the custom error to JSON and write it to the response
-	json.NewEncoder(w).Encode(&InvalidRequestError{Message: err.Error(), Status: http.StatusBadRequest})
+// Defuzzify using Center of Gravity
+func defuzzify(values []float64, memberships []float64) float64 {
+	total := 0.0
+	sum := 0.0
+	for i := range values {
+		mul := values[i] * memberships[i]
+		total += mul
+		sum += memberships[i]
+	}
+	if sum == 0 {
+		return 0
+	}
+	return total / sum
 }
 
-func divideHandler(w http.ResponseWriter, r *http.Request) {
-	dividendStr := r.URL.Query().Get("dividend")
-	divisorStr := r.URL.Query().Get("divisor")
+// FuzzyRule represents a fuzzy rule.
+type FuzzyRule struct {
+	antecedents []*FuzzySet
+	consequent  *FuzzySet
+}
 
-	// Validate the request parameters
-	if dividendStr == "" || divisorStr == "" {
-		err := &InvalidRequestError{Message: "Missing required parameters: dividend and divisor", Status: http.StatusBadRequest}
-		handleInvalidRequest(w, r, err)
-		return
+// Evaluate the fuzzy rule for a given input.
+func (rule *FuzzyRule) Evaluate(inputs []float64) float64 {
+	minMembership := 1.0
+	for i, antecedent := range rule.antecedents {
+		membership := antecedent.membershipFunc(inputs[i])
+		if membership < minMembership {
+			minMembership = membership
+		}
+	}
+	return minMembership
+}
+
+// FuzzySystem represents a fuzzy system.
+type FuzzySystem struct {
+	rules     []*FuzzyRule
+	inputSets []*FuzzySet
+	outputSet *FuzzySet
+}
+
+// Evaluate the fuzzy system for a given input.
+func (system *FuzzySystem) Evaluate(inputs []float64) float64 {
+	aggregatedMembership := make([]float64, len(system.rules))
+	for i, rule := range system.rules {
+		aggregatedMembership[i] = rule.Evaluate(inputs)
 	}
 
-	dividend, err := strconv.ParseFloat(dividendStr, 64)
-	if err != nil {
-		handleInvalidRequest(w, r, err)
-		return
-	}
-
-	divisor, err := strconv.ParseFloat(divisorStr, 64)
-	if err != nil {
-		handleInvalidRequest(w, r, err)
-		return
-	}
-
-	// Rest of the handler logic
-	result := dividend / divisor
-	fmt.Fprintf(w, "Result: %.2f\n", result)
+	// Defuzzification for treatment plan
+	return defuzzify([]float64{0, 50, 100}, aggregatedMembership) // Adjust values for defuzzification
 }
 
 func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/divide", divideHandler)
+	// Define fuzzy sets for the input variables "age", "blood_pressure", and "cholesterol"
+	young := &FuzzySet{"Young", TriangularMembershipFunc(0, 20, 40)}
+	adult := &FuzzySet{"Adult", TriangularMembershipFunc(20, 40, 60)}
+	old := &FuzzySet{"Old", TriangularMembershipFunc(40, 60, 100)}
 
-	log.Println("API server running on http://localhost:8080")
-	err := http.ListenAndServe(":8080", mux)
-	if err != nil {
-		log.Fatal("Error starting server:", err)
+	normal := &FuzzySet{"Normal", TriangularMembershipFunc(90, 120, 150)}
+	borderlineHigh := &FuzzySet{"Borderline High", TriangularMembershipFunc(120, 150, 180)}
+	high := &FuzzySet{"High", TriangularMembershipFunc(150, 180, 250)}
+
+	// Define fuzzy sets for the output variable "treatment_plan"
+	lowDose := &FuzzySet{"Low Dose", TriangularMembershipFunc(0, 50, 100)}
+	mediumDose := &FuzzySet{"Medium Dose", TriangularMembershipFunc(50, 100, 150)}
+	highDose := &FuzzySet{"High Dose", TriangularMembershipFunc(100, 150, 200)}
+
+	// Define fuzzy rules
+	rules := []*FuzzyRule{
+		{[]*FuzzySet{young, normal, high}, lowDose},
+		{[]*FuzzySet{young, normal, borderlineHigh}, mediumDose},
+		{[]*FuzzySet{young, normal, high}, highDose},
+		{[]*FuzzySet{young, high, borderlineHigh}, highDose},
+		{[]*FuzzySet{adult, normal, borderlineHigh}, mediumDose},
+		{[]*FuzzySet{adult, normal, high}, highDose},
 	}
+
+	// Create the fuzzy system
+	system := &FuzzySystem{
+		rules:     rules,
+		inputSets: []*FuzzySet{young, adult, old, normal, borderlineHigh, high},
+		outputSet: lowDose, // Adjust according to your output set preference
+	}
+
+	// Patient data
+	input := []float64{35, 130, 180} // Age, Blood Pressure, Cholesterol
+
+	// Calculate the treatment plan using fuzzy logic
+	treatmentPlan := system.Evaluate(input)
+	fmt.Println("Treatment Plan: ", treatmentPlan)
 }
