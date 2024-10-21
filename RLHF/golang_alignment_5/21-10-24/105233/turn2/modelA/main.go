@@ -2,66 +2,80 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi"
 )
 
-// Order represents a shipping order
-type Order struct {
-	ID           int
-	Weight       float64
-	ShippingCost float64
+// Define a custom error type
+type apiError struct {
+	Message string `json:"message"`
+	Status  int    `json:"status"`
 }
 
-func aggregateAndCalculateAverageCost(orders []Order) map[string]float64 {
-	weightCategories := map[string][]float64{
-		"Light":  []float64{},
-		"Medium": []float64{},
-		"Heavy":  []float64{},
+func (e *apiError) Error() string {
+	return fmt.Sprintf("api error: %s (status %d)", e.Message, e.Status)
+}
+
+// Sample function that might encounter errors
+func divide(dividend float64, divisor float64) (float64, error) {
+	if divisor == 0 {
+		return 0, &apiError{Message: "division by zero is not allowed", Status: http.StatusBadRequest}
+	}
+	result := dividend / divisor
+	return result, nil
+}
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	dividendStr := r.URL.Query().Get("dividend")
+	divisorStr := r.URL.Query().Get("divisor")
+
+	dividend, err := parseFloat(dividendStr)
+	if err != nil {
+		handleError(w, r, err)
+		return
 	}
 
-	// Aggregate data by weight category
-	for _, order := range orders {
-		var category string
-		if order.Weight <= 2 {
-			category = "Light"
-		} else if order.Weight <= 10 {
-			category = "Medium"
-		} else {
-			category = "Heavy"
-		}
-		weightCategories[category] = append(weightCategories[category], order.ShippingCost)
+	divisor, err := parseFloat(divisorStr)
+	if err != nil {
+		handleError(w, r, err)
+		return
 	}
 
-	// Calculate average cost for each category
-	averages := make(map[string]float64)
-	for category, costs := range weightCategories {
-		total := 0.0
-		for _, cost := range costs {
-			total += cost
-		}
-		if len(costs) > 0 {
-			averages[category] = total / float64(len(costs))
-		} else {
-			averages[category] = 0
-		}
+	result, err := divide(dividend, divisor)
+	if err != nil {
+		handleError(w, r, err)
+		return
 	}
-	return averages
+
+	fmt.Fprintf(w, "Result: %.2f\n", result)
+}
+
+func parseFloat(str string) (float64, error) {
+	value, err := strconv.ParseFloat(str, 64)
+	if err != nil {
+		return 0, &apiError{Message: "error parsing float", Status: http.StatusBadRequest}
+	}
+	return value, nil
+}
+
+func handleError(w http.ResponseWriter, r *http.Request, err error) {
+	apiErr, ok := err.(*apiError)
+	if !ok {
+		apiErr = &apiError{Message: "internal server error", Status: http.StatusInternalServerError}
+	}
+
+	http.Error(w, apiErr.Error(), apiErr.Status)
 }
 
 func main() {
-	// Sample orders data
-	orders := []Order{
-		{ID: 1, Weight: 1.5, ShippingCost: 10.50},
-		{ID: 2, Weight: 8.0, ShippingCost: 18.00},
-		{ID: 3, Weight: 4.0, ShippingCost: 12.00},
-		{ID: 4, Weight: 12.0, ShippingCost: 25.00},
-		{ID: 5, Weight: 6.0, ShippingCost: 15.00},
-		// Add more order data
-	}
+	r := chi.NewRouter()
+	r.Get("/divide", handler)
 
-	fmt.Println("Running batch data aggregation for average shipping costs...")
-	averageCosts := aggregateAndCalculateAverageCost(orders)
-
-	for category, averageCost := range averageCosts {
-		fmt.Printf("Average Shipping Cost for %s category: $%.2f\n", category, averageCost)
+	fmt.Println("API server running on http://localhost:8080")
+	err := http.ListenAndServe(":8080", r)
+	if err != nil {
+		fmt.Printf("Error starting server: %s\n", err)
 	}
 }
