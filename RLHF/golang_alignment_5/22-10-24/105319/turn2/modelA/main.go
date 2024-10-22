@@ -2,80 +2,175 @@ package main
 
 import (
 	"fmt"
-	"net/http"
-	"strconv"
-
-	"github.com/go-chi/chi"
+	"io"
+	"net"
+	"os"
+	"syscall"
 )
 
-// Define a custom error type
-type apiError struct {
-	Message string `json:"message"`
-	Status  int    `json:"status"`
-}
-
-func (e *apiError) Error() string {
-	return fmt.Sprintf("api error: %s (status %d)", e.Message, e.Status)
-}
-
-// Sample function that might encounter errors
-func divide(dividend float64, divisor float64) (float64, error) {
-	if divisor == 0 {
-		return 0, &apiError{Message: "division by zero is not allowed", Status: http.StatusBadRequest}
-	}
-	result := dividend / divisor
-	return result, nil
-}
-
-func handler(w http.ResponseWriter, r *http.Request) {
-	dividendStr := r.URL.Query().Get("dividend")
-	divisorStr := r.URL.Query().Get("divisor")
-
-	dividend, err := parseFloat(dividendStr)
-	if err != nil {
-		handleError(w, r, err)
-		return
-	}
-
-	divisor, err := parseFloat(divisorStr)
-	if err != nil {
-		handleError(w, r, err)
-		return
-	}
-
-	result, err := divide(dividend, divisor)
-	if err != nil {
-		handleError(w, r, err)
-		return
-	}
-
-	fmt.Fprintf(w, "Result: %.2f\n", result)
-}
-
-func parseFloat(str string) (float64, error) {
-	value, err := strconv.ParseFloat(str, 64)
-	if err != nil {
-		return 0, &apiError{Message: "error parsing float", Status: http.StatusBadRequest}
-	}
-	return value, nil
-}
-
-func handleError(w http.ResponseWriter, r *http.Request, err error) {
-	apiErr, ok := err.(*apiError)
-	if !ok {
-		apiErr = &apiError{Message: "internal server error", Status: http.StatusInternalServerError}
-	}
-
-	http.Error(w, apiErr.Error(), apiErr.Status)
-}
+const (
+	bufferSize = 1024 * 1024 // 1MB buffer size
+)
 
 func main() {
-	r := chi.NewRouter()
-	r.Get("/divide", handler)
-
-	fmt.Println("API server running on http://localhost:8080")
-	err := http.ListenAndServe(":8080", r)
+	// sender
+	sendFile := "example.txt"
+	conn, err := net.Dial("tcp", "127.0.0.1:8080")
 	if err != nil {
-		fmt.Printf("Error starting server: %s\n", err)
+		fmt.Println("Error dialing:", err)
+		return
 	}
+	defer conn.Close()
+
+	f, err := os.Open(sendFile)
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return
+	}
+	defer f.Close()
+
+	// Get the file information
+	fi, err := f.Stat()
+	if err != nil {
+		fmt.Println("Error getting file info:", err)
+		return
+	}
+
+	// Send the file size
+	err = conn.Write([]byte(fmt.Sprintf("%d", fi.Size())))
+	if err != nil {
+		fmt.Println("Error sending file size:", err)
+		return
+	}
+
+	// Perform zero-copy file transfer from sender to receiver
+	sendBytes, err := zeroCopySendFile(conn, f)
+	if err != nil {
+		fmt.Println("Error sending file:", err)
+		return
+	}
+
+	fmt.Printf("Sent %d bytes successfully\n", sendBytes)
+
+	// receiver
+	listener, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		fmt.Println("Error listening:", err)
+		return
+	}
+	defer listener.Close()
+
+	conn, err = listener.Accept()
+	if err != nil {
+		fmt.Println("Error accepting:", err)
+		return
+	}
+	defer conn.Close()
+
+	// Receive the file size
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		fmt.Println("Error reading file size:", err)
+		return
+	}
+
+	fileSize := int64(atoi(string(buf[:n])))
+	fmt.Printf("Receiving file of size: %d bytes\n", fileSize)
+
+	// Create a new file to store the received data
+	receiveFile := "received_file.txt"
+	f, err = os.Create(receiveFile)
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+	defer f.Close()
+
+	// Perform zero-copy file transfer from receiver to local file
+	receivedBytes, err := zeroCopyReceiveFile(conn, f, fileSize)
+	if err != nil {
+		fmt.Println("Error receiving file:", err)
+		return
+	}
+
+	fmt.Printf("Received %d bytes successfully and saved as %s\n", receivedBytes, receiveFile)
+}
+
+func zeroCopySendFile(conn net.Conn, file *os.File) (int64, error) {
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return 0, err
+	}
+
+	mfd, err := syscall.MemfdCreate("zerocopy_send", 0)
+	if err != nil {
+		return 0, err
+	}
+	defer syscall.Close(mfd)
+
+	err = syscall.Ftruncate(mfd, fileInfo.Size())
+	if err != nil {
+		return 0, err
+	}
+
+	mapAddr, err := syscall.Mmap(mfd, 0, int(fileInfo.Size()), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+	if err != nil {
+		return 0, err
+	}
+	defer syscall.Munmap(mapAddr, int(fileInfo.Size()))
+
+	n, err := file.Read(mapAddr)
+	if err != nil && err != io.EOF {
+		return 0, err
+	}
+
+	sentBytes, err := conn.Write(mapAddr)
+	if err != nil {
+		return 0, err
+	}
+
+	return int64(sentBytes), nil
+}
+
+func zeroCopyReceiveFile(conn net.Conn, file *os.File, fileSize int64) (int64, error) {
+	mfd, err := syscall.MemfdCreate("zerocopy_recv", 0)
+	if err != nil {
+		return 0, err
+	}
+	defer syscall.Close(mfd)
+
+	err = syscall.Ftruncate(mfd, fileSize)
+	if err != nil {
+		return 0, err
+	}
+
+	mapAddr, err := syscall.Mmap(mfd, 0, int(fileSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+	if err != nil {
+		return 0, err
+	}
+	defer syscall.Munmap(mapAddr, int(fileSize))
+
+	receivedBytes, err := conn.Read(mapAddr)
+	if err != nil && err != io.EOF {
+		return 0, err
+	}
+
+	n, err := file.Write(mapAddr[:receivedBytes])
+	if err != nil {
+		return 0, err
+	}
+
+	return int64(receivedBytes), nil
+}
+
+func atoi(str string) int {
+	num := 0
+	for _, ch := range str {
+		if ch < '0' || ch > '9' {
+			return num
+		}
+		num = num*10 + int(ch-'0')
+	}
+	return num
 }
