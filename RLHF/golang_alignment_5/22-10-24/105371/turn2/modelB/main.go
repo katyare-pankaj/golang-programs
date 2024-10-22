@@ -2,130 +2,126 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
-
-	"github.com/google/btree"
 )
 
-// Customer represents a customer record in the CRM system.
-type Customer struct {
-	ID       int
-	Name     string
-	Email    string
-	JoinDate time.Time
-	// Add other customer attributes as needed
+// CSRMatrix represents a sparse matrix in Compressed Sparse Row (CSR) format
+type CSRMatrix struct {
+	rows    int
+	cols    int
+	nnz     int // Number of non-zero elements
+	data    []float64
+	indices []int
+	indptr  []int
 }
 
-// CustomerStore represents a mock data store for customers using a slice for data retrieval optimization.
-type CustomerStore struct {
-	customers []Customer
-	indexByID map[int]int // Index to find customer by ID efficiently
-	index     *CustomerIndex
-	mu        sync.RWMutex // Mutex to protect concurrent access
-}
-
-// CustomerIndex is an in-memory B-tree index for customers based on their ID.
-type CustomerIndex struct {
-	Tree *btree.BTree
-	m    sync.RWMutex
-}
-
-// NewCustomerIndex creates a new CustomerIndex.
-func NewCustomerIndex() *CustomerIndex {
-	return &CustomerIndex{
-		Tree: btree.New(32), // Adjust the degree based on your use case.
+// NewCSRMatrix creates a new CSR matrix
+func NewCSRMatrix(rows, cols, nnz int) *CSRMatrix {
+	return &CSRMatrix{
+		rows:    rows,
+		cols:    cols,
+		nnz:     nnz,
+		data:    make([]float64, nnz),
+		indices: make([]int, nnz),
+		indptr:  make([]int, rows+1),
 	}
 }
 
-// AddCustomerIndex adds an entry to the customer index.
-func (ci *CustomerIndex) AddCustomerIndex(customer Customer) {
-	ci.m.Lock()
-	defer ci.m.Unlock()
-	ci.Tree.ReplaceOrInsert(btree.Int(customer.ID))
+// Set sets a value at a specific row and column in the CSR matrix
+func (m *CSRMatrix) Set(row, col int, value float64) {
+	m.data[m.indptr[row]] = value
+	m.indices[m.indptr[row]] = col
+	m.indptr[row]++
 }
 
-// GetCustomerByID retrieves a customer from the index by ID.
-func (ci *CustomerIndex) GetCustomerByID(customerID int) (*Customer, bool) {
-	ci.m.RLock()
-	defer ci.m.RUnlock()
-	it := ci.Tree.Get(btree.Int(customerID))
-	if it != nil {
-		return nil, true
-	}
-	return nil, false
-}
-
-// NewCustomerStore creates a new CustomerStore.
-func NewCustomerStore() *CustomerStore {
-	return &CustomerStore{
-		customers: []Customer{},
-		indexByID: make(map[int]int),
-		index:     NewCustomerIndex(),
-	}
-}
-
-// AddCustomer adds a new customer to the store.
-func (cs *CustomerStore) AddCustomer(customer Customer) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-
-	cs.customers = append(cs.customers, customer)
-	cs.indexByID[customer.ID] = len(cs.customers) - 1
-	cs.index.AddCustomerIndex(customer)
-}
-
-// GetCustomerByID retrieves a customer from the store by ID.
-func (cs *CustomerStore) GetCustomerByID(customerID int) (*Customer, bool) {
-	cs.mu.RLock()
-	defer cs.mu.RUnlock()
-
-	if index, found := cs.indexByID[customerID]; found {
-		return &cs.customers[index], true
-	}
-	return nil, false
-}
-
-// AggregateCustomersByDate aggregates the number of customers joined on each day.
-func (cs *CustomerStore) AggregateCustomersByDate() map[time.Time]int {
-	cs.mu.RLock()
-	defer cs.mu.RUnlock()
-
-	aggregatedData := make(map[time.Time]int)
-	for _, customer := range cs.customers {
-		joinDate := customer.JoinDate.Truncate(24 * time.Hour)
-		aggregatedData[joinDate]++
+// Multiply performs matrix multiplication with another CSR matrix using parallel processing
+func (m *CSRMatrix) Multiply(other *CSRMatrix) *CSRMatrix {
+	if m.cols != other.rows {
+		panic("Matrices cannot be multiplied due to incompatible dimensions.")
 	}
 
-	return aggregatedData
+	result := NewCSRMatrix(m.rows, other.cols, m.rows*other.cols)
+
+	// Create a wait group to wait for all goroutines to complete
+	var wg sync.WaitGroup
+
+	// Launch a goroutine for each row of the result matrix
+	for i := 0; i < m.rows; i++ {
+		wg.Add(1)
+		go func(row int) {
+			defer wg.Done()
+			for j := 0; j < other.cols; j++ {
+				sum := 0.0
+				for k := m.indptr[row]; k < m.indptr[row+1]; k++ {
+					val1 := m.data[k]
+					val2 := other.Get(m.indices[k], j)
+					sum += val1 * val2
+				}
+				if sum != 0 {
+					result.Set(row, j, sum)
+				}
+			}
+		}(i)
+	}
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+
+	return result
+}
+
+// Get gets the value at a specific row and column in the CSR matrix
+func (m *CSRMatrix) Get(row, col int) float64 {
+	for i := m.indptr[row]; i < m.indptr[row+1]; i++ {
+		if m.indices[i] == col {
+			return m.data[i]
+		}
+	}
+	return 0
 }
 
 func main() {
-	// Initialize the customer store
-	cs := NewCustomerStore()
+	// Set the seed for random number generation
+	rand.Seed(time.Now().UnixNano())
 
-	// Generate mock customers and add them to the store
-	for i := 1; i <= 1000; i++ {
-		customer := Customer{
-			ID:       i,
-			Name:     fmt.Sprintf("Customer %d", i),
-			Email:    fmt.Sprintf("customer%d@example.com", i),
-			JoinDate: time.Now().AddDate(0, 0, -i%365), // Random join date within the past year
+	// Generate a large, sparse dataset
+	const rows = 10000
+	const cols = 10000
+	const nnz = 1000000 // Approximately 1% non-zero elements
+
+	m1 := NewCSRMatrix(rows, cols, nnz)
+	for i := 0; i < nnz; i++ {
+		row := rand.Intn(rows)
+		col := rand.Intn(cols)
+		value := rand.Float64()
+		m1.Set(row, col, value)
+	}
+
+	m2 := NewCSRMatrix(cols, rows, nnz)
+	for i := 0; i < nnz; i++ {
+		row := rand.Intn(cols)
+		col := rand.Intn(rows)
+		value := rand.Float64()
+		m2.Set(row, col, value)
+	}
+
+	// Perform matrix multiplication
+	start := time.Now()
+	result := m1.Multiply(m2)
+	duration := time.Since(start)
+
+	// Print the result
+	fmt.Println("Result:")
+	for i := 0; i < result.rows; i++ {
+		for j := 0; j < result.cols; j++ {
+			val := result.Get(i, j)
+			if val != 0 {
+				fmt.Printf("m[%d][%d] = %.1f\n", i, j, val)
+			}
 		}
-		cs.AddCustomer(customer)
 	}
 
-	// Retrieve a customer by ID
-	if customer, found := cs.GetCustomerByID(500); found {
-		fmt.Printf("Retrieved Customer: %+v\n", customer)
-	} else {
-		fmt.Println("Customer not found.")
-	}
-
-	// Aggregate customers by join date
-	aggregatedData := cs.AggregateCustomersByDate()
-	fmt.Println("Aggregated Customers by Join Date:")
-	for date, count := range aggregatedData {
-		fmt.Printf("%s: %d\n", date.Format("2006-01-02"), count)
-	}
+	fmt.Printf("Matrix multiplication took %s\n", duration)
 }

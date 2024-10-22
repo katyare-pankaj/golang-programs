@@ -3,115 +3,81 @@ package main
 import (
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
 )
 
-// Customer represents a customer record in the CRM system.
-type Customer struct {
-	ID       int
-	Name     string
-	Email    string
-	JoinDate time.Time
-	// Add other customer attributes as needed
+// SparseData represents a sparse dataset using a map for efficient storage
+type SparseData struct {
+	data map[int]map[int]float64
 }
 
-// CustomerStore represents a mock data store for customers using slice for data retrieval optimization
-type CustomerStore struct {
-	customers []Customer
-	indexByID map[int]int // Index to find customer by ID efficiently
-}
-
-// NewCustomerStore creates a new CustomerStore
-func NewCustomerStore() *CustomerStore {
-	return &CustomerStore{
-		customers: []Customer{},
-		indexByID: make(map[int]int),
+// NewSparseData creates a new sparse data structure
+func NewSparseData() *SparseData {
+	return &SparseData{
+		data: make(map[int]map[int]float64),
 	}
 }
 
-// AddCustomer adds a customer to the store
-func (cs *CustomerStore) AddCustomer(customer Customer) {
-	cs.customers = append(cs.customers, customer)
-	cs.indexByID[customer.ID] = len(cs.customers) - 1
-}
-
-// GetCustomerByID retrieves a customer from the store by its ID using the index
-func (cs *CustomerStore) GetCustomerByID(customerID int) (Customer, bool) {
-	idx, found := cs.indexByID[customerID]
-	if !found {
-		return Customer{}, false
+// Set sets a value at a specific row and column in the sparse data
+func (sd *SparseData) Set(row, col int, value float64) {
+	if sd.data[row] == nil {
+		sd.data[row] = make(map[int]float64)
 	}
-	return cs.customers[idx], true
+	sd.data[row][col] = value
 }
 
-// GetCustomersByName retrieves customers by a given name (partial match supported)
-func (cs *CustomerStore) GetCustomersByName(name string) []Customer {
-	var results []Customer
+// Get gets the value at a specific row and column in the sparse data
+func (sd *SparseData) Get(row, col int) float64 {
+	if rowData, ok := sd.data[row]; ok {
+		return rowData[col]
+	}
+	return 0
+}
 
-	for _, customer := range cs.customers {
-		if len(name) == 0 || customer.Name == name || strings.Contains(customer.Name, name) {
-			results = append(results, customer)
+// ComputeMean computes the mean of the non-zero values in the sparse data
+func (sd *SparseData) ComputeMean() float64 {
+	sum := 0.0
+	count := 0
+
+	// Iterate through the sparse data to calculate sum and count
+	for _, rowData := range sd.data {
+		for _, value := range rowData {
+			sum += value
+			count++
 		}
 	}
 
-	return results
-}
-
-// GetCustomersByJoinDateRange retrieves customers within a specified date range
-func (cs *CustomerStore) GetCustomersByJoinDateRange(startDate, endDate time.Time) []Customer {
-	var results []Customer
-
-	for _, customer := range cs.customers {
-		if customer.JoinDate.After(startDate) && customer.JoinDate.Before(endDate) {
-			results = append(results, customer)
-		}
+	if count == 0 {
+		return 0
 	}
-
-	return results
+	return sum / float64(count)
 }
 
 func main() {
-	// Initialize the customer store
-	cs := NewCustomerStore()
+	// Generate a large sparse dataset for demonstration purposes
+	const rows = 100000
+	const cols = 10000
+	const sparsity = 0.01 // Percentage of non-zero elements
 
-	// Generate mock customers and add them to the store
 	rand.Seed(time.Now().UnixNano())
-	for i := 1; i <= 10000; i++ {
-		customer := Customer{
-			ID:       i,
-			Name:     fmt.Sprintf("Customer %d", i),
-			Email:    fmt.Sprintf("customer%d@example.com", i),
-			JoinDate: time.Now().AddDate(0, 0, -rand.Intn(365)),
+
+	sparseData := NewSparseData()
+
+	// Populate the sparse data with random values
+	for row := 0; row < rows; row++ {
+		for col := 0; col < cols; col++ {
+			if rand.Float64() < sparsity {
+				value := rand.Float64() * 100
+				sparseData.Set(row, col, value)
+			}
 		}
-		cs.AddCustomer(customer)
 	}
 
-	// Optimized data retrieval strategies in action:
+	// Measure the time taken to compute the mean
+	startTime := time.Now()
+	mean := sparseData.ComputeMean()
+	duration := time.Since(startTime)
 
-	// 1. Retrieve customer by ID
-	customerIDToFind := 5000
-	start := time.Now()
-	customer, found := cs.GetCustomerByID(customerIDToFind)
-	if found {
-		fmt.Printf("Customer Found: %v\n", customer)
-	} else {
-		fmt.Printf("Customer with ID %d not found.\n", customerIDToFind)
-	}
-	fmt.Println("Time taken to retrieve customer by ID:", time.Since(start))
-
-	// 2. Retrieve customers by name (partial match)
-	nameToFind := "Customer 3"
-	start = time.Now()
-	customers := cs.GetCustomersByName(nameToFind)
-	fmt.Printf("Customers matching '%s': %d\n", nameToFind, len(customers))
-	fmt.Println("Time taken to retrieve customers by name:", time.Since(start))
-
-	// 3. Retrieve customers by join date range
-	startDate := time.Now().AddDate(0, 0, -30)
-	endDate := time.Now()
-	start = time.Now()
-	customers = cs.GetCustomersByJoinDateRange(startDate, endDate)
-	fmt.Printf("Customers joined between %s and %s: %d\n", startDate, endDate, len(customers))
-	fmt.Println("Time taken to retrieve customers by join date range:", time.Since(start))
+	fmt.Println("Sparse Data Mean:", mean)
+	fmt.Println("Time taken to compute mean:", duration)
 }
