@@ -27,7 +27,7 @@ require (
 	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/glycerine/go-unsnap-stream v0.0.0-20181221182339-f9677308dec2 // indirect
-	github.com/golang/protobuf v1.5.0 // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
@@ -77,12 +77,14 @@ require (
 	github.com/dgraph-io/dgo/v2 v2.2.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-chi/chi v1.5.5
+	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/google/btree v1.1.3
 	github.com/gorilla/mux v1.8.1
 	github.com/hashicorp/consul/api v1.30.0
 	github.com/ikawaha/kagome v1.11.2
 	github.com/jdkato/prose/v2 v2.0.0
 	github.com/lib/pq v1.10.9
+	github.com/neo4j/neo4j-go-driver/v4 v4.4.7
 	github.com/nlpodyssey/gotokenizers v0.2.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/sajari/word2vec v1.0.1
