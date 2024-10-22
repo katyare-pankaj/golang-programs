@@ -73,6 +73,7 @@ require (
 	github.com/cockroachdb/cockroach-go/v2 v2.3.8
 	github.com/coreos/etcd v3.3.27+incompatible
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/dgraph-io/dgo v1.0.0
 	github.com/dgraph-io/dgo/v2 v2.2.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-chi/chi v1.5.5
