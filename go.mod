@@ -48,6 +48,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgraph-io/dgo/v2 v2.2.0
 	github.com/go-chi/chi v1.5.5
+	github.com/google/btree v1.1.3
 	github.com/gorilla/mux v1.8.1
 	github.com/ikawaha/kagome v1.11.2
 	github.com/jdkato/prose/v2 v2.0.0
