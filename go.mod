@@ -23,6 +23,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/couchbase/vellum v1.0.2 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
+	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/glycerine/go-unsnap-stream v0.0.0-20181221182339-f9677308dec2 // indirect
 	github.com/golang/protobuf v1.5.0 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
@@ -52,6 +53,7 @@ require (
 )
 
 require (
+	github.com/alecthomas/chroma v0.10.0
 	github.com/blevesearch/bleve v1.0.14
 	github.com/cockroachdb/cockroach-go/v2 v2.3.8
 	github.com/coreos/etcd v3.3.27+incompatible

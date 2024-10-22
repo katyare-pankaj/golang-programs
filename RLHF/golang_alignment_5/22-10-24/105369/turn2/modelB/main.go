@@ -2,57 +2,46 @@ package main
 
 import (
 	"fmt"
-	"net"
-	"os"
-	"syscall"
+	"strings"
 )
 
+// measureIndentation calculates the indentation level of each line in the given code.
+func measureIndentation(code string) []int {
+	indentationLevels := []int{}
+	lines := strings.Split(code, "\n")
+
+	for _, line := range lines {
+		trimmedLine := strings.TrimLeft(line, " \t")
+		indentationLevel := len(line) - len(trimmedLine)
+		indentationLevels = append(indentationLevels, indentationLevel)
+	}
+	return indentationLevels
+}
+
+// visualizeIndentation uses indentation levels to print the code with spaces or tabs to represent the hierarchy.
+func visualizeIndentation(code string, indentationLevels []int) {
+	lines := strings.Split(code, "\n")
+	for i, line := range lines {
+		// Generate the string of spaces based on the indentation level
+		indentation := strings.Repeat(" ", indentationLevels[i])
+		fmt.Printf("%s%s\n", indentation, line)
+	}
+}
+
 func main() {
-	// Replace this with the actual file path
-	filePath := "/path/to/the/large/file"
+	codeExample := `
+		package main
+		import ("fmt")
 
-	// Create a TCP connection to the FileReceiver microservice
-	conn, err := net.Dial("tcp", "fileReceiver:12345")
-	if err != nil {
-		fmt.Println("Error connecting to FileReceiver:", err)
-		return
-	}
-	defer conn.Close()
+		func main() {
+			fmt.Println("Hello, World!")
+			if true {
+				fmt.Println("Indented block")
+			}
+		}
+	`
+	indentationLevels := measureIndentation(codeExample)
 
-	// Open the file for reading
-	file, err := os.Open(filePath)
-	if err != nil {
-		fmt.Println("Error opening the file:", err)
-		return
-	}
-	defer file.Close()
-
-	// Perform zero-copy I/O
-	info, err := file.Stat()
-	if err != nil {
-		fmt.Println("Error stat file:", err)
-		return
-	}
-
-	fmt.Printf("Transferring file %s of size %d bytes\n", filePath, info.Size())
-
-	// Get the file descriptor of the TCP connection
-	connFile, err := conn.(*net.TCPConn).File()
-	if err != nil {
-		fmt.Println("Error getting connection file descriptor:", err)
-		return
-	}
-	defer connFile.Close() // Don't forget to close this file descriptor
-
-	// Cast file size to int (assuming file size is within int range)
-	fileSize := int(info.Size())
-
-	// Use Sendfile to transfer the file
-	_, err = syscall.Sendfile(int(connFile.Fd()), int(file.Fd()), nil, fileSize)
-	if err != nil {
-		fmt.Println("Error transferring file:", err)
-		return
-	}
-
-	fmt.Println("File transfer completed successfully.")
+	fmt.Println("Visualized Code with Indentation:")
+	visualizeIndentation(codeExample, indentationLevels)
 }
