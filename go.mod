@@ -24,6 +24,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/couchbase/vellum v1.0.2 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/glycerine/go-unsnap-stream v0.0.0-20181221182339-f9677308dec2 // indirect
@@ -38,6 +39,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/serf v0.10.1 // indirect
 	github.com/jonboulle/clockwork v0.4.0 // indirect
+	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mingrammer/commonregex v1.0.1 // indirect
@@ -45,6 +47,8 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/nats-io/nkeys v0.4.7 // indirect
+	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.20.5 // indirect
@@ -56,6 +60,7 @@ require (
 	github.com/willf/bitset v1.1.10 // indirect
 	github.com/ziutek/blas v0.0.0-20190227122918-da4ca23e90bb // indirect
 	go.etcd.io/bbolt v1.3.5 // indirect
+	golang.org/x/crypto v0.24.0 // indirect
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63 // indirect
 	golang.org/x/net v0.26.0 // indirect
 	golang.org/x/sys v0.22.0 // indirect
@@ -77,6 +82,7 @@ require (
 	github.com/dgraph-io/dgo/v2 v2.2.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-chi/chi v1.5.5
+	github.com/go-redis/redis/v8 v8.11.5
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/google/btree v1.1.3
 	github.com/gorilla/mux v1.8.1
@@ -84,6 +90,7 @@ require (
 	github.com/ikawaha/kagome v1.11.2
 	github.com/jdkato/prose/v2 v2.0.0
 	github.com/lib/pq v1.10.9
+	github.com/nats-io/nats.go v1.37.0
 	github.com/neo4j/neo4j-go-driver/v4 v4.4.7
 	github.com/nlpodyssey/gotokenizers v0.2.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
