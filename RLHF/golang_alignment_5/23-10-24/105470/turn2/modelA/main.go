@@ -47,6 +47,7 @@ func NewWorker(wg *sync.WaitGroup, tasks <-chan *task, result chan<- *result) *W
 
 // run starts the worker goroutine
 func (w *Worker) run() {
+	defer w.wg.Done() // Ensure that Done is called when the goroutine exits
 	for t := range w.tasks {
 		r := processTask(t)
 		w.result <- r
@@ -54,7 +55,6 @@ func (w *Worker) run() {
 		taskPool.Put(t)
 		resultPool.Put(r)
 	}
-	w.wg.Done()
 }
 
 func processTask(t *task) *result {
@@ -92,7 +92,7 @@ func main() {
 
 	// Collect results
 	go func() {
-		wg.Wait()
+		wg.Wait() // Wait for all workers to finish
 		close(results)
 	}()
 

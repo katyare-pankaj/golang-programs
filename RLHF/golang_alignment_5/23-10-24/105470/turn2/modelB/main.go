@@ -1,74 +1,104 @@
-package mlpdsl
+package main
 
 import (
-	"math/rand"
-	"testing"
+	"fmt"
+	"runtime"
+	"sync"
+	"time"
 )
 
-// MLP stands for Multi-Layer Perceptron
-type MLP struct {
-	layers         []int         // Number of neurons in each layer
-	weights        [][][]float64 // Weights between neurons in each layer
-	biases         [][]float64   // Biases for neurons in each layer
-	activationFunc ActivationFunc
+const (
+	numWorkers = 4
+	workItems  = 1000000
+	resultSize = 10000
+)
+
+type result struct {
+	data int
 }
 
-// ActivationFunc defines the activation function used for neurons
-type ActivationFunc func(float64) float64
+// Worker represents a worker goroutine that processes tasks
+type Worker struct {
+	wg         *sync.WaitGroup
+	tasks      <-chan int
+	results    chan []int
+	resultPool *sync.Pool
+}
 
-func TestNewMLP(t *testing.T) {
-	// Assert MLP structure is created correctly
-	mlp := NewMLP(2, 3, 1, ReLU)
-	if len(mlp.layers) != 3 {
-		t.Errorf("Expected 3 layers, got %d", len(mlp.layers))
+var resultPool = sync.Pool{
+	New: func() interface{} {
+		return &result{}
+	},
+}
+
+// NewWorker creates a new worker goroutine
+func NewWorker(wg *sync.WaitGroup, tasks <-chan int, results chan<- []int) *Worker {
+	worker := &Worker{
+		wg:      wg,
+		tasks:   tasks,
+		results: nil,
+		resultPool: &sync.Pool{
+			New: func() interface{} {
+				return make([]int, resultSize)
+			},
+		},
 	}
-	// Add more assertions for weights, biases, etc.
+	return worker
 }
 
-func BenchmarkFeedForward(b *testing.B) {
-	// Measure the time taken to perform feed-forward for a single input
-	mlp := NewMLP(100, 50, 10, ReLU)
-	input := make([]float64, 100)
-	for i := range input {
-		input[i] = rand.Float64()
+// run starts the worker goroutine
+func (w *Worker) run() {
+	for task := range w.tasks {
+		result := w.resultPool.Get().([]int)
+		processTask(task, result)
+		w.results <- result
 	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		mlp.FeedForward(input)
-	}
+	w.wg.Done()
 }
 
-// Stochastic Gradient Descent (SGD) implementation
-func (mlp *MLP) SGD(trainingData [][]float64, targets []float64, learningRate float64, epochs int, batchSize int) {
-	for epoch := 0; epoch < epochs; epoch++ {
-		for i := 0; i < len(trainingData); i += batchSize {
-			batchInputs := trainingData[i:min(i+batchSize, len(trainingData))]
-			batchTargets := targets[i:min(i+batchSize, len(targets))]
-			mlp.trainBatch(batchInputs, batchTargets, learningRate)
-		}
+func processTask(task int, result []int) {
+	// Simulate CPU-bound operation
+	for i := 0; i < resultSize; i++ {
+		result[i] = task * i
 	}
 }
 
-func (mlp *MLP) trainBatch(inputs [][]float64, targets []float64, learningRate float64) {
-	// Implement the SGD training logic for a batch
-	// ... (details omitted)
-}
+func main() {
+	// Set the number of GOMAXPROCS to the number of logical CPUs to optimize concurrent execution
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
-func TestSGD(t *testing.T) {
-	// Assert that SGD trains the MLP with reasonable accuracy
-	mlp := NewMLP(2, 3, 1, ReLU)
-	trainingData := [][]float64{{1, 1}, {0, 1}, {1, 0}, {0, 0}}
-	targets := []float64{1, 1, 0, 0}
-	mlp.SGD(trainingData, targets, 0.01, 100, 1)
-	// Perform additional assertions to evaluate the accuracy
-	// ...
-}
-func TestSGD(t *testing.T) {
-	// Assert that SGD trains the MLP with reasonable accuracy
-	mlp := NewMLP(2, 3, 1, ReLU)
-	trainingData := [][]float64{{1, 1}, {0, 1}, {1, 0}, {0, 0}}
-	targets := []float64{1, 1, 0, 0}
-	mlp.SGD(trainingData, targets, 0.01, 100, 1)
-	// Perform additional assertions to evaluate the accuracy
-	// ...
+	start := time.Now()
+
+	var wg sync.WaitGroup
+	tasks := make(chan int, workItems)
+	results := make(chan []int, workItems)
+
+	// Create a pool of worker goroutines
+	for i := 0; i < numWorkers; i++ {
+		worker := NewWorker(&wg, tasks, results)
+		wg.Add(1)
+		go worker.run()
+	}
+
+	// Generate and distribute work items
+	for i := 0; i < workItems; i++ {
+		tasks <- i
+	}
+	close(tasks)
+
+	// Collect and process results
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for result := range results {
+		// Process the result here
+		_ = result
+		// Return the result to the pool for reuse
+		resultPool.Put(result)
+	}
+
+	duration := time.Since(start)
+	fmt.Printf("Completed %d tasks in %s\n", workItems, duration)
 }
