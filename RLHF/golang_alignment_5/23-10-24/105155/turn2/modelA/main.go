@@ -2,33 +2,82 @@ package main
 
 import (
 	"fmt"
-	"net/http"
-	"sync"
-	"time"
+	"io"
+	"log"
+	"net"
+	"os"
 )
 
-// Simulate a handler function that performs some work
-func handleRequest(w http.ResponseWriter, r *http.Request) {
-	time.Sleep(time.Millisecond * 500) // Simulate work time
-	fmt.Fprintf(w, "Hello, concurrent world!\n")
+const (
+	bufferSize = 32 * 1024 // 32KB buffer size
+)
+
+// zeroCopyStreamHandler handles a single streaming connection using zero-copy techniques.
+func zeroCopyStreamHandler(conn net.Conn) {
+	defer conn.Close()
+
+	// Open the file to be streamed
+	file, err := os.Open("example.txt")
+	if err != nil {
+		log.Printf("Error opening file: %v", err)
+		return
+	}
+	defer file.Close()
+
+	// Get the file info to set the Content-Length header
+	fileInfo, err := file.Stat()
+	if err != nil {
+		log.Printf("Error stat file: %v", err)
+		return
+	}
+
+	// Write the HTTP header with Content-Length
+	_, err = conn.Write([]byte(fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n", fileInfo.Size())))
+	if err != nil {
+		log.Printf("Error writing header: %v", err)
+		return
+	}
+
+	// Create a buffer for zero-copy reads
+	buffer := make([]byte, bufferSize)
+
+	for {
+		n, err := file.Read(buffer)
+		if err == io.EOF {
+			// End of file, break the loop
+			break
+		}
+		if err != nil {
+			log.Printf("Error reading file: %v", err)
+			return
+		}
+
+		// Perform zero-copy write to the connection
+		_, err = conn.Write(buffer[:n])
+		if err != nil {
+			log.Printf("Error writing to connection: %v", err)
+			return
+		}
+	}
 }
 
 func main() {
-	const numHandlers = 100
-	var wg sync.WaitGroup
-
-	// Start the server
-	fmt.Println("Server started...")
-	http.HandleFunc("/", handleRequest)
-
-	// Run handlers concurrently
-	for i := 0; i < numHandlers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			http.ListenAndServe(":8080", nil)
-		}()
+	listener, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		log.Fatalf("Error listening: %v", err)
 	}
+	defer listener.Close()
 
-	wg.Wait()
+	fmt.Println("Server started on port 8080")
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Printf("Error accepting connection: %v", err)
+			continue
+		}
+
+		// Handle each connection in a goroutine for concurrency
+		go zeroCopyStreamHandler(conn)
+	}
 }
