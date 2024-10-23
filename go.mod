@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/RoaringBitmap/roaring v0.4.23 // indirect
 	github.com/apache/airflow v1.8.2 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
@@ -89,12 +90,14 @@ require (
 	github.com/go-chi/chi v1.5.5
 	github.com/go-playground/assert v1.2.1
 	github.com/go-redis/redis/v8 v8.11.5
+	github.com/go-sql-driver/mysql v1.8.1
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/google/btree v1.1.3
 	github.com/gorilla/mux v1.8.1
 	github.com/hashicorp/consul/api v1.30.0
 	github.com/ikawaha/kagome v1.11.2
 	github.com/jdkato/prose/v2 v2.0.0
+	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
 	github.com/nats-io/nats.go v1.37.0
 	github.com/neo4j/neo4j-go-driver/v4 v4.4.7
