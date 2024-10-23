@@ -1,108 +1,112 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"runtime"
-	"sync"
-	"time"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/dghubble/go-twitter/twitter"
+
+	"github.com/go-playground/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-const (
-	numWorkers = 4
-	workItems  = 1000000
+// MockTwitterClient is a mock implementation of the TwitterClient interface
+type MockTwitterClient struct {
+	mock.Mock
+}
+
+// PostTweet mocks the PostTweet method
+func (m *MockTwitterClient) PostTweet(ctx context.Context, tweet string) (*twitter.Tweet, *twitter.Response, error) {
+	args := m.Called(ctx, tweet)
+	return args.Get(0).(*twitter.Tweet), args.Get(1).(*twitter.Response), args.Error(2)
+}
+
+// TwitterClient defines the interface for interacting with Twitter
+type TwitterClient interface {
+	PostTweet(ctx context.Context, tweet string) (*twitter.Tweet, *twitter.Response, error)
+}
+
+// tweetHandler handles HTTP requests to post a tweet
+func tweetHandler(w http.ResponseWriter, r *http.Request) {
+	tweet := r.FormValue("tweet")
+	err := postTweet(tweet)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	fmt.Fprintln(w, "Tweet posted successfully!")
+}
+
+// postTweet posts a tweet using the TwitterClient
+func postTweet(tweet string) error {
+	// In a real implementation, you would inject the TwitterClient here
+	tc := getTwitterClient() // <-- Dependency injection
+	_, _, err := tc.PostTweet(context.Background(), tweet)
+	return err
+}
+
+var (
+	// replace these with your actual twitter consumer key, consumer secret, access token, and access token secret
+	consumerKey       = "YOUR_CONSUMER_KEY"
+	consumerSecret    = "YOUR_CONSUMER_SECRET"
+	accessToken       = "YOUR_ACCESS_TOKEN"
+	accessTokenSecret = "YOUR_ACCESS_TOKEN_SECRET"
 )
 
-// Worker represents a worker goroutine
-type Worker struct {
-	wg     *sync.WaitGroup
-	tasks  <-chan *task
-	result chan<- *result
+// getTwitterClient returns a new TwitterClient instance
+func getTwitterClient() TwitterClient {
+	// In a real implementation, you would use the actual Twitter API client here
+	return &realTwitterClient{}
 }
 
-type task struct {
-	data int
+type realTwitterClient struct{}
+
+func (c *realTwitterClient) PostTweet(ctx context.Context, tweet string) (*twitter.Tweet, *twitter.Response, error) {
+	config := oauth.NewConfig(consumerKey, consumerSecret)
+	token := oauth.NewToken(accessToken, accessTokenSecret)
+	httpClient := config.Client(oauth.NoContext, token)
+
+	client := twitter.NewClient(httpClient)
+
+	return client.Statuses.Update(tweet, nil)
 }
 
-type result struct {
-	data int
-}
+func TestTweetHandler(t *testing.T) {
+	// Test 1: Successful tweet post
+	mockClient := &MockTwitterClient{}
+	mockClient.On("PostTweet", mock.Anything, "Hello, TDD!").Return(&twitter.Tweet{}, &twitter.Response{}, nil)
 
-var taskPool = sync.Pool{
-	New: func() interface{} {
-		return &task{}
-	},
-}
-
-var resultPool = sync.Pool{
-	New: func() interface{} {
-		return &result{}
-	},
-}
-
-// NewWorker creates a new worker goroutine
-func NewWorker(wg *sync.WaitGroup, tasks <-chan *task, result chan<- *result) *Worker {
-	worker := &Worker{wg: wg, tasks: tasks, result: result}
-	return worker
-}
-
-// run starts the worker goroutine
-func (w *Worker) run() {
-	defer w.wg.Done() // Ensure that Done is called when the goroutine exits
-	for t := range w.tasks {
-		r := processTask(t)
-		w.result <- r
-		// Recycle task and result objects
-		taskPool.Put(t)
-		resultPool.Put(r)
-	}
-}
-
-func processTask(t *task) *result {
-	// Simulate work
-	time.Sleep(time.Millisecond * 1)
-	r := resultPool.Get().(*result)
-	r.data = t.data * t.data
-	return r
-}
-
-func main() {
-	// Set GOMAXPROCS
-	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	start := time.Now()
-
-	var wg sync.WaitGroup
-	tasks := make(chan *task, workItems)
-	results := make(chan *result, workItems)
-
-	// Create workers
-	for i := 0; i < numWorkers; i++ {
-		worker := NewWorker(&wg, tasks, results)
-		wg.Add(1)
-		go worker.run()
+	// Override the global getTwitterClient function for testing
+	getTwitterClient = func() TwitterClient {
+		return mockClient
 	}
 
-	// Generate tasks
-	for i := 0; i < workItems; i++ {
-		t := taskPool.Get().(*task)
-		t.data = i
-		tasks <- t
-	}
-	close(tasks)
+	req := httptest.NewRequest("POST", "/tweet?tweet=Hello%2C+TDD%21", nil)
+	rr := httptest.NewRecorder()
 
-	// Collect results
-	go func() {
-		wg.Wait() // Wait for all workers to finish
-		close(results)
-	}()
+	tweetHandler(rr, req)
 
-	count := 0
-	for r := range results {
-		count += r.data
-		// Recycle result object
-		resultPool.Put(r)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "Tweet posted successfully!\n", rr.Body.String())
+	mockClient.AssertExpectations(t)
+
+	// Test 2: Tweet post failure
+	mockClient.Reset()
+	mockClient.On("PostTweet", mock.Anything, "Failed tweet").Return(nil, nil, errors.New("tweet post failed"))
+
+	getTwitterClient = func() TwitterClient {
+		return mockClient
 	}
 
-	duration := time.Since(start)
-	fmt.Printf("Completed %d tasks, sum: %d in %s\n", workItems, count, duration)
+	req = httptest.NewRequest("POST", "/tweet?tweet=Failed+tweet", nil)
+	rr = httptest.NewRecorder()
+
+	tweetHandler(rr, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	mockClient.AssertExpectations(t)
 }

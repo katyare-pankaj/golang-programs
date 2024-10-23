@@ -21,15 +21,18 @@ require (
 	github.com/blevesearch/zap/v13 v13.0.6 // indirect
 	github.com/blevesearch/zap/v14 v14.0.5 // indirect
 	github.com/blevesearch/zap/v15 v15.0.3 // indirect
+	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/couchbase/vellum v1.0.2 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
+	github.com/dghubble/sling v1.4.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/glycerine/go-unsnap-stream v0.0.0-20181221182339-f9677308dec2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-hclog v1.5.0 // indirect
@@ -56,6 +59,7 @@ require (
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/steveyen/gtreap v0.1.0 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/tinylib/msgp v1.1.0 // indirect
 	github.com/willf/bitset v1.1.10 // indirect
 	github.com/ziutek/blas v0.0.0-20190227122918-da4ca23e90bb // indirect
@@ -78,10 +82,12 @@ require (
 	github.com/cockroachdb/cockroach-go/v2 v2.3.8
 	github.com/coreos/etcd v3.3.27+incompatible
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/dghubble/go-twitter v0.0.0-20221104224141-912508c3888b
 	github.com/dgraph-io/dgo v1.0.0
 	github.com/dgraph-io/dgo/v2 v2.2.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-chi/chi v1.5.5
+	github.com/go-playground/assert v1.2.1
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/google/btree v1.1.3
