@@ -20,16 +20,15 @@ type Worker struct {
 
 // NewWorker creates a new worker goroutine
 func NewWorker(wg *sync.WaitGroup, tasks <-chan int) *Worker {
-	worker := &Worker{wg: wg, tasks: tasks}
-	return worker
+	return &Worker{wg: wg, tasks: tasks}
 }
 
 // run starts the worker goroutine
 func (w *Worker) run() {
+	defer w.wg.Done() // Ensure that Done is called when the worker exits
 	for task := range w.tasks {
 		processTask(task)
 	}
-	w.wg.Done()
 }
 
 func processTask(task int) {
@@ -50,8 +49,8 @@ func main() {
 
 	// Create a pool of worker goroutines
 	for i := 0; i < numWorkers; i++ {
+		wg.Add(1) // Increment the WaitGroup counter for each worker
 		worker := NewWorker(&wg, tasks)
-		wg.Add(1)
 		go worker.run()
 	}
 
@@ -59,9 +58,9 @@ func main() {
 	for i := 0; i < workItems; i++ {
 		tasks <- i
 	}
-	close(tasks)
+	close(tasks) // Close the tasks channel to signal workers there are no more tasks
 
-	wg.Wait()
+	wg.Wait() // Wait for all workers to finish
 
 	duration := time.Since(start)
 	fmt.Printf("Completed %d tasks in %s\n", workItems, duration)
