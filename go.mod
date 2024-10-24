@@ -44,6 +44,7 @@ require (
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/serf v0.10.1 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/jonboulle/clockwork v0.4.0 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
@@ -85,6 +86,7 @@ require (
 
 require (
 	github.com/alecthomas/chroma v0.10.0
+	github.com/aws/aws-sdk-go v1.55.5
 	github.com/blevesearch/bleve v1.0.14
 	github.com/cockroachdb/cockroach-go/v2 v2.3.8
 	github.com/coreos/etcd v3.3.27+incompatible
