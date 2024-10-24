@@ -1,120 +1,77 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"log"
-	"os"
 	"time"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-// DataRecord represents a single record of user data
-type DataRecord struct {
-	UserID    string `json:"user_id"`
-	Feature   string `json:"feature"`
-	Timestamp int64  `json:"timestamp"`
-	Data      string `json:"data"`
+// TemperatureEvent represents a temperature data event
+type TemperatureEvent struct {
+	Timestamp   time.Time
+	Temperature float64
 }
 
-const (
-	// DataRetentionPeriod defines the default data retention period (in days)
-	DataRetentionPeriod = 30
+// Interval represents a closed interval [min, max]
+type Interval struct {
+	Min float64
+	Max float64
+}
 
-	// MaxDataRetentionPeriod defines the maximum data retention period (in days)
-	MaxDataRetentionPeriod = 180
+// analyzeTemperatureInterval analyzes the interval of possible temperature values based on historical data
+func analyzeTemperatureInterval(historicalData []TemperatureEvent) Interval {
+	// Assuming historical data is available
+	minTemperature := historicalData[0].Temperature
+	maxTemperature := historicalData[0].Temperature
 
-	// DataCompressionLevel defines the compression level for data
-	DataCompressionLevel = 9
-)
-
-var (
-	awsS3BucketName    string
-	awsS3Region        string
-	awsAccessKeyID     string
-	awsSecretAccessKey string
-)
-
-func init() {
-	if awsS3BucketName = os.Getenv("AWS_S3_BUCKET_NAME"); awsS3BucketName == "" {
-		log.Fatal("AWS_S3_BUCKET_NAME environment variable is not set")
+	for _, event := range historicalData[1:] {
+		if event.Temperature < minTemperature {
+			minTemperature = event.Temperature
+		} else if event.Temperature > maxTemperature {
+			maxTemperature = event.Temperature
+		}
 	}
 
-	if awsS3Region = os.Getenv("AWS_S3_REGION"); awsS3Region == "" {
-		log.Fatal("AWS_S3_REGION environment variable is not set")
-	}
+	// Add a small buffer to the interval for fluctuations
+	buffer := 1.0
+	return Interval{Min: minTemperature - buffer, Max: maxTemperature + buffer}
+}
 
-	if awsAccessKeyID = os.Getenv("AWS_ACCESS_KEY_ID"); awsAccessKeyID == "" {
-		log.Fatal("AWS_ACCESS_KEY_ID environment variable is not set")
-	}
-
-	if awsSecretAccessKey = os.Getenv("AWS_SECRET_ACCESS_KEY"); awsSecretAccessKey == "" {
-		log.Fatal("AWS_SECRET_ACCESS_KEY environment variable is not set")
+// processTemperatureEvent processes a temperature event using interval analysis
+func processTemperatureEvent(event TemperatureEvent, expectedInterval Interval) {
+	if event.Temperature < expectedInterval.Min || event.Temperature > expectedInterval.Max {
+		// Event value falls outside the expected interval, take appropriate action
+		// For example, trigger an alert or adjust the processing pipeline
+		fmt.Printf("Temperature event out of interval: %.2f\n", event.Temperature)
+	} else {
+		// Event value falls within the expected interval, apply optimized processing
+		// For example, perform further calculations or send the event to the next stage of processing
+		fmt.Printf("Processing temperature event: %.2f\n", event.Temperature)
 	}
 }
 
-func getS3Client() *s3.S3 {
-	sess, err := session.NewSession(&aws.Config{
-		Region:      aws.String(awsS3Region),
-		Credentials: credentials.NewStaticCredentials(awsAccessKeyID, awsSecretAccessKey, ""),
-	})
-	if err != nil {
-		log.Fatalf("Error creating AWS S3 session: %v", err)
+func main() {
+	// Simulate historical data collection
+	historicalData := []TemperatureEvent{
+		{Timestamp: time.Now(), Temperature: 25.0},
+		{Timestamp: time.Now().Add(time.Minute), Temperature: 28.0},
+		{Timestamp: time.Now().Add(2 * time.Minute), Temperature: 22.0},
+		// Add more historical data points
 	}
 
-	return s3.New(sess)
+	// Analyze the interval of possible temperature values
+	expectedInterval := analyzeTemperatureInterval(historicalData)
+	fmt.Printf("Expected temperature interval: [%.2f, %.2f]\n", expectedInterval.Min, expectedInterval.Max)
+
+	// Simulate streaming data
+	streamingData := []TemperatureEvent{
+		{Timestamp: time.Now().Add(3 * time.Minute), Temperature: 24.0},
+		{Timestamp: time.Now().Add(4 * time.Minute), Temperature: 30.0},
+		{Timestamp: time.Now().Add(5 * time.Minute), Temperature: 18.0},
+		// Add more streaming data points
+	}
+
+	// Process the streaming data events using interval analysis
+	for _, event := range streamingData {
+		processTemperatureEvent(event, expectedInterval)
+	}
 }
-
-func optimizeDataRetentionPolicy(feature string, retentionPeriod time.Duration) time.Duration {
-	// Ensure the retention period is within the specified limits
-	retentionPeriod = time.Duration(max(int(retentionPeriod), DataRetentionPeriod))
-	retentionPeriod = time.Duration(min(int(retentionPeriod), MaxDataRetentionPeriod))
-
-	// Calculate the optimized retention period based on performance considerations
-	// (For demonstration purposes, we'll set it to half of the retention period)
-	optimizedRetentionPeriod := retentionPeriod / 2
-
-	return optimizedRetentionPeriod
-}
-
-func storeUserData(userID string, feature string, data string) error {
-	// Simulate data record creation
-	record := DataRecord{
-		UserID:    userID,
-		Feature:   feature,
-		Timestamp: time.Now().Unix(),
-		Data:      data,
-	}
-
-	// Optimize the data retention policy for performance
-	retentionPeriod := optimizeDataRetentionPolicy(feature, DataRetentionPeriod)
-
-	// Compress the data before storing
-	compressedData, err := compressData([]byte(record.Data))
-	if err != nil {
-		return fmt.Errorf("error compressing data: %v", err)
-	}
-
-	// Generate an S3 object key based on the retention period and user ID
-	key := fmt.Sprintf("%s/%s/%d", feature, userID, record.Timestamp/int64(retentionPeriod*time.Second))
-
-	// Upload the compressed data to S3 with the optimized retention period
-	s3Client := getS3Client()
-	_, err = s3Client.PutObject(&s3.PutObjectInput{
-		Bucket: aws.String(awsS3BucketName),
-		Key:    aws.String(key),
-		Body:   bytes.NewReader(compressedData),
-		ACL:    aws.String("private"),
-	})
-	if err != nil {
-		return fmt.Errorf("error storing data in S3: %v", err)
-	}
-
-	return nil
-}
-
-// (Rest of the code remains the same)

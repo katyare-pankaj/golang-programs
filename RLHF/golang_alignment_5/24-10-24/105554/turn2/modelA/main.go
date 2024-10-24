@@ -2,76 +2,87 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"time"
-
-	"github.com/urfave/cli/v2"
 )
 
-// DataRetentionPolicy defines the data retention period for a feature, along with a compliance check function
-type DataRetentionPolicy struct {
-	Feature         string
-	Period          time.Duration
-	ComplianceCheck func(time.Time) bool
+// Interval represents a closed interval [min, max]
+type Interval struct {
+	Min float64
+	Max float64
 }
 
-var (
-	dataRetentionPolicies = []DataRetentionPolicy{
-		{
-			Feature: "UserLocationHistory",
-			Period:  30 * 24 * time.Hour,
-			ComplianceCheck: func(dataRetentionEndTime time.Time) bool {
-				// Example compliance check: Ensure retention ends within the last 90 days for GDPR
-				return time.Now().Sub(dataRetentionEndTime) <= 90*24*time.Hour
-			},
-		},
-		{
-			Feature: "UserInteractions",
-			Period:  7 * 24 * time.Hour,
-			ComplianceCheck: func(dataRetentionEndTime time.Time) bool {
-				// Example compliance check: No specific compliance requirement for this feature
-				return true
-			},
-		},
+// Subject interface defines the methods for subjects (data streams)
+type Subject interface {
+	RegisterObserver(o Observer)
+	RemoveObserver(o Observer)
+	NotifyObservers()
+	GetInterval() Interval
+}
+
+// DataStream implements the Subject interface to represent a streaming data source
+type DataStream struct {
+	observers       []Observer
+	currentInterval Interval
+}
+
+func (ds *DataStream) RegisterObserver(o Observer) {
+	ds.observers = append(ds.observers, o)
+}
+
+func (ds *DataStream) RemoveObserver(o Observer) {
+	// Implementation for removing observers
+}
+
+func (ds *DataStream) NotifyObservers() {
+	for _, observer := range ds.observers {
+		observer.Update(ds.currentInterval)
 	}
-)
+}
 
-func optimizeDataRetentionPolicies() {
-	for i, policy := range dataRetentionPolicies {
-		// Find the optimal retention period while maintaining compliance
-		optimalPeriod := policy.Period
+func (ds *DataStream) GetInterval() Interval {
+	return ds.currentInterval
+}
 
-		for retentionPeriod := policy.Period; retentionPeriod > 0; retentionPeriod -= time.Hour {
-			dataRetentionEndTime := time.Now().Add(-retentionPeriod)
-			if policy.ComplianceCheck(dataRetentionEndTime) {
-				optimalPeriod = retentionPeriod
-				break
-			}
-		}
+// Observer interface defines the update method for observers
+type Observer interface {
+	Update(interval Interval)
+}
 
-		dataRetentionPolicies[i].Period = optimalPeriod
-		fmt.Printf("Optimized retention period for feature '%s': %s\n", policy.Feature, optimalPeriod)
-	}
+// MovingAverageCalculator is an observer that calculates the moving average based on the data interval
+type MovingAverageCalculator struct {
+	windowSize     int
+	currentAverage float64
+}
+
+func NewMovingAverageCalculator(windowSize int) *MovingAverageCalculator {
+	return &MovingAverageCalculator{windowSize: windowSize}
+}
+
+func (mac *MovingAverageCalculator) Update(interval Interval) {
+	// Calculate the moving average using the interval and window size
+	minAverage := interval.Min / float64(mac.windowSize)
+	maxAverage := interval.Max / float64(mac.windowSize)
+	mac.currentAverage = (minAverage + maxAverage) / 2
+}
+
+func (mac *MovingAverageCalculator) GetCurrentAverage() float64 {
+	return mac.currentAverage
 }
 
 func main() {
-	app := &cli.App{
-		Name:  "VR Data Retention Optimizer",
-		Usage: "Optimizes data retention policies for VR applications while maintaining regulatory compliance",
-		Commands: []*cli.Command{
-			{
-				Name:  "optimize",
-				Usage: "Optimize data retention policies",
-				Action: func(c *cli.Context) error {
-					optimizeDataRetentionPolicies()
-					return nil
-				},
-			},
-		},
-	}
+	// Set up the data stream and observers
+	dataStream := &DataStream{}
+	movingAverageCalculator := NewMovingAverageCalculator(5)
 
-	err := app.Run(os.Args)
-	if err != nil {
-		fmt.Println(err)
-	}
+	dataStream.RegisterObserver(movingAverageCalculator)
+
+	// Simulate streaming data and update the interval
+	dataStream.currentInterval = Interval{Min: 20.0, Max: 80.0}
+	dataStream.NotifyObservers()
+
+	fmt.Printf("Current Moving Average: %.2f\n", movingAverageCalculator.GetCurrentAverage())
+
+	// Simulate updating the data stream interval
+	dataStream.currentInterval = Interval{Min: 40.0, Max: 100.0}
+	dataStream.NotifyObservers()
+	fmt.Printf("Current Moving Average: %.2f\n", movingAverageCalculator.GetCurrentAverage())
 }
