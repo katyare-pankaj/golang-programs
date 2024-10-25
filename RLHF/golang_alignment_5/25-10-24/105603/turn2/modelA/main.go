@@ -1,32 +1,66 @@
-// Example usage of compiler flags
-//go:build go1.18
-// +build go1.18
-
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+	"time"
 
-//go:noinline
-func sumArrayAutoVectorized(arr []int32) int32 {
-	total := int32(0)
-	for _, v := range arr {
-		total += v
+	"github.com/sugarme/gotch"
+)
+
+// NaiveMatrixMultiply performs a naive matrix multiplication
+func NaiveMatrixMultiply(A, B [][]float32) [][]float32 {
+	rowsA := len(A)
+	colsA := len(A[0])
+	rowsB := len(B)
+	colsB := len(B[0])
+
+	if colsA != rowsB {
+		panic("Number of columns in A must equal number of rows in B.")
 	}
-	return total
+
+	C := make([][]float32, rowsA)
+	for i := 0; i < rowsA; i++ {
+		C[i] = make([]float32, colsB)
+		for j := 0; j < colsB; j++ {
+			for k := 0; k < colsA; k++ {
+				C[i][j] += A[i][k] * B[k][j]
+			}
+		}
+	}
+
+	return C
+}
+
+// EfficientMatrixMultiply uses NumGO for efficient matrix multiplication
+func EfficientMatrixMultiply(A, B *gotch.Tensor) *gotch.Tensor {
+	return A.Matmul(B)
 }
 
 func main() {
-	// Enable compiler flags for AVX-512 support and optimization
-	// The exact flags may vary depending on the Go compiler version and platform
-	//runtime.SetCPUProfileRate(1)
+	// Initialize Gotch
+	gotch.Init()
+	defer gotch.Close()
 
-	arrSize := 10000000
-	arr := make([]int32, arrSize)
+	// Generate large random matrices for demonstration
+	size := 1000
+	A := gotch.Randn(size, size, gotch.Float)
+	B := gotch.Randn(size, size, gotch.Float)
 
-	for i := range arr {
-		arr[i] = int32(i)
-	}
+	// Naive Matrix Multiplication
+	start := time.Now()
+	naiveResult := NaiveMatrixMultiply(A.MustData().([]float32), B.MustData().([]float32))
+	naiveDuration := time.Since(start)
 
-	sum := sumArrayAutoVectorized(arr)
-	fmt.Println("Sum:", sum)
+	// Efficient Matrix Multiplication using NumGO
+	start = time.Now()
+	efficientResult := EfficientMatrixMultiply(A, B)
+	efficientDuration := time.Since(start)
+
+	// Verify the results are equal
+	gotch.AssertEqual(naiveResult, efficientResult.MustData().([]float32))
+
+	fmt.Printf("Naive Matrix Multiplication Time: %s\n", naiveDuration)
+	fmt.Printf("Efficient Matrix Multiplication Time using NumGO: %s\n", efficientDuration)
+	fmt.Printf("Speedup: %.2fx\n", math.Ceil(float64(naiveDuration)/float64(efficientDuration)))
 }
