@@ -1,53 +1,63 @@
-//go:build go1.18
-// +build go1.18
-
 package main
 
 import (
 	"fmt"
-	"runtime"
+	"math/rand"
+	"time"
 )
 
-// Vpsubd performs packed subtraction of 32-bit integers in 'x' and 'y' and stores the results in 'dst'.
-//func Vpsubd(dst *[8]int32, x *[8]int32, y *[8]int32)
+// TemperatureController represents a control system that regulates the temperature of a room.
+type TemperatureController struct {
+	currentTemperature float64
+	targetTemperature  float64
+	hysteresis         float64
+}
 
-func sumArrayBranchAware(arr []int32) int32 {
-	total := int32(0)
-	length := len(arr)
+// NewTemperatureController creates a new TemperatureController with the given initial temperature, target temperature, and hysteresis.
+func NewTemperatureController(currentTemperature, targetTemperature, hysteresis float64) *TemperatureController {
+	return &TemperatureController{
+		currentTemperature: currentTemperature,
+		targetTemperature:  targetTemperature,
+		hysteresis:         hysteresis,
+	}
+}
 
-	// branch-aware optimization for SIMD instruction
-	if length >= 8 {
-		// Loop iterating with a step of 8, which corresponds to the size of the SIMD register.
-		for i := 0; i < length-7; i += 8 {
-			// Load 8 int32 values from memory to a SIMD register.
-			x := arr[i : i+8]
+// Control updates the temperature of the room based on the current temperature and the target temperature.
+func (c *TemperatureController) Control() {
+	for {
+		// Simulate random temperature changes in the room
+		c.currentTemperature += rand.NormFloat64() * 0.5
 
-			// Use SIMD instruction to calculate the sum of 8 integers simultaneously.
-			total += vpsubd(&x, &[8]int32{}, &[8]int32{})
+		// Check if the temperature is too high or too low
+		if c.currentTemperature > c.targetTemperature+c.hysteresis {
+			// Temperature is too high, turn off the heater
+			fmt.Println("Temperature is too high, turning off the heater.")
+		} else if c.currentTemperature < c.targetTemperature-c.hysteresis {
+			// Temperature is too low, turn on the heater
+			fmt.Println("Temperature is too low, turning on the heater.")
+		} else {
+			// Temperature is within the hysteresis range, do nothing
+			fmt.Println("Temperature is within the hysteresis range, doing nothing.")
 		}
-	}
 
-	// Add the remaining elements that are not processed by SIMD
-	for i := length &^ 7; i < length; i++ {
-		total += arr[i]
+		// Simulate a control cycle delay
+		time.Sleep(time.Second)
 	}
-
-	return total
 }
 
 func main() {
-	// Ensure that the code is compiled for the Intel AVX-512 instructionset.
-	runtime.CPUProfile()
+	// Initialize the random number generator
+	rand.Seed(time.Now().UnixNano())
 
-	// Create a large array to test the performance of the function.
-	arrSize := 1000000
-	arr := make([]int32, arrSize)
+	// Create a new TemperatureController with the given parameters
+	controller := NewTemperatureController(22.0, 23.0, 0.5)
 
-	// Initialize the array with some data.
-	for i := range arr {
-		arr[i] = int32(i)
+	// Start the control loop
+	go controller.Control()
+
+	// Simulate some external events that may affect the temperature
+	for i := 0; i < 10; i++ {
+		time.Sleep(time.Duration(rand.Intn(5)) * time.Second)
+		fmt.Println("External event: Temperature changed by", rand.NormFloat64()*2.0)
 	}
-
-	sum := sumArrayBranchAware(arr)
-	fmt.Println("Sum:", sum)
 }

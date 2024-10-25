@@ -1,14 +1,21 @@
 package main
 
-import "runtime"
+import (
+	"fmt"
+	"runtime"
+)
 
 func main() {
-	for i := 0; i < 10000000; i++ {
+	for i := 0; i < 10; i++ {
 		x := i % 2
 		// Use the branch prediction methods as needed
 		result1 := predictStaticBranch(x)
 		result2 := predictProfileGuided(x)
 		result3 := indirectBranchPrediction(x > 0, f1, f2, x)
+
+		fmt.Println(result1)
+		fmt.Println(result2)
+		fmt.Println(result3)
 
 	}
 }

@@ -1,32 +1,47 @@
-// Example usage of compiler flags
-//go:build go1.18
-// +build go1.18
-
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"math/rand"
+	"time"
+)
 
-//go:noinline
-func sumArrayAutoVectorized(arr []int32) int32 {
-	total := int32(0)
-	for _, v := range arr {
-		total += v
+// TemperatureController ...
+type TemperatureController struct {
+	// ... (Same as before)
+}
+
+// Control with profile-guided branch prediction
+func (c *TemperatureController) ControlWithPGBP() {
+	for {
+		// Simulate temperature changes
+		c.currentTemperature += rand.NormFloat64() * 0.5
+
+		if c.currentTemperature > c.targetTemperature+c.hysteresis {
+			// Temperature is too high, turn off the heater
+			fmt.Println("Temperature is too high, turning off the heater.")
+		} else if c.currentTemperature < c.targetTemperature-c.hysteresis {
+			// Temperature is too low, turn on the heater
+			fmt.Println("Temperature is too low, turning on the heater.")
+		} else {
+			// Temperature is within the hysteresis range, do nothing
+			fmt.Println("Temperature is within the hysteresis range, doing nothing.")
+		}
+
+		time.Sleep(time.Second)
 	}
-	return total
 }
 
 func main() {
-	// Enable compiler flags for AVX-512 support and optimization
-	// The exact flags may vary depending on the Go compiler version and platform
-	//runtime.SetCPUProfileRate(1)
+	rand.Seed(time.Now().UnixNano())
+	controller := NewTemperatureController(22.0, 23.0, 0.5)
 
-	arrSize := 10000000
-	arr := make([]int32, arrSize)
+	// Run the control loop with profile-guided branch prediction
+	go controller.ControlWithPGBP()
 
-	for i := range arr {
-		arr[i] = int32(i)
+	// Simulate external events
+	for i := 0; i < 10; i++ {
+		time.Sleep(time.Duration(rand.Intn(5)) * time.Second)
+		fmt.Println("External event: Temperature changed by", rand.NormFloat64()*2.0)
 	}
-
-	sum := sumArrayAutoVectorized(arr)
-	fmt.Println("Sum:", sum)
 }
