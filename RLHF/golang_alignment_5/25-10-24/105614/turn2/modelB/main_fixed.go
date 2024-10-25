@@ -13,7 +13,7 @@ type Product struct {
 	Quantity int
 }
 
-// Lazy-evaluated data structure to hold a inventory of products
+// Lazy-evaluated data structure to hold an inventory of products
 type Inventory struct {
 	mu           sync.Mutex
 	products     map[string]Product
@@ -38,12 +38,6 @@ func (i *Inventory) UpdateProduct(product string, price float64, quantity int) {
 	defer i.mu.Unlock()
 
 	i.products[product] = Product{Price: price, Quantity: quantity}
-	i.lazyDataCalc.Do(func() {
-		i.lazyData = &lazyData{}
-		for _, p := range i.products {
-			i.lazyData.totalValue += p.Price * float64(p.Quantity)
-		}
-	})
 	i.lazyData = nil // Invalidate the lazy data when updating a product
 }
 
@@ -52,12 +46,13 @@ func (i *Inventory) TotalValue() float64 {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	i.lazyDataCalc.Do(func() {
+	// Initialize lazyData if it's nil
+	if i.lazyData == nil {
 		i.lazyData = &lazyData{}
 		for _, p := range i.products {
 			i.lazyData.totalValue += p.Price * float64(p.Quantity)
 		}
-	})
+	}
 	return i.lazyData.totalValue
 }
 
