@@ -127,6 +127,7 @@ require (
 	github.com/sajari/word2vec v1.0.1
 	github.com/siddontang/go-log v0.0.0-20190221022429-1e957dd83bed
 	github.com/sjwhitworth/golearn v0.0.0-20221228163002-74ae077eafb2
+	github.com/sugarme/gotch v0.9.1
 	github.com/urfave/cli/v2 v2.27.5
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
