@@ -88,6 +88,7 @@ require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/andybalholm/brotli v1.1.1
 	github.com/aws/aws-sdk-go v1.55.5
+	github.com/aymerick/raymond v2.0.2+incompatible
 	github.com/blevesearch/bleve v1.0.14
 	github.com/cockroachdb/cockroach-go/v2 v2.3.8
 	github.com/coreos/etcd v3.3.27+incompatible
@@ -116,6 +117,7 @@ require (
 	github.com/onsi/ginkgo v1.16.5
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/sajari/word2vec v1.0.1
+	github.com/siddontang/go-log v0.0.0-20190221022429-1e957dd83bed
 	github.com/urfave/cli/v2 v2.27.5
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
