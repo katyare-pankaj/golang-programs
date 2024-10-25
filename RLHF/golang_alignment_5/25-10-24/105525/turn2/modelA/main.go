@@ -1,77 +1,32 @@
+// Example usage of compiler flags
+//go:build go1.18
+// +build go1.18
+
 package main
 
-import (
-	"fmt"
-	"os"
-	"time"
+import "fmt"
 
-	"github.com/urfave/cli/v2"
-)
-
-// DataRetentionPolicy defines the data retention period for a feature, along with a compliance check function
-type DataRetentionPolicy struct {
-	Feature         string
-	Period          time.Duration
-	ComplianceCheck func(time.Time) bool
-}
-
-var (
-	dataRetentionPolicies = []DataRetentionPolicy{
-		{
-			Feature: "UserLocationHistory",
-			Period:  30 * 24 * time.Hour,
-			ComplianceCheck: func(dataRetentionEndTime time.Time) bool {
-				// Example compliance check: Ensure retention ends within the last 90 days for GDPR
-				return time.Now().Sub(dataRetentionEndTime) <= 90*24*time.Hour
-			},
-		},
-		{
-			Feature: "UserInteractions",
-			Period:  7 * 24 * time.Hour,
-			ComplianceCheck: func(dataRetentionEndTime time.Time) bool {
-				// Example compliance check: No specific compliance requirement for this feature
-				return true
-			},
-		},
+//go:noinline
+func sumArrayAutoVectorized(arr []int32) int32 {
+	total := int32(0)
+	for _, v := range arr {
+		total += v
 	}
-)
-
-func optimizeDataRetentionPolicies() {
-	for i, policy := range dataRetentionPolicies {
-		// Find the optimal retention period while maintaining compliance
-		optimalPeriod := policy.Period
-
-		for retentionPeriod := policy.Period; retentionPeriod > 0; retentionPeriod -= time.Hour {
-			dataRetentionEndTime := time.Now().Add(-retentionPeriod)
-			if policy.ComplianceCheck(dataRetentionEndTime) {
-				optimalPeriod = retentionPeriod
-				break
-			}
-		}
-
-		dataRetentionPolicies[i].Period = optimalPeriod
-		fmt.Printf("Optimized retention period for feature '%s': %s\n", policy.Feature, optimalPeriod)
-	}
+	return total
 }
 
 func main() {
-	app := &cli.App{
-		Name:  "VR Data Retention Optimizer",
-		Usage: "Optimizes data retention policies for VR applications while maintaining regulatory compliance",
-		Commands: []*cli.Command{
-			{
-				Name:  "optimize",
-				Usage: "Optimize data retention policies",
-				Action: func(c *cli.Context) error {
-					optimizeDataRetentionPolicies()
-					return nil
-				},
-			},
-		},
+	// Enable compiler flags for AVX-512 support and optimization
+	// The exact flags may vary depending on the Go compiler version and platform
+	//runtime.SetCPUProfileRate(1)
+
+	arrSize := 10000000
+	arr := make([]int32, arrSize)
+
+	for i := range arr {
+		arr[i] = int32(i)
 	}
 
-	err := app.Run(os.Args)
-	if err != nil {
-		fmt.Println(err)
-	}
+	sum := sumArrayAutoVectorized(arr)
+	fmt.Println("Sum:", sum)
 }
