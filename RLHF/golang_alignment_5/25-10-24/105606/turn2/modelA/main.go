@@ -1,92 +1,82 @@
 package main
 
 import (
-	"bytes"
-	"compress/gzip"
-	"compress/zlib"
+	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"testing"
-	"time"
+	"strings"
+
+	"github.com/aymerick/raymond"
+	"github.com/clips/pattern"
+	"github.com/siddontang/go-log/logger"
+	"github.com/topictoolkit/lda"
 )
 
+// LogEntry represents a structured log entry
+type LogEntry struct {
+	Timestamp string `json:"timestamp"`
+	Message   string `json:"message"`
+	Level     string `json:"level"`
+	UserID    int    `json:"user_id,omitempty"`
+	ErrorCode int    `json:"error_code,omitempty"`
+}
+
 func main() {
-	// Original data
-	data := []byte("This is a sample data string that will be compressed using different methods to compare their effects on processing time in real-time applications.")
-
-	fmt.Println("Original data size:", len(data))
-
-	// Compare Gzip and Zlib compression
-	testCompressionMethods(data, compressDataGzip, "Gzip")
-	testCompressionMethods(data, compressDataZlib, "Zlib")
-}
-
-func testCompressionMethods(data []byte, compressionFunc func([]byte) []byte, methodName string) {
-	start := time.Now()
-	compressedData := compressionFunc(data)
-	elapsed := time.Since(start)
-
-	fmt.Printf("%s Compression Time: %s\n", methodName, elapsed)
-	fmt.Printf("%s Compressed data size: %d\n", methodName, len(compressedData))
-
-	// Decompress and verify
-	decompressedData := decompressData(compressedData)
-
-	if bytes.Equal(data, decompressedData) {
-		fmt.Println("Decompression successful: Data matches original")
-	} else {
-		fmt.Println("Decompression failed: Data mismatch")
+	logMessages := []string{
+		`{"timestamp": "2023-07-28T10:00:01Z", "message": "User logged in successfully [user_id=456]", "level": "info"}`,
+		`{"timestamp": "2023-07-28T10:00:02Z", "message": "Order placed successfully [user_id=123, order_id=789]", "level": "info"}`,
+		`{"timestamp": "2023-07-28T10:00:03Z", "message": "System error: Internal Server Error (500)", "level": "error"}`,
+		`{"timestamp": "2023-07-28T10:00:04Z", "message": "Product stock updated [product_id=abc]", "level": "info"}`,
+		`{"timestamp": "2023-07-28T10:00:05Z", "message": "User feedback received: Great app!", "level": "info"}`,
 	}
-}
 
-func compressDataGzip(data []byte) []byte {
-	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
-	if _, err := zw.Write(data); err != nil {
-		log.Fatal(err)
+	// 1. Structured Log Parsing
+	var entries []LogEntry
+	for _, msg := range logMessages {
+		var entry LogEntry
+		if err := json.Unmarshal([]byte(msg), &entry); err != nil {
+			log.Printf("Error parsing log entry: %v", err)
+			continue
+		}
+		entries = append(entries, entry)
 	}
-	if err := zw.Close(); err != nil {
-		log.Fatal(err)
-	}
-	return buf.Bytes()
-}
 
-func compressDataZlib(data []byte) []byte {
-	var buf bytes.Buffer
-	w := zlib.NewWriter(&buf)
-	if _, err := w.Write(data); err != nil {
-		log.Fatal(err)
+	// 2. Sentiment Analysis
+	sentimentAnalyzer := pattern.NewSentimentAnalyzer(pattern.English)
+	for _, entry := range entries {
+		sentiment := sentimentAnalyzer.Sentiment(strings.ToLower(entry.Message))
+		entry.Message += fmt.Sprintf(" (Sentiment: %s)", sentiment)
 	}
-	if err := w.Close(); err != nil {
-		log.Fatal(err)
-	}
-	return buf.Bytes()
-}
 
-func decompressData(compressedData []byte) []byte {
-	gr, err := gzip.NewReader(bytes.NewBuffer(compressedData))
+	// 3. Text Preprocessing and Template Matching
+	template := "{{timestamp}} {{level}}: {{message}} [User ID: {{user_id}}]"
+	for i, entry := range entries {
+		preprocessedMessage := strings.Map(func(r rune) rune {
+			if r == '.' || r == ',' || r == '!' || r == '?' {
+				return -1
+			}
+			return r
+		}, strings.ToLower(entry.Message))
+
+		rendered := raymond.Render(template, map[string]interface{}{
+			"timestamp": entry.Timestamp,
+			"level":     entry.Level,
+			"message":   preprocessedMessage,
+			"user_id":   entry.UserID,
+		})
+		entries[i].Message = rendered
+	}
+
+	// 4. Topic Modeling (Using a simplified example for demonstration)
+	documents := make([][]string, len(entries))
+	for i, entry := range entries {
+		documents[i] = strings.Fields(strings.ToLower(entry.Message))
+	}
+
+	numTopics := 2
+	model, err := lda.NewLDA(numTopics, documents, 50, 0.01, 0.01)
 	if err != nil {
-		log.Fatal(err)
-	}
-	defer gr.Close()
-	data, err := ioutil.ReadAll(gr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return data
-}
+		logger.Fatalf("Error running LDA: %v", err)
 
-func BenchmarkGzipCompression(b *testing.B) {
-	data := []byte("This is some sample data for benchmarking")
-	for n := 0; n < b.N; n++ {
-		compressDataGzip(data)
-	}
-}
-
-func BenchmarkZlibCompression(b *testing.B) {
-	data := []byte("This is some sample data for benchmarking")
-	for n := 0; n < b.N; n++ {
-		compressDataZlib(data)
 	}
 }

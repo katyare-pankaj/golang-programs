@@ -1,85 +1,44 @@
 package main
 
 import (
-	"bytes"
-	"compress/gzip"
-	"io/ioutil"
-	"math/rand"
-	"testing"
-
-	"github.com/andybalholm/brotli"
+	"fmt"
+	"math"
+	"sort"
 )
 
-func generateRandomData(size int) []byte {
-	data := make([]byte, size)
-	rand.Read(data)
-	return data
+func isAnomaly(value float64, dataset []float64) bool {
+	// Calculate z-score
+	sortedData := append([]float64{}, dataset...)
+	sort.Float64s(sortedData)
+	mean := calculateMean(sortedData)
+	stdDev := calculateStdDev(sortedData)
+	zScore := (value - mean) / stdDev
+	// Set an anomaly threshold (e.g., z-score > 3)
+	threshold := 3.0
+	return math.Abs(zScore) > threshold
 }
-
-func compressDataGzip(data []byte) []byte {
-	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
-	if _, err := zw.Write(data); err != nil {
-		panic(err)
+func calculateMean(data []float64) float64 {
+	sum := 0.0
+	for _, value := range data {
+		sum += value
 	}
-	if err := zw.Close(); err != nil {
-		panic(err)
-	}
-	return buf.Bytes()
+	return sum / float64(len(data))
 }
-
-func decompressDataGzip(compressedData []byte) []byte {
-	gr, err := gzip.NewReader(bytes.NewBuffer(compressedData))
-	if err != nil {
-		panic(err)
+func calculateStdDev(data []float64) float64 {
+	mean := calculateMean(data)
+	squaredDifferences := make([]float64, len(data))
+	for i, value := range data {
+		squaredDifferences[i] = math.Pow(value-mean, 2)
 	}
-	defer gr.Close()
-	data, err := ioutil.ReadAll(gr)
-	if err != nil {
-		panic(err)
-	}
-	return data
-}
-
-func compressDataBrotli(data []byte) []byte {
-	var buf bytes.Buffer
-	w := brotli.NewWriter(&buf)
-	if _, err := w.Write(data); err != nil {
-		panic(err)
-	}
-	if err := w.Close(); err != nil {
-		panic(err)
-	}
-	return buf.Bytes()
-}
-
-func decompressDataBrotli(compressedData []byte) []byte {
-	r := brotli.NewReader(bytes.NewBuffer(compressedData))
-	data, err := ioutil.ReadAll(r)
-	if err != nil {
-		panic(err)
-	}
-	return data
-}
-
-func benchmarkCompression(b *testing.B, compressionFn func([]byte) []byte) {
-	data := generateRandomData(1024 * 1024) // 1MB data
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		compressedData := compressionFn(data)
-		decompressDataGzip(compressedData)
-	}
+	variance := calculateMean(squaredDifferences)
+	return math.Sqrt(variance)
 }
 
 func main() {
-	testing.Benchmark(BenchmarkCompressionGzip)
-	testing.Benchmark(BenchmarkCompressionBrotli)
-}
+	// Log data points (e.g., response times)
+	logData := []float64{100.0, 120.0, 80.0, 150.0, 110.0, 130.0, 140.0, 180.0, 160.0, 200.0}
 
-func BenchmarkCompressionGzip(b *testing.B) {
-	benchmarkCompression(b, compressDataGzip)
-}
-
-func BenchmarkCompressionBrotli(b *testing.B) {
-	benchmarkCompression(b, compressDataBrotli)
+	anomalyValue := 300.0 // Potential anomaly
+	isAnomaly := isAnomaly(anomalyValue, logData)
+	fmt.Println("Is Anomaly? :", isAnomaly)
 }
