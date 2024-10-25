@@ -102,6 +102,7 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/google/btree v1.1.3
+	github.com/google/go-cmp v0.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/hashicorp/consul/api v1.30.0
 	github.com/ikawaha/kagome v1.11.2
