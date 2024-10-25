@@ -86,6 +86,7 @@ require (
 
 require (
 	github.com/alecthomas/chroma v0.10.0
+	github.com/andybalholm/brotli v1.1.1
 	github.com/aws/aws-sdk-go v1.55.5
 	github.com/blevesearch/bleve v1.0.14
 	github.com/cockroachdb/cockroach-go/v2 v2.3.8
