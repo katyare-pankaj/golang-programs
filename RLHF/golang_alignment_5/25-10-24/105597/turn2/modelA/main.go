@@ -1,32 +1,36 @@
-// Example usage of compiler flags
-//go:build go1.18
-// +build go1.18
-
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"net/http"
+	"sort"
+)
 
-//go:noinline
-func sumArrayAutoVectorized(arr []int32) int32 {
-	total := int32(0)
-	for _, v := range arr {
-		total += v
+// Using a slice for in-memory data storage
+var inMemoryData []int
+
+func init() {
+	// Populate inMemoryData with some sample data for sorting example
+	for i := 0; i < 100000; i++ {
+		inMemoryData = append(inMemoryData, i)
 	}
-	return total
+}
+
+func handleSortData(w http.ResponseWriter, r *http.Request) {
+	// Sort the in-memory data using built-in sort package
+	sort.Ints(inMemoryData)
+
+	// Write the sorted data as response
+	for _, value := range inMemoryData {
+		fmt.Fprintf(w, "%d\n", value)
+	}
 }
 
 func main() {
-	// Enable compiler flags for AVX-512 support and optimization
-	// The exact flags may vary depending on the Go compiler version and platform
-	//runtime.SetCPUProfileRate(1)
-
-	arrSize := 10000000
-	arr := make([]int32, arrSize)
-
-	for i := range arr {
-		arr[i] = int32(i)
+	http.HandleFunc("/sort", handleSortData)
+	fmt.Println("Server is running on http://localhost:8080")
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		fmt.Println("Error starting the server:", err)
 	}
-
-	sum := sumArrayAutoVectorized(arr)
-	fmt.Println("Sum:", sum)
 }
