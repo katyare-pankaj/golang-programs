@@ -2,90 +2,38 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
+	"io"
+	"os"
 )
 
-// Immutable data structure to represent a product's price and quantity
-type Product struct {
-	Price    float64
-	Quantity int
-}
+// Use pre-allocated error object
+var errEOF = io.EOF
 
-// Lazy-evaluated data structure to hold a inventory of products
-type Inventory struct {
-	mu           sync.Mutex
-	products     map[string]Product
-	lazyData     *lazyData
-	lazyDataCalc sync.Once
-}
-
-type lazyData struct {
-	totalValue float64
-}
-
-// Create a new Inventory instance
-func NewInventory() *Inventory {
-	return &Inventory{
-		products: make(map[string]Product),
-	}
-}
-
-// Add a new product or update its quantity to the Inventory
-func (i *Inventory) UpdateProduct(product string, price float64, quantity int) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	i.products[product] = Product{Price: price, Quantity: quantity}
-	i.lazyDataCalc.Do(func() {
-		i.lazyData = &lazyData{}
-		for _, p := range i.products {
-			i.lazyData.totalValue += p.Price * float64(p.Quantity)
-		}
-	})
-	i.lazyData = nil // Invalidate the lazy data when updating a product
-}
-
-// Get the total value of the inventory (lazy evaluation)
-func (i *Inventory) TotalValue() float64 {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	i.lazyDataCalc.Do(func() {
-		i.lazyData = &lazyData{}
-		for _, p := range i.products {
-			i.lazyData.totalValue += p.Price * float64(p.Quantity)
-		}
-	})
-	return i.lazyData.totalValue
-}
-
-// Simulate real-time data processing by updating inventory products
-func simulateRealTimeDataProcessing(i *Inventory) {
-	rand.Seed(time.Now().UnixNano())
-	products := []string{"ProductA", "ProductB", "ProductC"}
-
+func readAndPrint(r io.Reader) error {
+	buf := make([]byte, 4096)
 	for {
-		product := products[rand.Intn(len(products))]
-		price := rand.Float64() * 100
-		quantity := rand.Intn(100)
-
-		i.UpdateProduct(product, price, quantity)
-
-		time.Sleep(time.Millisecond * 50)
+		n, err := r.Read(buf)
+		if err != nil {
+			// Handle error efficiently
+			if err == errEOF {
+				return nil // End of file, no error
+			}
+			return fmt.Errorf("read error: %w", err)
+		}
+		fmt.Print(string(buf[:n]))
 	}
 }
 
 func main() {
-	inv := NewInventory()
+	f, err := os.Open("example.txt")
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return
+	}
+	defer f.Close()
 
-	// Start the simulation of real-time data processing
-	go simulateRealTimeDataProcessing(inv)
-
-	// Example usage:
-	for {
-		time.Sleep(time.Second * 1)
-		fmt.Printf("Total Inventory Value: $%.2f\n", inv.TotalValue())
+	// Inline error handling
+	if err := readAndPrint(f); err != nil {
+		fmt.Println("Error reading file:", err)
 	}
 }
