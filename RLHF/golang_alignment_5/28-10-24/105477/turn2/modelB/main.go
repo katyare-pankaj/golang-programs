@@ -2,38 +2,83 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"os"
+	"math/rand"
+	"sync"
+	"testing"
 )
 
-// Use pre-allocated error object
-var errEOF = io.EOF
+const (
+	numVehicles   = 100
+	numIterations = 10000
+)
 
-func readAndPrint(r io.Reader) error {
-	buf := make([]byte, 4096)
-	for {
-		n, err := r.Read(buf)
-		if err != nil {
-			// Handle error efficiently
-			if err == errEOF {
-				return nil // End of file, no error
-			}
-			return fmt.Errorf("read error: %w", err)
+type VectorClock struct {
+	mu      sync.Mutex
+	clocks  map[int]int
+	vectors map[int]map[int]int
+}
+
+func NewVectorClock() *VectorClock {
+	return &VectorClock{
+		clocks:  make(map[int]int),
+		vectors: make(map[int]map[int]int),
+	}
+}
+
+func (vc *VectorClock) Synchronize(vehicleID int, currentTime int) {
+	vc.mu.Lock()
+	defer vc.mu.Unlock()
+
+	// Update the local clock
+	vc.clocks[vehicleID] = max(vc.clocks[vehicleID], currentTime)
+
+	// Merge received vector clocks
+	for senderID, senderVector := range vc.vectors {
+		vc.clocks[senderID] = max(vc.clocks[senderID], senderVector[vehicleID])
+	}
+
+	// Update vectors
+	vc.vectors[vehicleID] = make(map[int]int)
+	for senderID, senderTime := range vc.clocks {
+		vc.vectors[vehicleID][senderID] = senderTime
+	}
+}
+
+func (vc *VectorClock) GetSynchronizedTime(vehicleID int) int {
+	vc.mu.Lock()
+	defer vc.mu.Unlock()
+	return vc.clocks[vehicleID]
+}
+
+func max(a, b int) int {
+	if a >= b {
+		return a
+	}
+	return b
+}
+
+func TestVectorClock(t *testing.T) {
+	vc := NewVectorClock()
+
+	// Simulate synchronization between vehicles
+	for vehicleID := 0; vehicleID < numVehicles; vehicleID++ {
+		for i := 0; i < numIterations; i++ {
+			currentTime := rand.Intn(10000)
+			vc.Synchronize(vehicleID, currentTime)
 		}
-		fmt.Print(string(buf[:n]))
+	}
+
+	// Ensure all vehicles have the same synchronized time
+	synchronizedTime := vc.GetSynchronizedTime(0)
+	for vehicleID := 1; vehicleID < numVehicles; vehicleID++ {
+		if vc.GetSynchronizedTime(vehicleID) != synchronizedTime {
+			t.Errorf("Vehicles %d and %d have different synchronized times", 0, vehicleID)
+		}
 	}
 }
 
 func main() {
-	f, err := os.Open("example.txt")
-	if err != nil {
-		fmt.Println("Error opening file:", err)
-		return
-	}
-	defer f.Close()
-
-	// Inline error handling
-	if err := readAndPrint(f); err != nil {
-		fmt.Println("Error reading file:", err)
-	}
+	// Run performance test for the VectorClock
+	fmt.Println("Testing VectorClock:")
+	TestVectorClock(testing.T{})
 }
