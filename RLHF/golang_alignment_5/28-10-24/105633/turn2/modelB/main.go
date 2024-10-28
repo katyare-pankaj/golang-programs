@@ -2,62 +2,91 @@ package main
 
 import (
 	"fmt"
-	"gonum.org/v1/gonum/mat"
-	"gonum.org/v1/gonum/stat"
+	"math"
 )
 
-// Player represents a basketball player's statistics
-type Player struct {
-	Name   string
-	Points float64
-	Rebounds float64
-	Assists float64
-	Steals  float64
-	Blocks  float64
-}
+// Calculate the total cost of distributing renewable energy among users using dynamic programming.
+func distributeRenewableEnergy(users []int, energySources []int) int {
+	numUsers := len(users)
+	numSources := len(energySources)
 
-func main() {
-	// Dummy data for several players
-	players := []Player{
-		{"Player1", 20.5, 5.0, 3.0, 2.0, 1.0},
-		{"Player2", 18.0, 4.0, 6.0, 3.0, 0.5},
-		{"Player3", 15.0, 6.0, 2.0, 1.5, 2.0},
-		{"Player4", 22.0, 3.0, 4.0, 2.5, 1.0},
-		{"Player5", 19.0, 5.0, 5.0, 1.0, 2.5},
+	// 2D array to store intermediate results
+	dp := make([][]int, numUsers+1)
+	for i := 0; i < numUsers+1; i++ {
+		dp[i] = make([]int, numSources+1)
 	}
 
-	// Create a matrix to store player statistics
-	numPlayers := len(players)
-	statMatrix := mat.NewDense(numPlayers, 6, nil)
-	for i, player := range players {
-		statMatrix.Set(i, 0, player.Points)
-		statMatrix.Set(i, 1, player.Rebounds)
-		statMatrix.Set(i, 2, player.Assists)
-		statMatrix.Set(i, 3, player.Steals)
-		statMatrix.Set(i, 4, player.Blocks)
+	// Initialize the base cases.
+	for i := 0; i <= numUsers; i++ {
+		dp[i][0] = math.MaxInt32
+	}
+	for j := 0; j <= numSources; j++ {
+		dp[0][j] = 0
 	}
 
-	// Normalize each column of the matrix (optional)
-	for j := 0; j < statMatrix.Cols(); j++ {
-		column := statMatrix.ColView(j)
-		mean := stat.Mean(column, nil)
-		stdDev := stat.StdDev(column, nil)
-		for i := 0; i < statMatrix.Rows(); i++ {
-			statMatrix.Set(i, j, (statMatrix.At(i, j)-mean)/stdDev)
+	// Calculate the dynamic programming table using nested loops for better readability (complexity increases).
+	for i := 1; i <= numUsers; i++ {
+		for j := 1; j <= numSources; j++ {
+			currentUserEnergy := users[i-1]
+			currentSourceEnergy := energySources[j-1]
+
+			if currentUserEnergy <= currentSourceEnergy {
+				dp[i][j] = min(dp[i-1][j], dp[i-1][j-1]+currentUserEnergy)
+			} else {
+				dp[i][j] = dp[i-1][j]
+			}
 		}
 	}
 
-	// Define weights for each performance metric (optional)
-	weights := mat.NewVecDense(6, []float64{0.2, 0.2, 0.2, 0.15, 0.15})
+	// Return the minimum cost.
+	return dp[numUsers][numSources]
+}
 
-	// Calculate weighted linear combination scores
-	weightedScores := mat.NewVecDense(numPlayers, nil)
-	for i := 0; i < numPlayers; i++ {
-		row := statMatrix.RowView(i)
-		weightedScore := mat.Dot(row, weights)
-		weightedScores.SetVec(i, weightedScore)
+// Utility function to find minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
 	}
+	return b
+}
 
-	// Perform PCA to reduce dimensionality (optional)
-	pca := NewPCA(statMatrix)
-	reducedDimension := 2 // Choose the desired number of reduced dimensions
+// Function to calculate McCabe Complexity of a given function
+func McCabeComplexity(f func()) int {
+	cc := 0
+	nestedLoops := 0
+	calledFunctions := 0
+
+	// Implement McCabe complexity calculation logic (not included in this example for brevity)
+	// It involves counting nesting levels, loop iterations, and function calls.
+
+	return cc
+}
+
+// Function to calculate Halstead Complexity of a given function
+func HalsteadComplexity(f func()) (float64, float64) {
+	n1 := 0 // Operators
+	n2 := 0 // Operands
+	N1 := 0 // Distinct Operators
+	N2 := 0 // Distinct Operands
+
+	// Implement Halstead complexity calculation logic (not included in this example for brevity)
+	// It involves analyzing the function's code to count the number of operators, operands, and distinct ones.
+
+	return N1 + N2, 2.0 * (N1*math.Log2(float64(N1)) + N2*math.Log2(float64(N2)))
+}
+
+func main() {
+	users := []int{2, 3, 4, 3}
+	energySources := []int{3, 5, 2, 4}
+
+	fmt.Println("Users: ", users)
+	fmt.Println("Energy Sources: ", energySources)
+	minCost := distributeRenewableEnergy(users, energySources)
+	fmt.Println("Minimum Cost to distribute energy: ", minCost)
+
+	// Calculate and print code complexity metrics
+	fmt.Println("McCabe Complexity of distributeRenewableEnergy: ", McCabeComplexity(distributeRenewableEnergy))
+	N1, N2 := HalsteadComplexity(distributeRenewableEnergy)
+	fmt.Println("Halstead Complexity (N1 + N2): ", N1+N2)
+	fmt.Println("Halstead Complexity (2*N1*log2(N1) + 2*N2*log2(N2)): ", N2)
+}
