@@ -2,47 +2,62 @@ package main
 
 import (
 	"fmt"
-	"strings"
+	"gonum.org/v1/gonum/mat"
+	"gonum.org/v1/gonum/stat"
 )
 
-type DataProcessor struct {
-}
-
-func (dp *DataProcessor) ProcessData(inputData []string) []string {
-	return dp.transformData(dp.extractData(inputData))
-}
-
-func (dp *DataProcessor) extractData(inputData []string) []string {
-	// Simulate data extraction
-	return inputData
-}
-
-func (dp *DataProcessor) transformData(extractedData []string) []string {
-	cleanedData := make([]string, 0)
-	for _, data := range extractedData {
-		cleanedData = append(cleanedData, dp.cleanRecord(data))
-	}
-	return cleanedData
-}
-
-func (dp *DataProcessor) cleanRecord(record string) string {
-	// Perform data cleaning operations here
-	return strings.TrimSpace(strings.ToLower(record))
+// Player represents a basketball player's statistics
+type Player struct {
+	Name   string
+	Points float64
+	Rebounds float64
+	Assists float64
+	Steals  float64
+	Blocks  float64
 }
 
 func main() {
-	inputData := []string{
-		" Apple ",
-		"Banana",
-		"Cherry ",
-		"",
-		"dApple",
+	// Dummy data for several players
+	players := []Player{
+		{"Player1", 20.5, 5.0, 3.0, 2.0, 1.0},
+		{"Player2", 18.0, 4.0, 6.0, 3.0, 0.5},
+		{"Player3", 15.0, 6.0, 2.0, 1.5, 2.0},
+		{"Player4", 22.0, 3.0, 4.0, 2.5, 1.0},
+		{"Player5", 19.0, 5.0, 5.0, 1.0, 2.5},
 	}
 
-	processor := &DataProcessor{}
-	processedData := processor.ProcessData(inputData)
-
-	for _, processedRecord := range processedData {
-		fmt.Println(processedRecord)
+	// Create a matrix to store player statistics
+	numPlayers := len(players)
+	statMatrix := mat.NewDense(numPlayers, 6, nil)
+	for i, player := range players {
+		statMatrix.Set(i, 0, player.Points)
+		statMatrix.Set(i, 1, player.Rebounds)
+		statMatrix.Set(i, 2, player.Assists)
+		statMatrix.Set(i, 3, player.Steals)
+		statMatrix.Set(i, 4, player.Blocks)
 	}
-}
+
+	// Normalize each column of the matrix (optional)
+	for j := 0; j < statMatrix.Cols(); j++ {
+		column := statMatrix.ColView(j)
+		mean := stat.Mean(column, nil)
+		stdDev := stat.StdDev(column, nil)
+		for i := 0; i < statMatrix.Rows(); i++ {
+			statMatrix.Set(i, j, (statMatrix.At(i, j)-mean)/stdDev)
+		}
+	}
+
+	// Define weights for each performance metric (optional)
+	weights := mat.NewVecDense(6, []float64{0.2, 0.2, 0.2, 0.15, 0.15})
+
+	// Calculate weighted linear combination scores
+	weightedScores := mat.NewVecDense(numPlayers, nil)
+	for i := 0; i < numPlayers; i++ {
+		row := statMatrix.RowView(i)
+		weightedScore := mat.Dot(row, weights)
+		weightedScores.SetVec(i, weightedScore)
+	}
+
+	// Perform PCA to reduce dimensionality (optional)
+	pca := NewPCA(statMatrix)
+	reducedDimension := 2 // Choose the desired number of reduced dimensions
