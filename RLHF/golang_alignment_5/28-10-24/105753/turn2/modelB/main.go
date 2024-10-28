@@ -1,48 +1,77 @@
 package main
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"errors"
 	"fmt"
-	"strings"
+	"io"
 )
 
-type DataProcessor struct {
-}
-
-func (dp *DataProcessor) ProcessData(inputData []string) []string {
-	return dp.transformData(dp.extractData(inputData))
-}
-
-func (dp *DataProcessor) extractData(inputData []string) []string {
-	// Simulate data extraction
-	return inputData
-}
-
-func (dp *DataProcessor) transformData(extractedData []string) []string {
-	cleanedData := make([]string, 0)
-	for _, data := range extractedData {
-		cleanedData = append(cleanedData, dp.cleanRecord(data))
+func encrypt(key []byte, text []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
 	}
-	return cleanedData
+
+	// Never use more than 2^32 random nonces with a given key for security reasons.
+	nonce := make([]byte, 12)
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	ciphertext := aesgcm.Seal(nonce, nonce, text, nil)
+	return ciphertext, nil
 }
 
-func (dp *DataProcessor) cleanRecord(record string) string {
-	// Perform data cleaning operations here
-	return strings.TrimSpace(strings.ToLower(record))
+func decrypt(key []byte, ciphertext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	nonceSize := aesgcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return nil, errors.New("ciphertext too short")
+	}
+
+	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return plaintext, nil
 }
 
 func main() {
-	inputData := []string{
-		" Apple ",
-		"Banana",
-		"Cherry ",
-		"",
-		"dApple",
-	}
+	// Example key. In a real application, you should manage this securely.
+	key := []byte("32-byte-long-secret-key-goes-here-change-this-please")
 
-	processor := &DataProcessor{}
-	processedData := processor.ProcessData(inputData)
+	dataToEncrypt := []byte("Sensitive information goes here")
 
-	for _, processedRecord := range processedData {
-		fmt.Println(processedRecord)
+	// Encrypt
+	ciphertext, err := encrypt(key, dataToEncrypt)
+	if err != nil {
+		panic(err)
 	}
+	fmt.Printf("Encrypted data: %x\n", ciphertext)
+
+	// Decrypt
+	plaintext, err := decrypt(key, ciphertext)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Decrypted data: %s\n", plaintext)
 }
