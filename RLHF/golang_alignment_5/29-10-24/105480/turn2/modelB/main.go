@@ -1,48 +1,75 @@
-package main
-
-import (
+package main  
+import (  
 	"fmt"
-	"strings"
+	"math"
+	"math/rand"
+	"time"
 )
 
-type DataProcessor struct {
+const (
+	dataInterval = "*/1 * * * *" // Generate data every minute
+	maxDataPoints = 100
+	causalThreshold = 0.05
+)
+
+type dataPoint struct {
+	heartRate   float64
+	breathingRate float64
+	timestamp    time.Time
 }
 
-func (dp *DataProcessor) ProcessData(inputData []string) []string {
-	return dp.transformData(dp.extractData(inputData))
-}
-
-func (dp *DataProcessor) extractData(inputData []string) []string {
-	// Simulate data extraction
-	return inputData
-}
-
-func (dp *DataProcessor) transformData(extractedData []string) []string {
-	cleanedData := make([]string, 0)
-	for _, data := range extractedData {
-		cleanedData = append(cleanedData, dp.cleanRecord(data))
+var (
+	dataPoints []dataPoint
+	causalModel struct {
+		heartRateToBreathing float64
 	}
-	return cleanedData
+)
+
+func generateData() {
+	newHeartRate := rand.Float64() * 180 + 40 // Normal heart rate range for adults
+	newBreathingRate := rand.Float64() * 30 + 10
+	dataPoints = append(dataPoints, dataPoint{heartRate: newHeartRate, breathingRate: newBreathingRate, timestamp: time.Now()})
+	if len(dataPoints) > maxDataPoints {
+		dataPoints = dataPoints[1:]
+	}
 }
 
-func (dp *DataProcessor) cleanRecord(record string) string {
-	// Perform data cleaning operations here
-	return strings.TrimSpace(strings.ToLower(record))
+func buildCausalModel() {
+	if len(dataPoints) < 2 {
+		return
+	}
+
+	// Simple linear model: Heart rate = alpha * Breathing rate + beta
+	var sumXY, sumX, sumY float64
+	for _, dp := range dataPoints {
+		sumXY += dp.heartRate * dp.breathingRate
+		sumX += dp.breathingRate
+		sumY += dp.heartRate
+	}
+
+	n := float64(len(dataPoints))
+	causalModel.heartRateToBreathing = (n*sumXY - sumX*sumY) / (n*sumX*sumX - sumX*sumX)
+}
+
+func filterData() {
+	if causalModel.heartRateToBreathing == 0 {
+		return
+	}
+
+	for i := 1; i < len(dataPoints); i++ {
+		expectedHeartRate := causalModel.heartRateToBreathing * dataPoints[i].breathingRate
+		if absFloat64(dataPoints[i].heartRate-expectedHeartRate) > causalThreshold {
+			// Data point is an outlier, filter it
+			dataPoints[i].heartRate = expectedHeartRate
+		}
+	}
+}
+
+func absFloat64(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 func main() {
-	inputData := []string{
-		" Apple ",
-		"Banana",
-		"Cherry ",
-		"",
-		"dApple",
-	}
-
-	processor := &DataProcessor{}
-	processedData := processor.ProcessData(inputData)
-
-	for _, processedRecord := range processedData {
-		fmt.Println(processedRecord)
-	}
-}
