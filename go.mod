@@ -125,6 +125,7 @@ require (
 	github.com/nlpodyssey/gotokenizers v0.2.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/robfig/cron v1.2.0
 	github.com/sajari/word2vec v1.0.1
 	github.com/siddontang/go-log v0.0.0-20190221022429-1e957dd83bed
 	github.com/sjwhitworth/golearn v0.0.0-20221228163002-74ae077eafb2
