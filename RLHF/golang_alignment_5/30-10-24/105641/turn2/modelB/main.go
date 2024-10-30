@@ -1,31 +1,49 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+	"time"
+)
 
-// User struct encapsulates user data
-type User struct {
-	name    string
-	email   string
-	address Address
+// Simulate fetching data from an API
+func fetchData(url string, duration time.Duration) []string {
+	time.Sleep(duration)
+	return []string{"Airport1", "Airport2", "Airport3"}
 }
 
-// Address struct encapsulates address data
-type Address struct {
-	street  string
-	city    string
-	country string
-}
-
-func (u *User) SetAddress(street, city, country string) {
-	u.address = Address{street, city, country}
+// Simulate rendering UI elements
+func renderUI(data []string) {
+	fmt.Println("Rendering UI with data:")
+	for _, item := range data {
+		fmt.Println(item)
+	}
 }
 
 func main() {
-	user := &User{name: "John Doe", email: "johndoe@example.com"}
+	// We'll use a WaitGroup to wait for both asynchronous tasks to complete
+	var wg sync.WaitGroup
 
-	// Set user's address using encapsulated method
-	user.SetAddress("123 Main St", "New York", "USA")
+	// Simulate API request to fetch airports
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		airports := fetchData("https://example.com/api/airports", 2*time.Second)
+		renderUI(airports)
+	}()
 
-	fmt.Println("User Name:", user.name)
-	fmt.Println("User Address:", user.address)
+	// Simulate other tasks running concurrently
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		fmt.Println("Running another task...")
+		time.Sleep(1 * time.Second)
+	}()
+
+	// We can continue executing other code here without waiting for the tasks to finish
+	fmt.Println("Main thread continues executing...")
+
+	// Wait for both tasks to complete
+	wg.Wait()
+	fmt.Println("All tasks completed.")
 }
