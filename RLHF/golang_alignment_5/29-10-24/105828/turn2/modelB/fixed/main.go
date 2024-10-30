@@ -39,12 +39,9 @@ func (v *Video) SetTitle(title string) {
 // Function to handle operation on any content type that implements the Content interface
 func handleContent(content interface{}, operation string, args ...interface{}) {
 	v := reflect.ValueOf(content)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
 
 	// Check if the content type implements the Content interface
-	if !v.Type().Implements(reflect.TypeOf((*Content)(nil)).Elem()) {
+	if !reflect.TypeOf(content).Implements(reflect.TypeOf((*Content)(nil)).Elem()) {
 		fmt.Println("Error: Invalid content type.")
 		return
 	}
