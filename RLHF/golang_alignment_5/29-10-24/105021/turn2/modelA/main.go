@@ -1,98 +1,83 @@
 package main
 
 import (
-	"container/heap"
 	"fmt"
 	"math/rand"
 	"time"
+
+	"github.com/gonum/stat"
 )
 
-// Order represents a supply chain order
-type Order struct {
-	ID             int
-	ProcessingTime int // Time taken to process the order
-	ArrivalTime    int // Time the order arrives
-}
-
-// OrderQueue implements a priority queue for Orders based on ArrivalTime
-type OrderQueue []*Order
-
-func (pq OrderQueue) Len() int { return len(pq) }
-
-func (pq OrderQueue) Less(i, j int) bool {
-	return pq[i].ArrivalTime < pq[j].ArrivalTime
-}
-
-func (pq OrderQueue) Swap(i, j int) {
-	pq[i], pq[j] = pq[j], pq[i]
-}
-
-func (pq *OrderQueue) Push(x interface{}) {
-	item := x.(*Order)
-	*pq = append(*pq, item)
-}
-
-func (pq *OrderQueue) Pop() interface{} {
-	old := *pq
-	n := len(old)
-	item := old[n-1]
-	*pq = old[0 : n-1]
-	return item
-}
-
-// processOrders efficiently processes orders based on their arrival time
-func processOrders(orders []*Order) {
-	orderQueue := make(OrderQueue, 0)
-	heap.Init(&orderQueue)
-
-	currentTime := 0
-
-	for _, order := range orders {
-		heap.Push(&orderQueue, order)
-	}
-
-	for orderQueue.Len() > 0 {
-		// Pop the order with the earliest arrival time
-		currentOrder := heap.Pop(&orderQueue).(*Order)
-
-		// Wait for the order's arrival time if it's not yet arrived
-		if currentOrder.ArrivalTime > currentTime {
-			currentTime = currentOrder.ArrivalTime
-		}
-
-		fmt.Printf("Processing Order ID: %d, Arrival Time: %d, Processing Time: %d\n", currentOrder.ID, currentOrder.ArrivalTime, currentOrder.ProcessingTime)
-
-		// Simulate order processing
-		currentTime += currentOrder.ProcessingTime
-	}
-}
-
 const (
-	numOrders         = 20
-	maxProcessingTime = 10
-	maxArrivalTime    = 20
+	windowSize = 10 // Size of the sliding window for monitoring
 )
 
 func main() {
+	// Generate random data representing CPU usage percentages over time
 	rand.Seed(time.Now().UnixNano())
+	cpuUsageStream := make(chan float64)
 
-	orders := make([]*Order, 0, numOrders)
+	go func() {
+		for {
+			time.Sleep(time.Second)
+			cpuUsageStream <- rand.Float64() * 100
+		}
+	}()
 
-	for i := 0; i < numOrders; i++ {
-		processingTime := rand.Intn(maxProcessingTime) + 1
-		arrivalTime := rand.Intn(maxArrivalTime)
-		orders = append(orders, &Order{
-			ID:             i,
-			ProcessingTime: processingTime,
-			ArrivalTime:    arrivalTime,
-		})
+	monitorAndOptimize(cpuUsageStream)
+}
+
+func monitorAndOptimize(cpuUsageStream <-chan float64) {
+	var slidingWindow []float64
+	var modelPredictions []float64
+
+	for cpuUsage := range cpuUsageStream {
+		// Add the current CPU usage to the sliding window
+		slidingWindow = append(slidingWindow, cpuUsage)
+
+		// Keep the window size fixed
+		if len(slidingWindow) > windowSize {
+			slidingWindow = slidingWindow[1:]
+		}
+
+		// Wait for enough data to populate the window
+		if len(slidingWindow) < windowSize {
+			continue
+		}
+
+		// Fit a simple linear regression model to the sliding window data
+		m, b := fitLinearRegression(slidingWindow, modelPredictions)
+
+		// Predict the CPU usage for the next time step
+		nextPrediction := m*float64(len(slidingWindow)) + b
+		modelPredictions = append(modelPredictions, nextPrediction)
+
+		// Analyze the prediction and take action if needed
+		if nextPrediction > 90 { // Threshold for high CPU usage
+			fmt.Println("High CPU usage predicted! Taking action...")
+			// Add your optimization logic here, such as scaling resources,
+			// adjusting task priorities, or triggering auto-scaling mechanisms.
+			// For simplicity, we'll just print a message.
+		}
+
+		// Display current status
+		fmt.Printf("Current CPU Usage: %.2f%%\tPredicted Next: %.2f%%\n", cpuUsage, nextPrediction)
 	}
+}
 
-	fmt.Println("Orders before processing:")
-	for _, order := range orders {
-		fmt.Printf("Order ID: %d, Arrival Time: %d, Processing Time: %d\n", order.ID, order.ArrivalTime, order.ProcessingTime)
-	}
+// fitLinearRegression fits a linear regression model to the given data.
+func fitLinearRegression(x, y []float64) (m, b float64) {
+	// Calculate mean of x and y
+	meanX := stat.Mean(x, nil)
+	meanY := stat.Mean(y, nil)
 
-	fmt.Println("\nProcessing Orders efficiently based on arrival time:")
-	processOrders(orders)
+	// Calculate covariance and variance of x and y
+	cov := stat.Covariance(x, y, nil)
+	varX := stat.Variance(x, nil)
+
+	// Calculate slope (m) and intercept (b)
+	m = cov / varX
+	b = meanY - m*meanX
+
+	return
 }
