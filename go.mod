@@ -33,6 +33,8 @@ require (
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/glycerine/go-unsnap-stream v0.0.0-20181221182339-f9677308dec2 // indirect
+	github.com/go-jose/go-jose/v4 v4.0.2 // indirect
+	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/gonum/blas v0.0.0-20181208220705-f22b278b28ac // indirect
@@ -78,11 +80,13 @@ require (
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
 	github.com/ziutek/blas v0.0.0-20190227122918-da4ca23e90bb // indirect
 	go.etcd.io/bbolt v1.3.5 // indirect
-	golang.org/x/crypto v0.24.0 // indirect
+	golang.org/x/crypto v0.25.0 // indirect
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63 // indirect
-	golang.org/x/net v0.26.0 // indirect
+	golang.org/x/net v0.27.0 // indirect
+	golang.org/x/oauth2 v0.21.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/sys v0.22.0 // indirect
+	golang.org/x/term v0.22.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
 	gonum.org/v1/gonum v0.8.1 // indirect
 	google.golang.org/genproto v0.0.0-20200430143042-b979b6f78d84 // indirect
@@ -100,6 +104,7 @@ require (
 	github.com/blevesearch/bleve v1.0.14
 	github.com/cockroachdb/cockroach-go/v2 v2.3.8
 	github.com/coreos/etcd v3.3.27+incompatible
+	github.com/coreos/go-oidc/v3 v3.11.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dghubble/go-twitter v0.0.0-20221104224141-912508c3888b
 	github.com/dgraph-io/dgo v1.0.0
@@ -117,6 +122,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/hashicorp/consul/api v1.30.0
 	github.com/ikawaha/kagome v1.11.2
+	github.com/inconshreveable/log15 v2.16.0+incompatible
 	github.com/jasonlvhit/gocron v0.0.1
 	github.com/jdkato/prose/v2 v2.0.0
 	github.com/jmoiron/sqlx v1.4.0
@@ -130,6 +136,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/sajari/word2vec v1.0.1
 	github.com/siddontang/go-log v0.0.0-20190221022429-1e957dd83bed
+	github.com/sirupsen/logrus v1.9.3
 	github.com/sjwhitworth/golearn v0.0.0-20221228163002-74ae077eafb2
 	github.com/sugarme/gotch v0.9.1
 	github.com/urfave/cli/v2 v2.27.5
