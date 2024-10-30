@@ -105,6 +105,7 @@ require (
 	github.com/dgraph-io/dgo v1.0.0
 	github.com/dgraph-io/dgo/v2 v2.2.0
 	github.com/dustin/go-humanize v1.0.1
+	github.com/garyburd/redigo v1.6.4
 	github.com/go-chi/chi v1.5.5
 	github.com/go-playground/assert v1.2.1
 	github.com/go-redis/redis v6.15.9+incompatible
@@ -124,6 +125,7 @@ require (
 	github.com/neo4j/neo4j-go-driver/v4 v4.4.7
 	github.com/nlpodyssey/gotokenizers v0.2.0
 	github.com/onsi/ginkgo v1.16.5
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/robfig/cron v1.2.0
 	github.com/sajari/word2vec v1.0.1
