@@ -39,7 +39,7 @@ require (
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/golang/snappy v0.0.1 // indirect
+	github.com/golang/snappy v0.0.3 // indirect
 	github.com/gonum/blas v0.0.0-20181208220705-f22b278b28ac // indirect
 	github.com/gonum/internal v0.0.0-20181124074243-f884aa714029 // indirect
 	github.com/gonum/lapack v0.0.0-20181123203213-e4cdc5a0bff9 // indirect
@@ -95,9 +95,10 @@ require (
 	golang.org/x/term v0.25.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
 	golang.org/x/tools v0.26.0 // indirect
-	gonum.org/v1/gonum v0.8.1 // indirect
-	google.golang.org/genproto v0.0.0-20200430143042-b979b6f78d84 // indirect
-	google.golang.org/grpc v1.29.1 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	gonum.org/v1/gonum v0.9.3 // indirect
+	google.golang.org/genproto v0.0.0-20210630183607-d20f26d13c79 // indirect
+	google.golang.org/grpc v1.39.0 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/neurosnap/sentences.v1 v1.0.6 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
@@ -106,6 +107,7 @@ require (
 require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/andybalholm/brotli v1.1.1
+	github.com/apache/arrow/go/arrow v0.0.0-20211112161151-bc219186db40
 	github.com/aws/aws-sdk-go v1.55.5
 	github.com/aymerick/raymond v2.0.2+incompatible
 	github.com/blevesearch/bleve v1.0.14
