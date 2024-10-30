@@ -1,98 +1,110 @@
-package main
-
-import (
+package main  
+import (  
 	"fmt"
+	"math"
 	"math/rand"
-	"sync"
+	"sort"
 	"time"
-
-	"github.com/patrickmn/go-cache"
 )
 
-// Product struct represents a product in the store
-type Product struct {
-	ID          int
-	Name        string
-	Description string
-	Price       float64
-	Categories  []string
+// Order represents a supply chain order
+type Order struct {
+	ID        int
+	ItemID    int
+	Quantity  int
+	ProcessingTime int // Time taken to process the order (in days)
 }
 
-// InMemoryProductStore uses in-memory caching to store and retrieve products
-type InMemoryProductStore struct {
-	cache *cache.Cache
-	mu    sync.Mutex
+// Inventory represents the inventory status of an item
+type Inventory struct {
+	ItemID    int
+	CurrentStock int
+	MinimumStock int
+	MaximumStock int
+	DemandForecast int // Forecasted demand for the item (in units)
 }
 
-// NewInMemoryProductStore creates a new InMemoryProductStore
-func NewInMemoryProductStore() *InMemoryProductStore {
-	return &InMemoryProductStore{
-		cache: cache.New(5*time.Minute, 10*time.Minute), // Cache items for 5 minutes, clean up every 10 minutes
+// DemandHistory stores demand data for an item over time
+type DemandHistory struct{
+	ItemID int
+	Demand []int
+}
+
+// Supplier represents a supplier for an item
+type Supplier struct{
+	ItemID int
+	LeadTime int // Time taken to receive an order from the supplier (in days)
+}
+
+//CalculateReorderLevel calculates the reorder level for an item
+func CalculateReorderLevel(inventory *Inventory) int {
+	return int(math.Ceil(float64(inventory.DemandForecast) * (float64(inventory.MaximumStock - inventory.MinimumStock) / 100))) + inventory.MinimumStock
+}
+
+//UpdateInventory updates the inventory after processing an order
+func UpdateInventory(inventory *Inventory, order *Order) {
+	inventory.CurrentStock -= order.Quantity
+}
+
+//ProcessOrder processes an order and updates inventory
+func ProcessOrder(inventoryMap map[int]*Inventory, order *Order) {
+	// Find the inventory for the item being ordered
+	inventory, ok := inventoryMap[order.ItemID]
+	if !ok {
+		fmt.Printf("Error: Item ID %d not found in inventory.\n", order.ItemID)
+		return
+	}
+
+	// Update inventory after processing the order
+	UpdateInventory(inventory, order)
+
+	// Check if reorder level needs to be updated
+	if inventory.CurrentStock <= inventory.ReorderLevel {
+		fmt.Printf("Reorder level reached for Item ID %d. Placing a reorder.\n", inventory.ItemID)
+		// Place a reorder here (not implemented in this example)
 	}
 }
 
-// StoreProduct stores a product in the in-memory store
-func (ims *InMemoryProductStore) StoreProduct(product *Product) {
-	ims.mu.Lock()
-	defer ims.mu.Unlock()
-	ims.cache.Set(fmt.Sprint(product.ID), product, cache.DefaultExpiration)
-}
+// PredictDemand uses simple statistical methods to predict demand for an item
+func PredictDemand(demandHistory []DemandHistory, itemID int, period int) int {
+	// We'll use a simple moving average for prediction in this example
+	sum := 0
+	count := 0
 
-// GetProduct retrieves a product from the in-memory store based on its ID
-func (ims *InMemoryProductStore) GetProduct(id int) (*Product, bool) {
-	ims.mu.Lock()
-	defer ims.mu.Unlock()
-	val, found := ims.cache.Get(fmt.Sprint(id))
-	if found {
-		return val.(*Product), true
-	}
-	return nil, false
-}
-
-// getRandomProduct fetches a random product from the database (in a real scenario)
-func getRandomProduct() *Product {
-	// In a real application, this would query the database to fetch the product.
-	time.Sleep(time.Millisecond * 50) // Simulate database query time
-	productID := rand.Intn(1000)
-	return &Product{
-		ID:          productID,
-		Name:        fmt.Sprintf("Product %d", productID),
-		Description: fmt.Sprintf("This is product %d.", productID),
-		Price:       float64(rand.Intn(1000)) + 0.99,
-		Categories:  []string{"Electronics", "Smart Devices", "Gaming"},
-	}
-}
-
-// searchProducts simulates a real-time search for products based on a given query
-func searchProducts(query string, store *InMemoryProductStore) []*Product {
-	// In a real application, this would perform a search in the database or elasticsearch
-	// Based on the query, we'll fetch some random products here.
-	results := []*Product{}
-	for i := 0; i < 5; i++ {
-		product := getRandomProduct()
-		// Check if the product is already in the cache to avoid redundant queries
-		if _, cached := store.GetProduct(product.ID); !cached {
-			store.StoreProduct(product)
+	// Find the demand history for the specified item
+	for _, history := range demandHistory {
+		if history.ItemID == itemID {
+			for _, demand := range history.Demand {
+				if count >= period {
+					break
+				}
+				sum += demand
+				count++
+			}
+			break
 		}
-		results = append(results, product)
 	}
-	return results
+
+	if count == 0 {
+		return 0 // Return 0 if no demand history is found
+	}
+
+	return int(math.Round(float64(sum) / float64(count)))
 }
+
+const (
+	numItems = 5
+	maxDemand = 20
+	numOrders = 20
+	reorderPercentage = 20 // Percentage of maximum stock as reorder level
+)
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	store := NewInMemoryProductStore()
 
-	// Simulate a real-time search query
-	query := "smartphone"
-	startTime := time.Now()
-	searchResults := searchProducts(query, store)
-	endTime := time.Now()
-
-	// Output the search results and cache hit statistics
-	fmt.Println("Search Results:")
-	for _, product := range searchResults {
-		fmt.Printf("Product %d: %s ($%.2f)\n", product.ID, product.Name, product.Price)
-	}
-	fmt.Println("------------------------")
-	fmt.Printf("Cache Hits: %d\n", store.cache.ItemCount())
+	// Initialize inventory
+	inventoryMap := make(map[int]*Inventory)
+	for i := 0; i < numItems; i++ {
+		minStock := rand.Intn(10) + 1
+		maxStock := minStock + rand.Intn(20) + 1
+		inventory
