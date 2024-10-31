@@ -1,28 +1,43 @@
-package modelA
+package main
 
 import (
 	"fmt"
+	"net/http"
+	"sync"
 )
 
-// Step 1: Encapsulate user data
-type User struct {
-	name  string
-	email string
+// Counter is a simple shared counter
+type Counter struct {
+	mu    sync.Mutex
+	count int
 }
 
-func (u *User) GetName() string {
-	return u.name
+// Increment increments the counter
+func (c *Counter) Increment() {
+	c.mu.Lock()
+	c.count++
+	c.mu.Unlock()
 }
 
-func (u *User) SetName(name string) {
-	u.name = name
+// GetCount returns the current count
+func (c *Counter) GetCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.count
+}
+
+var counter = &Counter{}
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	counter.Increment()
+	fmt.Fprintf(w, "Hello, world! Count: %d\n", counter.GetCount())
 }
 
 func main() {
-	user := &User{name: "Alice"}
-	fmt.Println("User Name:", user.GetName())
-
-	// Modifying user name encapsulated change
-	user.SetName("Bob")
-	fmt.Println("Updated User Name:", user.GetName())
+	http.HandleFunc("/", handler)
+	fmt.Println("Server running on http://localhost:8080")
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		panic(err)
+	}
 }

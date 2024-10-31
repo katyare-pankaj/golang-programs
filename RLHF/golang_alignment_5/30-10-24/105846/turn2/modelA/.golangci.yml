@@ -1,0 +1,11 @@
+linters:
+  enable:
+  - revive
+  - gosec
+  - bodyclose
+  - errcheck
+  - staticcheck
+  - unused
+
+run:
+  timeout: 2m
