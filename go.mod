@@ -29,6 +29,8 @@ require (
 	github.com/couchbase/vellum v1.0.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
+	github.com/dereklstinson/cutil v0.0.0-20200501162227-cd61820be722 // indirect
+	github.com/dereklstinson/half v0.0.0-20200329200302-12eeddbf446a // indirect
 	github.com/dghubble/sling v1.4.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dlclark/regexp2 v1.4.0 // indirect
@@ -115,6 +117,7 @@ require (
 	github.com/coreos/etcd v3.3.27+incompatible
 	github.com/coreos/go-oidc/v3 v3.11.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/dereklstinson/gocudnn v0.0.0-20200513205921-c9f06edc8374
 	github.com/dghubble/go-twitter v0.0.0-20221104224141-912508c3888b
 	github.com/dgraph-io/dgo v1.0.0
 	github.com/dgraph-io/dgo/v2 v2.2.0
