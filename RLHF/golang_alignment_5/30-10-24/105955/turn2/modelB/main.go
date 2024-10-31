@@ -1,31 +1,53 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"log"
+	"math/rand"
+	"net/http"
+	"time"
 
-// User struct encapsulates user data
-type User struct {
-	name    string
-	email   string
-	address Address
-}
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
 
-// Address struct encapsulates address data
-type Address struct {
-	street  string
-	city    string
-	country string
-}
+var (
+	// Metric to store the count of code reviews processed at regular intervals.
+	codeReviewsProcessed = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "code_reviews_processed_count",
+			Help: "Number of code reviews processed at regular intervals.",
+		},
+		[]string{},
+	)
 
-func (u *User) SetAddress(street, city, country string) {
-	u.address = Address{street, city, country}
-}
+	// Interval at which we want to sample and record data.
+	samplingInterval = time.Second * 10
+)
 
 func main() {
-	user := &User{name: "John Doe", email: "johndoe@example.com"}
+	// Simulate code review processing and record metrics at a fixed interval.
+	go func() {
+		ticker := time.NewTicker(samplingInterval)
+		defer ticker.Stop()
 
-	// Set user's address using encapsulated method
-	user.SetAddress("123 Main St", "New York", "USA")
+		for range ticker.C {
+			processCodeReviews()
+		}
+	}()
 
-	fmt.Println("User Name:", user.name)
-	fmt.Println("User Address:", user.address)
+	// Start the HTTP server to expose Prometheus metrics.
+	fmt.Println("Prometheus metrics server listening on :8080")
+	http.Handle("/metrics", promhttp.Handler())
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func processCodeReviews() {
+	// Simulate processing some code reviews.
+	count := rand.Intn(10) + 1
+	fmt.Printf("Processed %d code reviews during the interval.\n", count)
+
+	// Record the sampled data point.
+	codeReviewsProcessed.WithLabelValues().Set(float64(count))
 }

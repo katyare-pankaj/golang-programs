@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	codeReviewDuration = expvar.NewHistogram("code_review_duration_seconds")
+	codeReviewDuration = expvar.NewFloat("code_review_duration_seconds") // Use Float for duration
 	codeReviewsTotal   = expvar.NewInt("code_reviews_total")
 	samplingInterval   = time.Second // Choose your desired sampling interval
 	nextSampleTime     = time.Now()
@@ -37,8 +37,8 @@ func main() {
 	}()
 
 	// Start a HTTP server to expose expvar metrics
+	http.HandleFunc("/metrics", expvar.Handler().ServeHTTP) // Correctly serve expvar metrics
 	fmt.Println("Expvar metrics server listening on :8080")
-	expvar.HandleExpvar()
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
@@ -46,16 +46,17 @@ func processCodeReview() {
 	// Simulate code review processing time
 	duration := time.Duration(rand.Intn(10)+1) * time.Second
 
-	// Update the histogram without sampling
-	codeReviewDuration.Add(float64(duration.Seconds()))
-	codeReviewsTotal.Add(1)
+	// Update the metrics
+	codeReviewDuration.Set(float64(duration.Seconds())) // Set the duration in seconds
+	codeReviewsTotal.Add(1)                             // Increment the total count
 }
 
 func sampleAndResetMetrics() {
 	// Perform sampling and reset counters here if needed
-	// For example, you can calculate average duration and reset the histogram
+	// For example, you can calculate average duration and reset the metrics
 	fmt.Println("Sampling metrics...")
+
 	// Reset counters for the next sampling interval
-	codeReviewDuration.Init()
-	codeReviewsTotal.Set(0)
+	codeReviewDuration.Set(0) // Reset the duration metric
+	codeReviewsTotal.Set(0)   // Reset the total count
 }
