@@ -1,84 +1,68 @@
-package main
+package main  
+import (  
+    "encoding/json"  
+    "fmt"  
+    "log"
+)  
 
-import (
-	"fmt"
-	"sync"
-	"time"
-)
+type Node struct {  
+    Value int    `json:"value"`  
+    Next  *Node `json:"next"`  
+}  
 
-// Processor interface defines an extensible processor for the data pipeline.
-type Processor interface {
-	Process(data []byte, c chan<- []byte)
+// Custom Marshaler to break the circular reference
+func (n *Node) MarshalJSON() ([]byte, error) {  
+    if n == nil {
+        return json.Marshal(nil)
+    }
+    type SimpleNode struct {
+        Value int `json:"value"`
+        Next  *SimpleNodeID `json:"next"`
+    }
+    type SimpleNodeID struct {
+        ID int `json:"id"`
+    }
+
+    var out SimpleNode
+    out.Value = n.Value
+
+    // Create a mapping to ensure next nodes reference each other by ID
+    nodeMap := make(map[*Node]int)
+    nodeMap[n] = len(nodeMap)
+
+    func marshalNext(node *Node) (interface{}, error) {
+        if node == nil {
+            return nil, nil
+        }
+        id, ok := nodeMap[node]
+        if !ok {
+            id = len(nodeMap)
+            nodeMap[node] = id
+        }
+        return &SimpleNodeID{ID: id}, nil
+    }
+
+    out.Next, err := marshalNext(n.Next)
+    if err != nil {
+        return nil, err
+    }
+
+    return json.Marshal(out)
 }
 
-// SimpleProcessor simulates a basic processing function with a delay.
-type SimpleProcessor struct{}
+func main() {  
+    // Example data with a circular reference  
+    a := &Node{Value: 1}  
+    b := &Node{Value: 2}  
+    c := &Node{Value: 3}  
 
-func (p *SimpleProcessor) Process(data []byte, c chan<- []byte) {
-	time.Sleep(100 * time.Millisecond) // Simulate processing time
-	c <- append(data, data...)
-}
+    a.Next = b  
+    b.Next = c  
+    c.Next = a // Circular reference back to A
 
-// AggregateProcessor simulates an aggregation processing function.
-type AggregateProcessor struct{}
-
-func (p *AggregateProcessor) Process(data []byte, c chan<- []byte) {
-	time.Sleep(50 * time.Millisecond) // Simulate processing time
-	c <- data
-}
-
-// Pipeline manages the sequence of processors and runs the data through them.
-type Pipeline struct {
-	processors []Processor
-	wg         sync.WaitGroup
-}
-
-// NewPipeline creates a new pipeline.
-func NewPipeline() *Pipeline {
-	return &Pipeline{}
-}
-
-// AddProcessor appends a new processor to the pipeline.
-func (p *Pipeline) AddProcessor(processor Processor) {
-	p.processors = append(p.processors, processor)
-}
-
-// Start begins the data processing pipeline.
-func (p *Pipeline) Start(input []byte) {
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		p.runPipeline(input)
-	}()
-}
-
-// Wait waits for the pipeline to complete processing.
-func (p *Pipeline) Wait() {
-	p.wg.Wait()
-}
-
-func (p *Pipeline) runPipeline(input []byte) {
-	c := make(chan []byte)
-
-	for _, processor := range p.processors {
-		go func(p Processor) {
-			processor.Process(<-c, c)
-		}(processor)
-	}
-
-	c <- input
-	close(c)
-}
-
-func main() {
-	pipeline := NewPipeline()
-	pipeline.AddProcessor(&SimpleProcessor{})
-	pipeline.AddProcessor(&AggregateProcessor{})
-
-	inputData := []byte("Hello, Fog Computing!")
-
-	fmt.Println("Starting pipeline...")
-	pipeline.Start(inputData)
-	pipeline.Wait()
-	fmt.Println("Pipeline completed.")
+    data, err := json.MarshalIndent(a, "", "  ")  
+    if err != nil {  
+        log.Fatal("Error marshaling data:", err)  
+    }  
+    fmt.Println(string(data))
 }
