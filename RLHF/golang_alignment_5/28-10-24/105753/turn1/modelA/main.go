@@ -51,7 +51,7 @@ func decrypt(key []byte, ciphertext []byte) ([]byte, error) {
 
 func main() {
 	// Example key. In a real application, you should manage this securely
-	key := []byte("32-byte-long-secret-key-goes-here-change-this-please")
+	key := []byte("thisis32byteslongsecretkeyforaes")
 
 	dataToEncrypt := []byte("Sensitive information goes here")
 
