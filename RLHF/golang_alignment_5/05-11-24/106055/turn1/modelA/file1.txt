@@ -1,0 +1,14 @@
+# Generate a sample text file 'file.txt' with some content to test the archiving program.
+
+file_path = "file.txt"
+
+# Create and write some sample data to 'file.txt'
+with open(file_path, "w") as f:
+    f.write("This is a sample text file used to test the archiving program.\n")
+    f.write("It contains several lines of text.\n")
+    f.write("Each line serves as a simple test case for compression.\n")
+    f.write("Let's add more content to make it a bit larger.\n")
+    f.write("This line is here to ensure we have sufficient data for testing.\n")
+    f.write("End of the sample text file.\n")
+
+file_path
