@@ -7,16 +7,16 @@ type Employee struct {
 	Skills []string
 }
 
+func (e Employee) printCompetencies() {
+	fmt.Println("Competencies:")
+	for _, skill := range e.Skills {
+		fmt.Println(skill)
+	}
+}
+
 type Manager struct {
 	Employee
 	ReportingTeam []string
-}
-
-func (m Manager) printCompetencies() {
-	fmt.Println("Manager Competencies:")
-	for _, skill := range m.Skills {
-		fmt.Println(skill)
-	}
 }
 
 func main() {
@@ -30,5 +30,5 @@ func main() {
 		ReportingTeam: []string{"Bob", "Charlie"},
 	}
 
-	manager.printCompetencies()
+	emp.printCompetencies()
 }

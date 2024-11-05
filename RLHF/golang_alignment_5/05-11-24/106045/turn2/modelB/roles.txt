@@ -1,0 +1,6 @@
+roles_content = """Engineer
+Manager
+Analyst
+Designer
+Tester
+"""
