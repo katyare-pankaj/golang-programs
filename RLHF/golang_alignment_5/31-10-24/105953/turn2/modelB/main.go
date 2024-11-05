@@ -1,76 +1,45 @@
-package main
+// patient_service.go
+
+package patient
 
 import (
+	"context"
 	"fmt"
-	"time"
 
-	"github.com/cucumber/godog"
 	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
-// User represents a user in the system
-type User struct {
-	gorm.Model
-	Name      string `gorm:"type:varchar(100)"`
-	Email     string `gorm:"type:varchar(255)"`
-	Age       int
-	CreatedAt time.Time
-	UpdatedAt time.Time
+// Patient represents a patient entity
+type Patient struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Age          int    `json:"age"`
+	HealthStatus string `json:"health_status"`
 }
 
-// Synchronizer handles data synchronization
-type Synchronizer struct {
+// PatientService interface defines the service methods
+type PatientService interface {
+	GetPatient(ctx context.Context, id string) (*Patient, error)
+	CreatePatient(ctx context.Context, patient *Patient) (*Patient, error)
+	UpdatePatient(ctx context.Context, patient *Patient) (*Patient, error)
+	DeletePatient(ctx context.Context, id string) error
+}
+
+// patientService implements the PatientService interface
+type patientService struct {
 	db *gorm.DB
 }
 
-// NewSynchronizer creates a new Synchronizer
-func NewSynchronizer() *Synchronizer {
-	db, err := gorm.Open("sqlite3", "test.db")
-	if err != nil {
-		panic("failed to connect database")
+// GetPatient implements the PatientService interface
+func (s *patientService) GetPatient(ctx context.Context, id string) (*Patient, error) {
+	var patient Patient
+	if err := s.db.Where("id = ?", id).First(&patient).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("patient with id %s not found", id)
+		}
+		return nil, err
 	}
-
-	// Migrate the schema
-	db.AutoMigrate(&User{})
-
-	return &Synchronizer{db: db}
+	return &patient, nil
 }
 
-// SynchronizeUsers synchronizes users from one database to another
-func (s *Synchronizer) SynchronizeUsers() error {
-	// Implement your synchronization logic here
-	// For this example, we'll just perform a simple two-way synchronization
-	return nil
-}
-
-func FeatureContext(s *godog.ScenarioContext) {
-	var synchronizer *Synchronizer
-
-	s.BeforeScenario(func(*godog.Scenario) {
-		synchronizer = NewSynchronizer()
-	})
-
-	s.Step(`^I synchronize users$`, func() error {
-		return synchronizer.SynchronizeUsers()
-	})
-
-	s.Step(`^the users should be synchronized successfully$`, func() error {
-		// Add your assertion logic here to verify that the users are synchronized correctly
-		return nil
-	})
-}
-
-func main() {
-	status, err := godog.TestSuites(
-		&godog.TestSuite{
-			Name:                "Synchronization features",
-			ScenarioInitializer: FeatureContext,
-			FeaturesPath:        "features",
-		},
-	)
-	if err != nil {
-		fmt.Println(err)
-	}
-	godog.Exit(status)
-}
+// (Implement remaining service methods and TDD tests)
