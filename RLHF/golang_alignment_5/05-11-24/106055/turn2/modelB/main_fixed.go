@@ -34,16 +34,25 @@ func archiveData(source string, destination string, compressor string, compressi
 	var writer io.Writer
 	switch compressor {
 	case "gzip":
-		writer = gzip.NewWriter(archiveFile)
-		defer writer.(*gzip.Writer).Close()
-		writer.(*gzip.Writer).Level = compressionLevel
+		// Use NewWriterLevel to set the compression level for gzip
+		gzWriter, err := gzip.NewWriterLevel(archiveFile, compressionLevel)
+		if err != nil {
+			log.Fatalf("Error creating gzip writer: %v", err)
+		}
+		defer gzWriter.Close()
+		writer = gzWriter
 	case "zlib":
-		writer = zlib.NewWriter(archiveFile)
-		defer writer.(*zlib.Writer).Close()
-		writer.(*zlib.Writer).Level = compressionLevel
+		// Use NewWriterLevel to set the compression level for zlib
+		zlibWriter, err := zlib.NewWriterLevel(archiveFile, compressionLevel)
+		if err != nil {
+			log.Fatalf("Error creating zlib writer: %v", err)
+		}
+		defer zlibWriter.Close()
+		writer = zlibWriter
 	case "lz4":
-		writer = lz4.NewWriter(archiveFile)
-		defer writer.(*lz4.Writer).Close()
+		lz4Writer := lz4.NewWriter(archiveFile)
+		defer lz4Writer.Close()
+		writer = lz4Writer
 	default:
 		log.Fatalf("Invalid compressor: %s", compressor)
 		return
@@ -92,3 +101,16 @@ func compressChunks(source string, writer io.Writer) error {
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU()) // Use all available CPU cores
+
+	source := "file.txt"
+	destinations := []string{
+		"gzip_archive.gz",
+		"lz4_archive.lz4",
+	}
+
+	// Compress with Gzip
+	archiveData(source, destinations[0], "gzip", gzip.BestCompression)
+
+	// Compress with LZ4
+	archiveData(source, destinations[1], "lz4", 0) // LZ4 doesn't support levels, so use 0 or omit
+}

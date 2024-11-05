@@ -1,84 +1,100 @@
 package main
 
 import (
-	"fmt"
+	"compress/gzip"
+	"io"
+	"log"
+	"os"
+	"runtime"
 	"sync"
-	"time"
+
+	"github.com/pierrec/lz4"
 )
 
-// Processor interface defines an extensible processor for the data pipeline.
-type Processor interface {
-	Process(data []byte, c chan<- []byte)
-}
+const (
+	chunkSize = 1024 * 1024 // 1MB chunk size
+)
 
-// SimpleProcessor simulates a basic processing function with a delay.
-type SimpleProcessor struct{}
-
-func (p *SimpleProcessor) Process(data []byte, c chan<- []byte) {
-	time.Sleep(100 * time.Millisecond) // Simulate processing time
-	c <- append(data, data...)
-}
-
-// AggregateProcessor simulates an aggregation processing function.
-type AggregateProcessor struct{}
-
-func (p *AggregateProcessor) Process(data []byte, c chan<- []byte) {
-	time.Sleep(50 * time.Millisecond) // Simulate processing time
-	c <- data
-}
-
-// Pipeline manages the sequence of processors and runs the data through them.
-type Pipeline struct {
-	processors []Processor
-	wg         sync.WaitGroup
-}
-
-// NewPipeline creates a new pipeline.
-func NewPipeline() *Pipeline {
-	return &Pipeline{}
-}
-
-// AddProcessor appends a new processor to the pipeline.
-func (p *Pipeline) AddProcessor(processor Processor) {
-	p.processors = append(p.processors, processor)
-}
-
-// Start begins the data processing pipeline.
-func (p *Pipeline) Start(input []byte) {
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		p.runPipeline(input)
-	}()
-}
-
-// Wait waits for the pipeline to complete processing.
-func (p *Pipeline) Wait() {
-	p.wg.Wait()
-}
-
-func (p *Pipeline) runPipeline(input []byte) {
-	c := make(chan []byte)
-
-	for _, processor := range p.processors {
-		go func(p Processor) {
-			processor.Process(<-c, c)
-		}(processor)
+func archiveData(source string, destination string, compressionType string) {
+	// Check if source file exists
+	_, err := os.Stat(source)
+	if os.IsNotExist(err) {
+		log.Fatalf("Error: Source file '%s' not found.", source)
 	}
 
-	c <- input
-	close(c)
+	// Create the archive file
+	archiveFile, err := os.Create(destination)
+	if err != nil {
+		log.Fatalf("Error creating archive file: %v", err)
+	}
+	defer archiveFile.Close()
+
+	var writer io.Writer
+	switch compressionType {
+	case "gzip":
+		writer = gzip.NewWriter(archiveFile)
+		defer writer.(*gzip.Writer).Close()
+	case "lz4":
+		writer = lz4.NewWriter(archiveFile)
+		defer writer.(*lz4.Writer).Close()
+	default:
+		log.Fatalf("Invalid compression type: %s", compressionType)
+		return
+	}
+
+	// Read the source file in chunks and compress concurrently
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		if err := compressChunks(source, writer); err != nil {
+			log.Fatalf("Error compressing data: %v", err)
+		}
+	}()
+
+	wg.Wait()
+
+	log.Printf("Archive created successfully: %s", destination)
+}
+
+func compressChunks(source string, writer io.Writer) error {
+	file, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	buffer := make([]byte, chunkSize)
+
+	for {
+		n, err := file.Read(buffer)
+		if n == 0 {
+			if err == io.EOF {
+				return nil // End of file
+			}
+			return err // Other error
+		}
+
+		if _, err := writer.Write(buffer[:n]); err != nil {
+			return err
+		}
+	}
 }
 
 func main() {
-	pipeline := NewPipeline()
-	pipeline.AddProcessor(&SimpleProcessor{})
-	pipeline.AddProcessor(&AggregateProcessor{})
+	source := "file.txt"
+	destinations := []string{
+		"gzip_archive.gz",
+		"lz4_archive.lz4",
+	}
+	compressionTypes := []string{"gzip", "lz4"}
 
-	inputData := []byte("Hello, Fog Computing!")
+	for i, compressionType := range compressionTypes {
+		runtime.GOMAXPROCS(runtime.NumCPU()) // Use all available CPU cores
 
-	fmt.Println("Starting pipeline...")
-	pipeline.Start(inputData)
-	pipeline.Wait()
-	fmt.Println("Pipeline completed.")
+		destination := destinations[i]
+
+		archiveData(source, destination, compressionType)
+	}
 }
