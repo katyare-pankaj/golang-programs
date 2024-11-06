@@ -2,83 +2,96 @@ package main
 
 import (
 	"fmt"
+	"math"
+	"runtime"
 	"sync"
 	"time"
 )
 
-// Processor interface defines an extensible processor for the data pipeline.
-type Processor interface {
-	Process(data []byte, c chan<- []byte)
+func isPrime(n int) bool {
+	if n < 2 {
+		return false
+	}
+	for i := 2; i <= int(math.Sqrt(float64(n))); i++ {
+		if n%i == 0 {
+			return false
+		}
+	}
+	return true
 }
 
-// SimpleProcessor simulates a basic processing function with a delay.
-type SimpleProcessor struct{}
-
-func (p *SimpleProcessor) Process(data []byte, c chan<- []byte) {
-	time.Sleep(100 * time.Millisecond) // Simulate processing time
-	c <- append(data, data...)
+func calculatePrimes(limit int) []int {
+	var primes []int
+	for i := 2; i <= limit; i++ {
+		if isPrime(i) {
+			primes = append(primes, i)
+		}
+	}
+	return primes
 }
 
-// AggregateProcessor simulates an aggregation processing function.
-type AggregateProcessor struct{}
-
-func (p *AggregateProcessor) Process(data []byte, c chan<- []byte) {
-	time.Sleep(50 * time.Millisecond) // Simulate processing time
-	c <- data
-}
-
-// Pipeline manages the sequence of processors and runs the data through them.
-type Pipeline struct {
-	processors []Processor
-	wg         sync.WaitGroup
-}
-
-// NewPipeline creates a new pipeline.
-func NewPipeline() *Pipeline {
-	return &Pipeline{}
-}
-
-// AddProcessor appends a new processor to the pipeline.
-func (p *Pipeline) AddProcessor(processor Processor) {
-	p.processors = append(p.processors, processor)
-}
-
-// Start begins the data processing pipeline.
-func (p *Pipeline) Start(input []byte) {
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		p.runPipeline(input)
-	}()
-}
-
-// Wait waits for the pipeline to complete processing.
-func (p *Pipeline) Wait() {
-	p.wg.Wait()
-}
-
-func (p *Pipeline) runPipeline(input []byte) {
-	c := make(chan []byte)
-
-	for _, processor := range p.processors {
-		go func(p Processor) {
-			processor.Process(<-c, c)
-		}(processor)
+func sieveOfEratosthenes(limit int) []int {
+	primes := make([]int, 0)
+	isPrime := make([]bool, limit+1)
+	for i := 2; i <= limit; i++ {
+		isPrime[i] = true
 	}
 
-	c <- input
-	close(c)
+	for i := 2; i*i <= limit; i++ {
+		if isPrime[i] {
+			for j := i * i; j <= limit; j += i {
+				isPrime[j] = false
+			}
+		}
+	}
+
+	for i := 2; i <= limit; i++ {
+		if isPrime[i] {
+			primes = append(primes, i)
+		}
+	}
+	return primes
+}
+
+func calculatePrimesConcurrently(limit int) []int {
+	var primes []int
+	var wg sync.WaitGroup
+
+	numThreads := runtime.NumCPU()
+	chunkSize := (limit-1)/numThreads + 1
+
+	wg.Add(numThreads)
+	for threadID := 0; threadID < numThreads; threadID++ {
+		start := 2 + threadID*chunkSize
+		end := min(start+chunkSize-1, limit)
+		go func(start, end int) {
+			defer wg.Done()
+			for i := start; i <= end; i++ {
+				if isPrime(i) {
+					primes = append(primes, i)
+				}
+			}
+		}(start, end)
+	}
+
+	wg.Wait()
+	return primes
 }
 
 func main() {
-	pipeline := NewPipeline()
-	pipeline.AddProcessor(&SimpleProcessor{})
-	pipeline.AddProcessor(&AggregateProcessor{})
+	limit := 100000
+	start := time.Now()
+	primes := calculatePrimes(limit)
+	duration := time.Since(start)
+	fmt.Printf("Calculated %d primes up to %d in %s\n", len(primes), limit, duration)
 
-	inputData := []byte("Hello, Fog Computing!")
+	start = time.Now()
+	primes = sieveOfEratosthenes(limit)
+	duration = time.Since(start)
+	fmt.Printf("Calculated %d primes using Sieve of Eratosthenes in: %s\n", len(primes), duration)
 
-	fmt.Println("Starting pipeline...")
-	pipeline.Start(inputData)
-	pipeline.Wait()
-	fmt.Println("Pipeline completed.")
+	start = time.Now()
+	primes = calculatePrimesConcurrently(limit)
+	duration = time.Since(start)
+	fmt.Printf("Calculated %d primes concurrently in: %s\n", len(primes), duration)
 }
