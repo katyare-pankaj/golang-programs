@@ -2,80 +2,89 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 )
 
-// Define the Product interface
-type Product interface {
-	Use()
-	Clone() Product
+// DroneNavigationSystem interface defines the basic navigation operations
+type DroneNavigationSystem interface {
+	PlanPath(start, end Point) []Point
+	GetCurrentPosition() Point
 }
 
-// Concrete Product implementations
-type ConcreteProductA struct {
-	name string
+// BasicNavigationSystem is a simple implementation of the DroneNavigationSystem interface
+type BasicNavigationSystem struct {
+	currentPosition Point
 }
 
-func (p *ConcreteProductA) Use() {
-	fmt.Println("Using ConcreteProduct A")
-}
-
-func (p *ConcreteProductA) Clone() Product {
-	return &ConcreteProductA{name: p.name}
-}
-
-type ConcreteProductB struct {
-	name string
-}
-
-func (p *ConcreteProductB) Use() {
-	fmt.Println("Using ConcreteProduct B")
-}
-
-func (p *ConcreteProductB) Clone() Product {
-	return &ConcreteProductB{name: p.name}
-}
-
-// Manager class uses the prototype pattern
-type Manager struct {
-	prototypes map[string]Product
-}
-
-func NewManager() *Manager {
-	return &Manager{
-		prototypes: make(map[string]Product),
+func (n *BasicNavigationSystem) PlanPath(start, end Point) []Point {
+	// Simple linear path planning
+	path := []Point{}
+	for i := 0; i < 10; i++ {
+		x := start.X + (end.X-start.X)*float64(i)/10
+		y := start.Y + (end.Y-start.Y)*float64(i)/10
+		path = append(path, Point{X: x, Y: y})
 	}
+	return path
 }
 
-func (m *Manager) RegisterPrototype(name string, prototype Product) {
-	m.prototypes[name] = prototype
+func (n *BasicNavigationSystem) GetCurrentPosition() Point {
+	return n.currentPosition
 }
 
-func (m *Manager) CreateProduct(name string) Product {
-	p, ok := m.prototypes[name]
-	if !ok {
-		return nil
+// Point represents a 2D position
+type Point struct {
+	X, Y float64
+}
+
+// PathPlannerPlugin represents a custom plugin that can extend path planning
+type PathPlannerPlugin interface {
+	Init(navSystem DroneNavigationSystem)
+	PlanPath(start, end Point) []Point
+}
+
+// AStarPlugin implements A* path planning algorithm
+type AStarPlugin struct {
+	navSystem DroneNavigationSystem
+}
+
+func (p *AStarPlugin) Init(navSystem DroneNavigationSystem) {
+	p.navSystem = navSystem
+}
+
+func (p *AStarPlugin) PlanPath(start, end Point) []Point {
+	// Perform A* path planning here (for demonstration, we'll just use a random path)
+	path := []Point{}
+	for i := 0; i < 10; i++ {
+		x := start.X + rand.Float64()*10
+		y := start.Y + rand.Float64()*10
+		path = append(path, Point{X: x, Y: y})
 	}
-	return p.Clone()
+	fmt.Println("Using A* Path Planner")
+	return path
 }
 
 func main() {
-	manager := NewManager()
+	// Create a basic navigation system
+	navSystem := &BasicNavigationSystem{}
 
-	// Register prototypes
-	manager.RegisterPrototype("productA", &ConcreteProductA{name: "Default A"})
-	manager.RegisterPrototype("productB", &ConcreteProductB{name: "Default B"})
+	// Add an A* path planning plugin
+	aStarPlugin := &AStarPlugin{}
+	aStarPlugin.Init(navSystem)
 
-	// Creating products via cloning
-	product1 := manager.CreateProduct("productA")
-	product1.Use() // Output: Using ConcreteProduct A
+	// Extensible navigation system
+	start := Point{X: 0, Y: 0}
+	end := Point{X: 100, Y: 100}
 
-	product2 := manager.CreateProduct("productB")
-	product2.Use() // Output: Using ConcreteProduct B
+	fmt.Println("Basic Path Planning:")
+	path := navSystem.PlanPath(start, end)
+	for _, p := range path {
+		fmt.Println(p)
+	}
 
-	// Modify the prototype and create new instances
-	productAPrototype := manager.prototypes["productA"].(*ConcreteProductA)
-	productAPrototype.name = "Custom A"
-
-	product3 := manager.CreateProduct("productA")
-	product3.Use() // Output: Using ConcreteProduct A with name Custom A
+	fmt.Println("\nA* Path Planning using plugin:")
+	// Use the A* path planner plugin
+	path = aStarPlugin.PlanPath(start, end)
+	for _, p := range path {
+		fmt.Println(p)
+	}
 }

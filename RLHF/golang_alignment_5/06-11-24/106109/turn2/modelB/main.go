@@ -2,89 +2,81 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
+	"time"
 )
 
-// Shape interface defines the operations that all shapes must support
-type Shape interface {
-	Draw()
-	Clone() Shape
+// Drone interface defines the basic operations that a drone should support
+type Drone interface {
+	SetAltitude(altitude float64)
+	GetAltitude() float64
+	AdjustAltitude(delta float64)
 }
 
-// Concrete Shape implementations
-type Circle struct {
-	radius float64
+// BasicDrone is a simple implementation of the Drone interface
+type BasicDrone struct {
+	altitude float64
 }
 
-func (c *Circle) Draw() {
-	fmt.Println("Drawing a circle with radius", c.radius)
+func (d *BasicDrone) SetAltitude(altitude float64) {
+	d.altitude = altitude
 }
 
-func (c *Circle) Clone() Shape {
-	return &Circle{radius: c.radius}
+func (d *BasicDrone) GetAltitude() float64 {
+	return d.altitude
 }
 
-type Rectangle struct {
-	length float64
-	width  float64
+func (d *BasicDrone) AdjustAltitude(delta float64) {
+	d.altitude += delta
 }
 
-func (r *Rectangle) Draw() {
-	fmt.Println("Drawing a rectangle with length", r.length, "and width", r.width)
+// AltitudeControllerPlugin represents a custom plugin that can adjust the drone's altitude
+type AltitudeControllerPlugin interface {
+	Init(drone Drone)
+	Execute()
 }
 
-func (r *Rectangle) Clone() Shape {
-	return &Rectangle{length: r.length, width: r.width}
+// ExampleAltitudeControllerPlugin implements a simple altitude control algorithm with random adjustments
+type ExampleAltitudeControllerPlugin struct {
+	drone     Drone
+	targetAlt float64
 }
 
-// ShapeFactory uses the prototype pattern to create shapes
-type ShapeFactory struct {
-	prototypes map[string]Shape
+func (p *ExampleAltitudeControllerPlugin) Init(drone Drone) {
+	p.drone = drone
+	p.targetAlt = 10.0 // Initial target altitude
 }
 
-func NewShapeFactory() *ShapeFactory {
-	return &ShapeFactory{prototypes: make(map[string]Shape)}
-}
+func (p *ExampleAltitudeControllerPlugin) Execute() {
+	// Randomly adjust the target altitude within a range
+	minAlt := p.targetAlt - 2.0
+	maxAlt := p.targetAlt + 2.0
+	p.targetAlt = rand.Float64()*(maxAlt-minAlt) + minAlt
 
-func (sf *ShapeFactory) RegisterPrototype(name string, prototype Shape) {
-	sf.prototypes[name] = prototype
-}
+	// Calculate the delta to adjust the altitude towards the target
+	currentAlt := p.drone.GetAltitude()
+	delta := (p.targetAlt - currentAlt) * 0.1 // 10% step size
 
-func (sf *ShapeFactory) CreateShape(name string) Shape {
-	prototype, ok := sf.prototypes[name]
-	if !ok {
-		return nil
-	}
-	return prototype.Clone()
-}
+	// Adjust the drone's altitude
+	p.drone.AdjustAltitude(delta)
 
-// TestShapeFactory uses the prototype pattern to create test shapes
-type TestShapeFactory struct {
-	ShapeFactory
-}
-
-func NewTestShapeFactory() *TestShapeFactory {
-	tf := NewShapeFactory()
-	// Register test prototypes
-	tf.RegisterPrototype("test_circle", &Circle{radius: 1.0})
-	tf.RegisterPrototype("test_rectangle", &Rectangle{length: 2.0, width: 3.0})
-	return &TestShapeFactory{*tf}
+	fmt.Printf("Drone adjusting altitude towards %.2f meters. Current altitude: %.2f meters\n", p.targetAlt, currentAlt)
 }
 
 func main() {
-	// Create a shape factory and register prototypes
-	factory := NewShapeFactory()
-	factory.RegisterPrototype("circle", &Circle{radius: 5.0})
-	factory.RegisterPrototype("rectangle", &Rectangle{length: 10.0, width: 20.0})
+	// Create a basic drone
+	drone := &BasicDrone{}
+	drone.SetAltitude(5.0) // Initial altitude
 
-	// Use the factory to create shapes
-	circle := factory.CreateShape("circle")
-	circle.Draw() // Output: Drawing a circle with radius 5.0
+	// Add the altitude controller plugin
+	plugin := &ExampleAltitudeControllerPlugin{}
+	plugin.Init(drone)
 
-	// Create test shapes using the TestShapeFactory
-	testFactory := NewTestShapeFactory()
-	testCircle := testFactory.CreateShape("test_circle")
-	testCircle.Draw() // Output: Drawing a circle with radius 1.0
+	// Simulate real-time operations with the plugin
+	for i := 0; i < 10; i++ {
+		time.Sleep(time.Second)
+		plugin.Execute() // Adjust the altitude based on the plugin's algorithm
+	}
 
-	// Perform tests on test shapes
-	// ...
+	fmt.Println("Drone altitude control simulation completed.")
 }
