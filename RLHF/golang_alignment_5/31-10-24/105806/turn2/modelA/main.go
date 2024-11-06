@@ -1,66 +1,80 @@
+// main.go
 package main
 
 import (
 	"fmt"
+	"log"
+	"net/http"
+	"time"
 
-	"golang.org/x/text/language"
-	"golang.org/x/text/message"
+	"github.com/gin-gonic/gin"
 )
 
-// Translator holds translations for different messages
-type Translator struct {
-	translations map[string]map[string]string
+// SensorData represents the data structure for sensor data
+type SensorData struct {
+	DeviceID    string  `json:"device_id"`
+	Temperature float32 `json:"temperature"`
+	Humidity    float32 `json:"humidity"`
+	Timestamp   int64   `json:"timestamp"`
 }
 
-// NewTranslator creates a new Translator
-func NewTranslator() *Translator {
-	return &Translator{
-		translations: map[string]map[string]string{
-			"en": {
-				"date_format":     "January 2, 2006",
-				"currency_format": "$%.2f",
-			},
-			"es": {
-				"date_format":     "02 de enero de 2006",
-				"currency_format": "€%.2f",
-			},
-		},
-	}
-}
-
-// Translate translates a message
-func (t *Translator) Translate(msg, lang string) string {
-	translation, ok := t.translations[lang][msg]
-	if !ok {
-		translation, _ = t.translations["en"][msg]
-	}
-	return translation
-}
-
-// FormatMessage formats a message with arguments using the specified language
-func (t *Translator) FormatMessage(msg, lang string, args ...interface{}) string {
-	p := message.NewPrinter(language.Make(lang))
-	return p.Sprintf(t.Translate(msg, lang), args...)
-}
+var (
+	aggregatedData []SensorData
+)
 
 func main() {
-	translator := NewTranslator()
+	// Initialize router
+	router := gin.Default()
 
-	// BDD Scenario: Data synchronization for different languages and formats
-	testDataSynchronization("en", translator)
-	testDataSynchronization("es", translator)
+	// Route for device to send data
+	router.POST("/collect", collectSensorData)
+
+	// Route to start data aggregation
+	router.GET("/aggregate", aggregateData)
+
+	// Run the server
+	fmt.Println("Server is running on http://localhost:8080")
+	log.Fatal(router.Run(":8080"))
 }
 
-func testDataSynchronization(lang string, translator *Translator) {
-	// Synchronizing date
-	date := "2023-07-31"
-	expectedDateFormat := translator.Translate("date_format", lang)
-	actualDate := translator.FormatMessage("date_format", lang, date)
-	fmt.Printf("Testing date format in %s: Expected '%s', Got '%s'\n", lang, expectedDateFormat, actualDate)
+// collectSensorData handles POST requests from devices to collect sensor data
+func collectSensorData(c *gin.Context) {
+	var data SensorData
+	if err := c.ShouldBindJSON(&data); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-	// Synchronizing currency
-	amount := 123.45
-	expectedCurrencyFormat := translator.Translate("currency_format", lang)
-	actualCurrency := translator.FormatMessage("currency_format", lang, amount)
-	fmt.Printf("Testing currency format in %s: Expected '%s', Got '%s'\n", lang, expectedCurrencyFormat, actualCurrency)
+	data.Timestamp = time.Now().UnixNano()
+	aggregatedData = append(aggregatedData, data)
+	c.JSON(http.StatusOK, gin.H{"message": "Data collected successfully"})
+}
+
+// aggregateData handles GET requests to aggregate and report the sensor data
+func aggregateData(c *gin.Context) {
+	if len(aggregatedData) == 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "No data available for aggregation"})
+		return
+	}
+
+	// Perform aggregation (in this case, we'll just calculate the average)
+	var totalTemp, totalHumidity float32
+	for _, entry := range aggregatedData {
+		totalTemp += entry.Temperature
+		totalHumidity += entry.Humidity
+	}
+
+	averageTemp := totalTemp / float32(len(aggregatedData))
+	averageHumidity := totalHumidity / float32(len(aggregatedData))
+
+	aggregationReport := gin.H{
+		"average_temperature": averageTemp,
+		"average_humidity":    averageHumidity,
+		"data_count":          len(aggregatedData),
+	}
+
+	// Reset aggregated data for next aggregation period
+	aggregatedData = aggregatedData[:0]
+
+	c.JSON(http.StatusOK, aggregationReport)
 }

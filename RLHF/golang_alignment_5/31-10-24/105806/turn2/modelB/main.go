@@ -1,76 +1,39 @@
 package main
 
 import (
-	"fmt"
+	"math/rand"
+	"net/http"
 	"time"
 
-	"github.com/cucumber/godog"
-	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"github.com/gin-gonic/gin"
 )
 
-// User represents a user in the system
-type User struct {
-	gorm.Model
-	Name      string `gorm:"type:varchar(100)"`
-	Email     string `gorm:"type:varchar(255)"`
-	Age       int
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
-// Synchronizer handles data synchronization
-type Synchronizer struct {
-	db *gorm.DB
-}
-
-// NewSynchronizer creates a new Synchronizer
-func NewSynchronizer() *Synchronizer {
-	db, err := gorm.Open("sqlite3", "test.db")
-	if err != nil {
-		panic("failed to connect database")
-	}
-
-	// Migrate the schema
-	db.AutoMigrate(&User{})
-
-	return &Synchronizer{db: db}
-}
-
-// SynchronizeUsers synchronizes users from one database to another
-func (s *Synchronizer) SynchronizeUsers() error {
-	// Implement your synchronization logic here
-	// For this example, we'll just perform a simple two-way synchronization
-	return nil
-}
-
-func FeatureContext(s *godog.ScenarioContext) {
-	var synchronizer *Synchronizer
-
-	s.BeforeScenario(func(*godog.Scenario) {
-		synchronizer = NewSynchronizer()
-	})
-
-	s.Step(`^I synchronize users$`, func() error {
-		return synchronizer.SynchronizeUsers()
-	})
-
-	s.Step(`^the users should be synchronized successfully$`, func() error {
-		// Add your assertion logic here to verify that the users are synchronized correctly
-		return nil
-	})
+type SensorData struct {
+	DeviceID    string  `json:"device_id"`
+	Temperature float32 `json:"temperature"`
+	Humidity    float32 `json:"humidity"`
+	Timestamp   string  `json:"timestamp"`
 }
 
 func main() {
-	status, err := godog.TestSuites(
-		&godog.TestSuite{
-			Name:                "Synchronization features",
-			ScenarioInitializer: FeatureContext,
-			FeaturesPath:        "features",
-		},
-	)
-	if err != nil {
-		fmt.Println(err)
-	}
-	godog.Exit(status)
+	// Initialize random number generator
+	rand.Seed(time.Now().UnixNano())
+
+	// Create a new Gin router
+	router := gin.Default()
+
+	// Endpoint to simulate device data generation
+	router.GET("/data", func(c *gin.Context) {
+		// Generate random data and send it back as a response
+		data := SensorData{
+			DeviceID:    "device123",
+			Temperature: rand.Float32() * 20,
+			Humidity:    rand.Float32() * 100,
+			Timestamp:   time.Now().Format(time.RFC3339),
+		}
+		c.JSON(http.StatusOK, data)
+	})
+
+	// Run the server on port 8080
+	router.Run(":8080")
 }
