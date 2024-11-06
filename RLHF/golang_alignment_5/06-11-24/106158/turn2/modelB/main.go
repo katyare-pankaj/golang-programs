@@ -2,77 +2,89 @@ package main
 
 import (
 	"fmt"
-	"sync"
 )
 
-// Processor interface defines an extensible data processor.
-type Processor interface {
-	Process(in <-chan []byte, out chan<- []byte)
+// Shape interface defines the operations that all shapes must support
+type Shape interface {
+	Draw()
+	Clone() Shape
 }
 
-// SimpleProcessor doubles the data.
-type SimpleProcessor struct{}
+// Concrete Shape implementations
+type Circle struct {
+	radius float64
+}
 
-func (p *SimpleProcessor) Process(in <-chan []byte, out chan<- []byte) {
-	for data := range in {
-		out <- append(data, data...)
+func (c *Circle) Draw() {
+	fmt.Println("Drawing a circle with radius", c.radius)
+}
+
+func (c *Circle) Clone() Shape {
+	return &Circle{radius: c.radius}
+}
+
+type Rectangle struct {
+	length float64
+	width  float64
+}
+
+func (r *Rectangle) Draw() {
+	fmt.Println("Drawing a rectangle with length", r.length, "and width", r.width)
+}
+
+func (r *Rectangle) Clone() Shape {
+	return &Rectangle{length: r.length, width: r.width}
+}
+
+// ShapeFactory uses the prototype pattern to create shapes
+type ShapeFactory struct {
+	prototypes map[string]Shape
+}
+
+func NewShapeFactory() *ShapeFactory {
+	return &ShapeFactory{prototypes: make(map[string]Shape)}
+}
+
+func (sf *ShapeFactory) RegisterPrototype(name string, prototype Shape) {
+	sf.prototypes[name] = prototype
+}
+
+func (sf *ShapeFactory) CreateShape(name string) Shape {
+	prototype, ok := sf.prototypes[name]
+	if !ok {
+		return nil
 	}
+	return prototype.Clone()
 }
 
-// AggregateProcessor aggregates the data.
-type AggregateProcessor struct{}
-
-func (p *AggregateProcessor) Process(in <-chan []byte, out chan<- []byte) {
-	for data := range in {
-		// Simulate aggregation
-		out <- data
-	}
+// TestShapeFactory uses the prototype pattern to create test shapes
+type TestShapeFactory struct {
+	ShapeFactory
 }
 
-// Pipeline runs a sequence of processors.
-type Pipeline struct {
-	processors []Processor
-	wg         sync.WaitGroup
-}
-
-// NewPipeline creates a new pipeline.
-func NewPipeline(processors ...Processor) *Pipeline {
-	return &Pipeline{processors: processors}
-}
-
-// Start runs the pipeline.
-func (p *Pipeline) Start() {
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		in := make(chan []byte)
-		out := make(chan []byte)
-
-		for _, processor := range p.processors {
-			go processor.Process(in, out)
-			in = out
-			out = make(chan []byte)
-		}
-
-		// Simulate data input
-		for i := 0; i < 1000; i++ {
-			data := []byte(fmt.Sprintf("Data %d\n", i))
-			in <- data
-		}
-
-		close(in)
-	}()
-}
-
-// Wait waits for the pipeline to finish.
-func (p *Pipeline) Wait() {
-	p.wg.Wait()
+func NewTestShapeFactory() *TestShapeFactory {
+	tf := NewShapeFactory()
+	// Register test prototypes
+	tf.RegisterPrototype("test_circle", &Circle{radius: 1.0})
+	tf.RegisterPrototype("test_rectangle", &Rectangle{length: 2.0, width: 3.0})
+	return &TestShapeFactory{*tf}
 }
 
 func main() {
-	pipeline := NewPipeline(&SimpleProcessor{}, &AggregateProcessor{})
-	pipeline.Start()
-	pipeline.Wait()
+	// Create a shape factory and register prototypes
+	factory := NewShapeFactory()
+	factory.RegisterPrototype("circle", &Circle{radius: 5.0})
+	factory.RegisterPrototype("rectangle", &Rectangle{length: 10.0, width: 20.0})
 
-	fmt.Println("Pipeline processing complete.")
+	// Use the factory to create shapes
+	circle := factory.CreateShape("circle")
+	circle.Draw() // Output: Drawing a circle with radius 5.0
+
+	// Create test shapes using the TestShapeFactory
+	testFactory := NewTestShapeFactory()
+	testCircle := testFactory.CreateShape("test_circle")
+	testCircle.Draw() // Output: Drawing a circle with radius 1.0
+
+	// Perform tests on test shapes
+	// ...
 }

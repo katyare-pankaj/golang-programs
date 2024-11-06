@@ -2,83 +2,80 @@ package main
 
 import (
 	"fmt"
-	"sync"
-	"time"
 )
 
-// Processor interface defines an extensible processor for the data pipeline.
-type Processor interface {
-	Process(data []byte, c chan<- []byte)
+// Define the Product interface
+type Product interface {
+	Use()
+	Clone() Product
 }
 
-// SimpleProcessor simulates a basic processing function with a delay.
-type SimpleProcessor struct{}
-
-func (p *SimpleProcessor) Process(data []byte, c chan<- []byte) {
-	time.Sleep(100 * time.Millisecond) // Simulate processing time
-	c <- append(data, data...)
+// Concrete Product implementations
+type ConcreteProductA struct {
+	name string
 }
 
-// AggregateProcessor simulates an aggregation processing function.
-type AggregateProcessor struct{}
-
-func (p *AggregateProcessor) Process(data []byte, c chan<- []byte) {
-	time.Sleep(50 * time.Millisecond) // Simulate processing time
-	c <- data
+func (p *ConcreteProductA) Use() {
+	fmt.Println("Using ConcreteProduct A")
 }
 
-// Pipeline manages the sequence of processors and runs the data through them.
-type Pipeline struct {
-	processors []Processor
-	wg         sync.WaitGroup
+func (p *ConcreteProductA) Clone() Product {
+	return &ConcreteProductA{name: p.name}
 }
 
-// NewPipeline creates a new pipeline.
-func NewPipeline() *Pipeline {
-	return &Pipeline{}
+type ConcreteProductB struct {
+	name string
 }
 
-// AddProcessor appends a new processor to the pipeline.
-func (p *Pipeline) AddProcessor(processor Processor) {
-	p.processors = append(p.processors, processor)
+func (p *ConcreteProductB) Use() {
+	fmt.Println("Using ConcreteProduct B")
 }
 
-// Start begins the data processing pipeline.
-func (p *Pipeline) Start(input []byte) {
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		p.runPipeline(input)
-	}()
+func (p *ConcreteProductB) Clone() Product {
+	return &ConcreteProductB{name: p.name}
 }
 
-// Wait waits for the pipeline to complete processing.
-func (p *Pipeline) Wait() {
-	p.wg.Wait()
+// Manager class uses the prototype pattern
+type Manager struct {
+	prototypes map[string]Product
 }
 
-func (p *Pipeline) runPipeline(input []byte) {
-	c := make(chan []byte)
-
-	for _, processor := range p.processors {
-		go func(p Processor) {
-			processor.Process(<-c, c)
-		}(processor)
+func NewManager() *Manager {
+	return &Manager{
+		prototypes: make(map[string]Product),
 	}
+}
 
-	c <- input
-	close(c)
+func (m *Manager) RegisterPrototype(name string, prototype Product) {
+	m.prototypes[name] = prototype
+}
+
+func (m *Manager) CreateProduct(name string) Product {
+	p, ok := m.prototypes[name]
+	if !ok {
+		return nil
+	}
+	return p.Clone()
 }
 
 func main() {
-	pipeline := NewPipeline()
-	pipeline.AddProcessor(&SimpleProcessor{})
-	pipeline.AddProcessor(&AggregateProcessor{})
+	manager := NewManager()
 
-	inputData := []byte("Hello, Fog Computing!")
+	// Register prototypes
+	manager.RegisterPrototype("productA", &ConcreteProductA{name: "Default A"})
+	manager.RegisterPrototype("productB", &ConcreteProductB{name: "Default B"})
 
-	fmt.Println("Starting pipeline...")
-	pipeline.Start(inputData)
-	pipeline.Wait()
-	fmt.Println("Pipeline completed.")
+	// Creating products via cloning
+	product1 := manager.CreateProduct("productA")
+	product1.Use() // Output: Using ConcreteProduct A
+
+	product2 := manager.CreateProduct("productB")
+	product2.Use() // Output: Using ConcreteProduct B
+
+	// Modify the prototype and create new instances
+	productAPrototype := manager.prototypes["productA"].(*ConcreteProductA)
+	productAPrototype.name = "Custom A"
+
+	product3 := manager.CreateProduct("productA")
+	product3.Use() // Output: Using ConcreteProduct A with name Custom A
 }
