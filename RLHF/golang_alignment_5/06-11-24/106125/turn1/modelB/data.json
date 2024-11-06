@@ -1,0 +1,5 @@
+
+[
+    {"price": 100, "rating": 4.5, "count": 10, "category": "Luxury"},
+    {"price": 200, "rating": 4, "count": 20, "category": "Business"},
+]

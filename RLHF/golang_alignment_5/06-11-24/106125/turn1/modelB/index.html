@@ -1,0 +1,30 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hospitality Travel App Visualization</title>
+    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-lite@4.8.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-embed@5"></script>
+</head>
+<body>
+    <div id="vis"></div>
+    <script>
+        // Load the data from the JSON file
+        vegaEmbed("#vis", {
+            $schema: "https://vega.github.io/schema/vega-lite/v4.8.1.json",
+            data: {
+                url: "data.json"
+            },
+            mark: "point",
+            encoding: {
+                x: {field: "price", type: "quantitative"},
+                y: {field: "rating", type: "quantitative"},
+                size: {field: "count", type: "quantitative"},
+                color: {field: "category", type: "nominal"}
+            }
+        })
+        .catch(error => console.error(error));
+    </script>
+</body>
+</html>
