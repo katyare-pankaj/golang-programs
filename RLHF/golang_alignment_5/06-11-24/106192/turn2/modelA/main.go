@@ -2,80 +2,134 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
+	"sync"
+	"time"
 )
 
-// Define the Product interface
-type Product interface {
-	Use()
-	Clone() Product
+// ServerState represents the shared state managed by the server.
+type ServerState struct {
+	Value int
+	mutex sync.Mutex
 }
 
-// Concrete Product implementations
-type ConcreteProductA struct {
-	name string
+// LocalState manages the local state of a device and buffers changes before synchronizing.
+type LocalState struct {
+	Value  int
+	buffer []int
+	mutex  sync.Mutex
 }
 
-func (p *ConcreteProductA) Use() {
-	fmt.Println("Using ConcreteProduct A")
+// Synchronizer orchestrates the buffering and synchronization of local states with the server.
+type Synchronizer struct {
+	localState  *LocalState
+	serverState *ServerState
+	stopCh      chan struct{}
+	wg          sync.WaitGroup
 }
 
-func (p *ConcreteProductA) Clone() Product {
-	return &ConcreteProductA{name: p.name}
+// NewSynchronizer creates a new Synchronizer instance.
+func NewSynchronizer(localState *LocalState, serverState *ServerState) *Synchronizer {
+	s := &Synchronizer{
+		localState:  localState,
+		serverState: serverState,
+		stopCh:      make(chan struct{}),
+	}
+	s.wg.Add(2)
+	go s.bufferLocalChanges()
+	go s.synchronizeWithServer()
+	return s
 }
 
-type ConcreteProductB struct {
-	name string
+// Stop signals the Synchronizer to stop its goroutines.
+func (s *Synchronizer) Stop() {
+	close(s.stopCh)
+	s.wg.Wait()
 }
 
-func (p *ConcreteProductB) Use() {
-	fmt.Println("Using ConcreteProduct B")
-}
+// bufferLocalChanges periodically checks for buffered changes and applies them to the local state
+// after a simulated stable connection period.
+func (s *Synchronizer) bufferLocalChanges() {
+	defer s.wg.Done()
+	for {
+		select {
+		case <-s.stopCh:
+			return
+		default:
+		}
 
-func (p *ConcreteProductB) Clone() Product {
-	return &ConcreteProductB{name: p.name}
-}
+		s.localState.mutex.Lock()
+		if len(s.localState.buffer) == 0 {
+			s.localState.mutex.Unlock()
+			time.Sleep(time.Second) // Simulate checking interval
+			continue
+		}
 
-// Manager class uses the prototype pattern
-type Manager struct {
-	prototypes map[string]Product
-}
+		// Apply buffered changes to the local state
+		fmt.Println("Buffering changes...")
+		for _, change := range s.localState.buffer {
+			s.localState.Value += change
+		}
+		s.localState.buffer = nil
+		s.localState.mutex.Unlock()
 
-func NewManager() *Manager {
-	return &Manager{
-		prototypes: make(map[string]Product),
+		// Simulate stable connection period before synchronizing
+		fmt.Println("Synchronizing with the server...")
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
 	}
 }
 
-func (m *Manager) RegisterPrototype(name string, prototype Product) {
-	m.prototypes[name] = prototype
+// synchronizeWithServer synchronizes the local state with the server state periodically.
+func (s *Synchronizer) synchronizeWithServer() {
+	defer s.wg.Done()
+	for {
+		select {
+		case <-s.stopCh:
+			return
+		default:
+		}
+
+		s.localState.mutex.Lock()
+		localValue := s.localState.Value
+		s.localState.mutex.Unlock()
+
+		s.serverState.mutex.Lock()
+		if localValue != s.serverState.Value {
+			fmt.Println("Syncing local state with server state...")
+			s.serverState.Value = localValue
+		}
+		s.serverState.mutex.Unlock()
+
+		time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
+	}
 }
 
-func (m *Manager) CreateProduct(name string) Product {
-	p, ok := m.prototypes[name]
-	if !ok {
-		return nil
-	}
-	return p.Clone()
+// updateLocalState updates the local state and adds the change to the buffer.
+func updateLocalState(localState *LocalState, value int) {
+	localState.mutex.Lock()
+	defer localState.mutex.Unlock()
+	localState.Value += value
+	localState.buffer = append(localState.buffer, value)
 }
 
 func main() {
-	manager := NewManager()
+	// Create instances of ServerState and LocalState
+	serverState := &ServerState{}
+	localState := &LocalState{}
 
-	// Register prototypes
-	manager.RegisterPrototype("productA", &ConcreteProductA{name: "Default A"})
-	manager.RegisterPrototype("productB", &ConcreteProductB{name: "Default B"})
+	// Create a Synchronizer to manage buffering and synchronization
+	synchronizer := NewSynchronizer(localState, serverState)
+	defer synchronizer.Stop()
 
-	// Creating products via cloning
-	product1 := manager.CreateProduct("productA")
-	product1.Use() // Output: Using ConcreteProduct A
+	// Simulate local updates to the state
+	for i := 0; i < 20; i++ {
+		updateLocalState(localState, rand.Intn(10)+1)
+		time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
+	}
 
-	product2 := manager.CreateProduct("productB")
-	product2.Use() // Output: Using ConcreteProduct B
+	// Wait for some time to let the synchronization process complete
+	time.Sleep(5 * time.Second)
 
-	// Modify the prototype and create new instances
-	productAPrototype := manager.prototypes["productA"].(*ConcreteProductA)
-	productAPrototype.name = "Custom A"
-
-	product3 := manager.CreateProduct("productA")
-	product3.Use() // Output: Using ConcreteProduct A with name Custom A
+	fmt.Println("Final Local State:", localState.Value)
+	fmt.Println("Final Server State:", serverState.Value)
 }
