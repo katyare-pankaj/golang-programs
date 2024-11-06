@@ -1,90 +1,61 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gorilla/mux"
 )
 
-// Shape interface defines the operations that all shapes must support
-type Shape interface {
-	Draw()
-	Clone() Shape
+// Sample data for the visualization
+var data = []struct {
+	Date  string  `json:"date"`
+	Value float64 `json:"value"`
+}{
+	{"2023-01-01", 100.0},
+	{"2023-01-02", 120.0},
+	// More data entries...
 }
 
-// Concrete Shape implementations
-type Circle struct {
-	radius float64
+// Cache struct to store the cached data
+type Cache struct {
+	Data     []byte
+	Expiry   time.Time
+	Duration time.Duration
 }
 
-func (c *Circle) Draw() {
-	fmt.Println("Drawing a circle with radius", c.radius)
-}
-
-func (c *Circle) Clone() Shape {
-	return &Circle{radius: c.radius}
-}
-
-type Rectangle struct {
-	length float64
-	width  float64
-}
-
-func (r *Rectangle) Draw() {
-	fmt.Println("Drawing a rectangle with length", r.length, "and width", r.width)
-}
-
-func (r *Rectangle) Clone() Shape {
-	return &Rectangle{length: r.length, width: r.width}
-}
-
-// ShapeFactory uses the prototype pattern to create shapes
-type ShapeFactory struct {
-	prototypes map[string]Shape
-}
-
-func NewShapeFactory() *ShapeFactory {
-	return &ShapeFactory{prototypes: make(map[string]Shape)}
-}
-
-func (sf *ShapeFactory) RegisterPrototype(name string, prototype Shape) {
-	sf.prototypes[name] = prototype
-}
-
-func (sf *ShapeFactory) CreateShape(name string) Shape {
-	prototype, ok := sf.prototypes[name]
-	if !ok {
-		return nil
-	}
-	return prototype.Clone()
-}
-
-// TestShapeFactory uses the prototype pattern to create test shapes
-type TestShapeFactory struct {
-	ShapeFactory
-}
-
-func NewTestShapeFactory() *TestShapeFactory {
-	tf := NewShapeFactory()
-	// Register test prototypes
-	tf.RegisterPrototype("test_circle", &Circle{radius: 1.0})
-	tf.RegisterPrototype("test_rectangle", &Rectangle{length: 2.0, width: 3.0})
-	return &TestShapeFactory{*tf}
-}
+// cachedData holds the cached data
+var cachedData Cache
+var mu sync.Mutex
 
 func main() {
-	// Create a shape factory and register prototypes
-	factory := NewShapeFactory()
-	factory.RegisterPrototype("circle", &Circle{radius: 5.0})
-	factory.RegisterPrototype("rectangle", &Rectangle{length: 10.0, width: 20.0})
+	// Initialize router and routes
+	r := mux.NewRouter()
+	r.HandleFunc("/data.json", dataHandler)
 
-	// Use the factory to create shapes
-	circle := factory.CreateShape("circle")
-	circle.Draw() // Output: Drawing a circle with radius 5.0
+	// Start the server
+	fmt.Println("Server running on port 8080")
+	log.Fatal(http.ListenAndServe(":8080", r))
+}
 
-	// Create test shapes using the TestShapeFactory
-	testFactory := NewTestShapeFactory()
-	testCircle := testFactory.CreateShape("test_circle")
-	testCircle.Draw() // Output: Drawing a circle with radius 1.0
+func dataHandler(w http.ResponseWriter, r *http.Request) {
+	// Check if the data is cached and valid
+	mu.Lock()
+	defer mu.Unlock()
 
-	// Perform tests on test shapes
-	// ...
+	if time.Now().After(cachedData.Expiry) {
+		// Cache is expired, generate new data and cache it
+		cachedData.Data, _ = json.Marshal(data)
+		cachedData.Expiry = time.Now().Add(time.Minute * 5) // Cache for 5 minutes
+	}
+
+	// Set the content type header
+	w.Header().Set("Content-Type", "application/json")
+
+	// Write the cached data to the response
+	_, _ = w.Write(cachedData.Data)
 }
