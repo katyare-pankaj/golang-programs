@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/gorilla/mux"
 )
 
 type Patient struct {
-	ID        int    `json:"id"`
+	ID        string `json:"id"`
 	Name      string `json:"name"`
 	Age       int    `json:"age"`
 	Gender    string `json:"gender"`
@@ -52,7 +51,7 @@ func addPatient(w http.ResponseWriter, r *http.Request) {
 // getPatient handles GET requests to /patients/{id}
 func getPatient(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	id, _ := strconv.Atoi(params["id"])
+	id := params["id"]
 	for _, patient := range patients {
 		if patient.ID == id {
 			w.Header().Set("Content-Type", "application/json")
@@ -66,7 +65,7 @@ func getPatient(w http.ResponseWriter, r *http.Request) {
 // updatePatient handles PUT requests to /patients/{id}
 func updatePatient(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	id, _ := strconv.Atoi(params["id"])
+	id := params["id"]
 	var patient Patient
 	_ = json.NewDecoder(r.Body).Decode(&patient)
 	for i, p := range patients {
@@ -83,7 +82,7 @@ func updatePatient(w http.ResponseWriter, r *http.Request) {
 // deletePatient handles DELETE requests to /patients/{id}
 func deletePatient(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	id, _ := strconv.Atoi(params["id"])
+	id := params["id"]
 	for i, patient := range patients {
 		if patient.ID == id {
 			patients = append(patients[:i], patients[i+1:]...)
