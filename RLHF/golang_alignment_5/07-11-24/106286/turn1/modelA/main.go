@@ -5,8 +5,8 @@ import (
 	"math"
 	"runtime"
 
-	"github.com/gonum/blas/gonum"
 	"github.com/gonum/matrix/mat64"
+	"gonum.org/v1/gonum"
 )
 
 func main() {

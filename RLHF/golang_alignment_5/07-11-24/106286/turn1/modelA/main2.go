@@ -4,44 +4,26 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
-	"time"
 )
 
 func main() {
-	// Set the number of goroutines to the number of CPU cores
+	// Enable maximum number of cores
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	// Example data
+	// Sample data
 	data := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	result := make([]int, len(data))
 
-	// Sequential sum
-	start := time.Now()
-	sum := 0
-	for _, value := range data {
-		sum += value
-	}
-	fmt.Println("Sequential sum:", sum, "Time:", time.Since(start))
-
-	// Parallel sum
-	start = time.Now()
+	// Parallel computation using goroutines and channels
 	var wg sync.WaitGroup
-	partialSums := make([]int, runtime.NumCPU())
-
-	for i := 0; i < runtime.NumCPU(); i++ {
-		wg.Add(1)
+	wg.Add(len(data))
+	for i := range data {
 		go func(index int) {
-			defer wg.Done()
-			for j := index; j < len(data); j += runtime.NumCPU() {
-				partialSums[index] += data[j]
-			}
+			result[index] = data[index] * data[index]
+			wg.Done()
 		}(i)
 	}
-
 	wg.Wait()
 
-	sum = 0
-	for _, partialSum := range partialSums {
-		sum += partialSum
-	}
-	fmt.Println("Parallel sum:", sum, "Time:", time.Since(start))
+	fmt.Println("Parallel Result:", result)
 }
