@@ -2,69 +2,90 @@ package main
 
 import (
 	"fmt"
-	"sync"
-	"time"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 const (
-	// Set the session expiration duration in minutes
-	sessionExpirationDuration = time.Minute * 10
+	// Ratio threshold below which files will be identified as having low comment-to-code ratio
+	lowRatioThreshold = 0.2
 )
 
-type Session struct {
-	Data   interface{}
-	Expiry time.Time
-}
-
 func main() {
-	// Create a sync.Map to store sessions
-	sessions := &sync.Map{}
+	// Check if the number of arguments is correct
+	if len(os.Args) != 2 {
+		fmt.Println("Usage: go run low-comment-to-code-ratio.go <codebase_directory>")
+		os.Exit(1)
+	}
 
-	// Start the session expiration goroutine
-	go manageSessionExpiration(sessions, sessionExpirationDuration)
+	// Directory containing the codebase
+	codebaseDir := os.Args[1]
 
-	// Simulate some sessions
-	simulateSessions(sessions)
-}
+	// Get the file paths of all Go files in the codebase
+	filePaths, err := getGoFilePaths(codebaseDir)
+	if err != nil {
+		log.Fatalf("Error getting Go file paths: %v", err)
+	}
 
-// Simulate session creation and updates
-func simulateSessions(sessions *sync.Map) {
-	for sessionID := 0; sessionID < 10; sessionID++ {
-		newSession := Session{
-			Data:   map[string]interface{}{"user": "user" + fmt.Sprint(sessionID)},
-			Expiry: time.Now().Add(sessionExpirationDuration),
+	// Analyze each file and print files with low comment-to-code ratio
+	for _, filePath := range filePaths {
+		comments, codeLines, err := analyzeFile(filePath)
+		if err != nil {
+			log.Fatalf("Error analyzing file %s: %v", filePath, err)
 		}
-		sessions.Store(fmt.Sprint(sessionID), newSession)
-		fmt.Printf("Session %d created.\n", sessionID)
-
-		// Modify the session data after some time to demonstrate updates
-		time.Sleep(time.Duration(sessionID*2) * time.Second)
-		updateSession, _ := sessions.Load(fmt.Sprint(sessionID))
-		if updateSession != nil {
-			updatedSession := updateSession.(Session)
-			updatedSession.Data.(map[string]interface{})["key"] = "value" + fmt.Sprint(sessionID)
-			updatedSession.Expiry = time.Now().Add(sessionExpirationDuration)
-			sessions.Store(fmt.Sprint(sessionID), updatedSession)
-			fmt.Printf("Session %d updated.\n", sessionID)
+		ratio := float64(comments) / float64(codeLines)
+		if ratio < lowRatioThreshold {
+			fmt.Printf("File with low comment-to-code ratio: %s (%.2f)\n", filePath, ratio)
 		}
 	}
 }
 
-// Manage session expiration in a separate goroutine
-func manageSessionExpiration(sessions *sync.Map, expirationDuration time.Duration) {
-	for {
-		// Check for expired sessions every 30 seconds
-		time.Sleep(30 * time.Second)
-		now := time.Now()
+// Remaining functions (getGoFilePaths, analyzeFile) remain the same as in the previous response
 
-		sessions.Range(func(key, value interface{}) bool {
-			session := value.(Session)
-			if session.Expiry.Before(now) {
-				// Session expired, remove it from the map
-				sessions.Delete(key)
-				fmt.Printf("Session %s expired.\n", key)
-			}
-			return true // Continue the iteration
-		})
+func getGoFilePaths(dir string) ([]string, error) {
+	var filePaths []string
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasSuffix(path, ".go") {
+			filePaths = append(filePaths, path)
+		}
+		return nil
+	})
+	return filePaths, err
+}
+
+func analyzeFile(filePath string) (int, int, error) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return 0, 0, err
 	}
+
+	var comments int
+	var codeLines int
+
+	ast.Inspect(f, func(n ast.Node) bool {
+		if n == nil {
+			return true
+		}
+
+		if _, ok := n.(*ast.Comment); ok {
+			comments++
+		}
+
+		if n.Pos() != 0 && n.End() != 0 {
+			codeLines++
+		}
+
+		return true
+	})
+
+	return comments, codeLines, nil
 }
