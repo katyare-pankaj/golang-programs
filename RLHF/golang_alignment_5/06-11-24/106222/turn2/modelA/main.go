@@ -2,80 +2,152 @@ package main
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"strings"
 )
 
-// Define the Product interface
-type Product interface {
-	Use()
-	Clone() Product
+// FunctionSignature represents the signature of a function
+type FunctionSignature struct {
+	name       string
+	params     []string
+	returnType string
 }
 
-// Concrete Product implementations
-type ConcreteProductA struct {
-	name string
+// Graph represents the codebase as a graph where nodes are functions and edges represent similarity
+type Graph struct {
+	nodes []*FunctionSignature
+	edges [][]int
 }
 
-func (p *ConcreteProductA) Use() {
-	fmt.Println("Using ConcreteProduct A")
+// NewGraph creates a new graph
+func NewGraph() *Graph {
+	return &Graph{nodes: make([]*FunctionSignature, 0), edges: make([][]int, 0)}
 }
 
-func (p *ConcreteProductA) Clone() Product {
-	return &ConcreteProductA{name: p.name}
+// AddNode adds a node to the graph
+func (g *Graph) AddNode(fs *FunctionSignature) {
+	g.nodes = append(g.nodes, fs)
+	g.edges = append(g.edges, make([]int, len(g.nodes)))
 }
 
-type ConcreteProductB struct {
-	name string
+// AddEdge adds an edge between two nodes
+func (g *Graph) AddEdge(i, j int) {
+	g.edges[i][j] = 1
+	g.edges[j][i] = 1 // Undirected graph
 }
 
-func (p *ConcreteProductB) Use() {
-	fmt.Println("Using ConcreteProduct B")
+// JaccardSimilarity calculates the Jaccard similarity between two sets of strings
+func JaccardSimilarity(set1, set2 []string) float64 {
+	intersection := 0
+	union := len(set1) + len(set2)
+
+	for _, s1 := range set1 {
+		for _, s2 := range set2 {
+			if s1 == s2 {
+				intersection++
+				break
+			}
+		}
+	}
+
+	return float64(intersection) / float64(union)
 }
 
-func (p *ConcreteProductB) Clone() Product {
-	return &ConcreteProductB{name: p.name}
-}
+// detectSimilarFunctions uses graph algorithms to find similar functions
+func detectSimilarFunctions(filePath string, threshold float64) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		fmt.Println("Error parsing file:", err)
+		return
+	}
 
-// Manager class uses the prototype pattern
-type Manager struct {
-	prototypes map[string]Product
-}
+	// Create the graph
+	graph := NewGraph()
 
-func NewManager() *Manager {
-	return &Manager{
-		prototypes: make(map[string]Product),
+	// Extract function signatures from the AST
+	ast.Inspect(file, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.FuncDecl:
+			fs := &FunctionSignature{
+				name:       n.Name.Name,
+				params:     make([]string, 0),
+				returnType: strings.TrimSpace(fmt.Sprint(n.Type.Results.List[0].Type)),
+			}
+
+			for _, param := range n.Type.Params.List {
+				fs.params = append(fs.params, strings.TrimSpace(fmt.Sprint(param.Type)))
+			}
+
+			graph.AddNode(fs)
+			return true
+		}
+		return true
+	})
+
+	// Add edges between nodes if they have similar signatures
+	for i := 0; i < len(graph.nodes); i++ {
+		for j := i + 1; j < len(graph.nodes); j++ {
+			sig1 := graph.nodes[i]
+			sig2 := graph.nodes[j]
+
+			paramSet1 := make([]string, len(sig1.params))
+			copy(paramSet1, sig1.params)
+			paramSet2 := make([]string, len(sig2.params))
+			copy(paramSet2, sig2.params)
+
+			similarity := JaccardSimilarity(paramSet1, paramSet2)
+			if similarity >= threshold {
+				graph.AddEdge(i, j)
+			}
+		}
+	}
+
+	// Find connected components (similar function groups)
+	components := findConnectedComponents(graph)
+
+	fmt.Println("Similar Functions:")
+	for i, component := range components {
+		fmt.Printf("Group %d:\n", i+1)
+		for _, nodeIndex := range component {
+			fs := graph.nodes[nodeIndex]
+			fmt.Printf("%s(%s) %s\n", fs.name, strings.Join(fs.params, ", "), fs.returnType)
+		}
+		fmt.Println("--------------------")
 	}
 }
 
-func (m *Manager) RegisterPrototype(name string, prototype Product) {
-	m.prototypes[name] = prototype
+// findConnectedComponents uses Depth-First Search to find connected components in the graph
+func findConnectedComponents(graph *Graph) [][]int {
+	var components [][]int
+	visited := make([]bool, len(graph.nodes))
+
+	for i := 0; i < len(graph.nodes); i++ {
+		if !visited[i] {
+			component := make([]int, 0)
+			dfs(graph, i, &component, &visited)
+			components = append(components, component)
+		}
+	}
+
+	return components
 }
 
-func (m *Manager) CreateProduct(name string) Product {
-	p, ok := m.prototypes[name]
-	if !ok {
-		return nil
+func dfs(graph *Graph, node int, component *[]int, visited *[]bool) {
+	*visited = append(*visited, true)
+	*component = append(*component, node)
+
+	for i := 0; i < len(graph.nodes); i++ {
+		if graph.edges[node][i] == 1 && !(*visited)[i] {
+			dfs(graph, i, component, visited)
+		}
 	}
-	return p.Clone()
 }
 
 func main() {
-	manager := NewManager()
-
-	// Register prototypes
-	manager.RegisterPrototype("productA", &ConcreteProductA{name: "Default A"})
-	manager.RegisterPrototype("productB", &ConcreteProductB{name: "Default B"})
-
-	// Creating products via cloning
-	product1 := manager.CreateProduct("productA")
-	product1.Use() // Output: Using ConcreteProduct A
-
-	product2 := manager.CreateProduct("productB")
-	product2.Use() // Output: Using ConcreteProduct B
-
-	// Modify the prototype and create new instances
-	productAPrototype := manager.prototypes["productA"].(*ConcreteProductA)
-	productAPrototype.name = "Custom A"
-
-	product3 := manager.CreateProduct("productA")
-	product3.Use() // Output: Using ConcreteProduct A with name Custom A
+	const filePath = "your_codebase.go" // Replace this with the actual Go file path
+	const similarityThreshold = 0.7     // Adjust this threshold as needed
+	detectSimilarFunctions(filePath, similarityThreshold)
 }
