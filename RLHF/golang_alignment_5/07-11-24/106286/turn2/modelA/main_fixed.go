@@ -16,7 +16,7 @@ func main() {
 	}
 
 	// Remaining iterations for smaller arrays
-	for ; i < len(data); i++ {
+	for i := 0; i < len(data); i++ {
 		result[i] = data[i] * data[i]
 	}
 
