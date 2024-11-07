@@ -2,80 +2,115 @@ package main
 
 import (
 	"fmt"
+	"sync"
+	"time"
 )
 
-// Define the Product interface
-type Product interface {
-	Use()
-	Clone() Product
+// Session represents a single session with an expiration time
+type Session struct {
+	Data       interface{}
+	Expiration time.Time
 }
 
-// Concrete Product implementations
-type ConcreteProductA struct {
-	name string
+// SessionManager manages sessions using a sync.Map
+type SessionManager struct {
+	sessions sync.Map
+	duration time.Duration
+	ticker   *time.Ticker
+	quit     chan struct{}
 }
 
-func (p *ConcreteProductA) Use() {
-	fmt.Println("Using ConcreteProduct A")
+// NewSessionManager creates a new SessionManager with a specified expiration duration
+func NewSessionManager(duration time.Duration) *SessionManager {
+	sm := &SessionManager{
+		duration: duration,
+		quit:     make(chan struct{}),
+	}
+	sm.ticker = time.NewTicker(time.Minute)
+	go sm.run()
+	return sm
 }
 
-func (p *ConcreteProductA) Clone() Product {
-	return &ConcreteProductA{name: p.name}
+// Stop the session manager
+func (sm *SessionManager) Stop() {
+	close(sm.quit)
+	sm.ticker.Stop()
 }
 
-type ConcreteProductB struct {
-	name string
-}
-
-func (p *ConcreteProductB) Use() {
-	fmt.Println("Using ConcreteProduct B")
-}
-
-func (p *ConcreteProductB) Clone() Product {
-	return &ConcreteProductB{name: p.name}
-}
-
-// Manager class uses the prototype pattern
-type Manager struct {
-	prototypes map[string]Product
-}
-
-func NewManager() *Manager {
-	return &Manager{
-		prototypes: make(map[string]Product),
+// run is a background goroutine that expires sessions periodically
+func (sm *SessionManager) run() {
+	for {
+		select {
+		case <-sm.ticker.C:
+			sm.expireSessions()
+		case <-sm.quit:
+			return
+		}
 	}
 }
 
-func (m *Manager) RegisterPrototype(name string, prototype Product) {
-	m.prototypes[name] = prototype
+// expireSessions removes all sessions that have expired
+func (sm *SessionManager) expireSessions() {
+	now := time.Now()
+	sm.sessions.Range(func(key, value interface{}) bool {
+		session := value.(*Session)
+		if session.Expiration.Before(now) {
+			sm.sessions.Delete(key)
+		}
+		return true
+	})
 }
 
-func (m *Manager) CreateProduct(name string) Product {
-	p, ok := m.prototypes[name]
+// SetSession sets a new session or updates an existing one
+func (sm *SessionManager) SetSession(key string, data interface{}) {
+	expiration := time.Now().Add(sm.duration)
+	session := &Session{Data: data, Expiration: expiration}
+	sm.sessions.Store(key, session)
+}
+
+// GetSession retrieves a session by key
+func (sm *SessionManager) GetSession(key string) (interface{}, bool) {
+	value, ok := sm.sessions.Load(key)
 	if !ok {
-		return nil
+		return nil, false
 	}
-	return p.Clone()
+	session := value.(*Session)
+	if session.Expiration.Before(time.Now()) {
+		sm.sessions.Delete(key)
+		return nil, false
+	}
+	return session.Data, true
+}
+
+// DeleteSession deletes a session by key
+func (sm *SessionManager) DeleteSession(key string) {
+	sm.sessions.Delete(key)
 }
 
 func main() {
-	manager := NewManager()
+	// Create a session manager with a session expiration of 10 seconds
+	sessionManager := NewSessionManager(10 * time.Second)
+	defer sessionManager.Stop()
 
-	// Register prototypes
-	manager.RegisterPrototype("productA", &ConcreteProductA{name: "Default A"})
-	manager.RegisterPrototype("productB", &ConcreteProductB{name: "Default B"})
+	// Set some sessions
+	sessionManager.SetSession("user1", "some data for user1")
+	sessionManager.SetSession("user2", "some data for user2")
 
-	// Creating products via cloning
-	product1 := manager.CreateProduct("productA")
-	product1.Use() // Output: Using ConcreteProduct A
+	// Retrieve and print sessions
+	data, ok := sessionManager.GetSession("user1")
+	if ok {
+		fmt.Println("User1 session data:", data)
+	} else {
+		fmt.Println("User1 session expired")
+	}
 
-	product2 := manager.CreateProduct("productB")
-	product2.Use() // Output: Using ConcreteProduct B
+	// Wait for sessions to expire
+	time.Sleep(15 * time.Second)
 
-	// Modify the prototype and create new instances
-	productAPrototype := manager.prototypes["productA"].(*ConcreteProductA)
-	productAPrototype.name = "Custom A"
-
-	product3 := manager.CreateProduct("productA")
-	product3.Use() // Output: Using ConcreteProduct A with name Custom A
+	data, ok = sessionManager.GetSession("user1")
+	if ok {
+		fmt.Println("User1 session data:", data)
+	} else {
+		fmt.Println("User1 session expired")
+	}
 }

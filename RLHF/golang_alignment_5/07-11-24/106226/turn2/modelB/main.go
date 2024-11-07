@@ -2,89 +2,69 @@ package main
 
 import (
 	"fmt"
+	"sync"
+	"time"
 )
 
-// Shape interface defines the operations that all shapes must support
-type Shape interface {
-	Draw()
-	Clone() Shape
-}
+const (
+	// Set the session expiration duration in minutes
+	sessionExpirationDuration = time.Minute * 10
+)
 
-// Concrete Shape implementations
-type Circle struct {
-	radius float64
-}
-
-func (c *Circle) Draw() {
-	fmt.Println("Drawing a circle with radius", c.radius)
-}
-
-func (c *Circle) Clone() Shape {
-	return &Circle{radius: c.radius}
-}
-
-type Rectangle struct {
-	length float64
-	width  float64
-}
-
-func (r *Rectangle) Draw() {
-	fmt.Println("Drawing a rectangle with length", r.length, "and width", r.width)
-}
-
-func (r *Rectangle) Clone() Shape {
-	return &Rectangle{length: r.length, width: r.width}
-}
-
-// ShapeFactory uses the prototype pattern to create shapes
-type ShapeFactory struct {
-	prototypes map[string]Shape
-}
-
-func NewShapeFactory() *ShapeFactory {
-	return &ShapeFactory{prototypes: make(map[string]Shape)}
-}
-
-func (sf *ShapeFactory) RegisterPrototype(name string, prototype Shape) {
-	sf.prototypes[name] = prototype
-}
-
-func (sf *ShapeFactory) CreateShape(name string) Shape {
-	prototype, ok := sf.prototypes[name]
-	if !ok {
-		return nil
-	}
-	return prototype.Clone()
-}
-
-// TestShapeFactory uses the prototype pattern to create test shapes
-type TestShapeFactory struct {
-	ShapeFactory
-}
-
-func NewTestShapeFactory() *TestShapeFactory {
-	tf := NewShapeFactory()
-	// Register test prototypes
-	tf.RegisterPrototype("test_circle", &Circle{radius: 1.0})
-	tf.RegisterPrototype("test_rectangle", &Rectangle{length: 2.0, width: 3.0})
-	return &TestShapeFactory{*tf}
+type Session struct {
+	Data   interface{}
+	Expiry time.Time
 }
 
 func main() {
-	// Create a shape factory and register prototypes
-	factory := NewShapeFactory()
-	factory.RegisterPrototype("circle", &Circle{radius: 5.0})
-	factory.RegisterPrototype("rectangle", &Rectangle{length: 10.0, width: 20.0})
+	// Create a sync.Map to store sessions
+	sessions := &sync.Map{}
 
-	// Use the factory to create shapes
-	circle := factory.CreateShape("circle")
-	circle.Draw() // Output: Drawing a circle with radius 5.0
+	// Start the session expiration goroutine
+	go manageSessionExpiration(sessions, sessionExpirationDuration)
 
-	// Create test shapes using the TestShapeFactory
-	testFactory := NewTestShapeFactory()
-	testCircle := testFactory.CreateShape("test_circle")
-	testCircle.Draw() // Output: Drawing a circle with radius 1.0
+	// Simulate some sessions
+	simulateSessions(sessions)
+}
 
-	// Perform tests on test shapes
-	// ...
+// Simulate session creation and updates
+func simulateSessions(sessions *sync.Map) {
+	for sessionID := 0; sessionID < 10; sessionID++ {
+		newSession := Session{
+			Data:   map[string]interface{}{"user": "user" + fmt.Sprint(sessionID)},
+			Expiry: time.Now().Add(sessionExpirationDuration),
+		}
+		sessions.Store(fmt.Sprint(sessionID), newSession)
+		fmt.Printf("Session %d created.\n", sessionID)
+
+		// Modify the session data after some time to demonstrate updates
+		time.Sleep(time.Duration(sessionID*2) * time.Second)
+		updateSession, _ := sessions.Load(fmt.Sprint(sessionID))
+		if updateSession != nil {
+			updatedSession := updateSession.(Session)
+			updatedSession.Data.(map[string]interface{})["key"] = "value" + fmt.Sprint(sessionID)
+			updatedSession.Expiry = time.Now().Add(sessionExpirationDuration)
+			sessions.Store(fmt.Sprint(sessionID), updatedSession)
+			fmt.Printf("Session %d updated.\n", sessionID)
+		}
+	}
+}
+
+// Manage session expiration in a separate goroutine
+func manageSessionExpiration(sessions *sync.Map, expirationDuration time.Duration) {
+	for {
+		// Check for expired sessions every 30 seconds
+		time.Sleep(30 * time.Second)
+		now := time.Now()
+
+		sessions.Range(func(key, value interface{}) bool {
+			session := value.(Session)
+			if session.Expiry.Before(now) {
+				// Session expired, remove it from the map
+				sessions.Delete(key)
+				fmt.Printf("Session %s expired.\n", key)
+			}
+			return true // Continue the iteration
+		})
+	}
 }
