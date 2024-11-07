@@ -97,6 +97,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.21.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/philhofer/fwd v1.0.0 // indirect
+	github.com/pierrec/lz4/v4 v4.1.15 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.20.5 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
@@ -189,9 +190,11 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sajari/word2vec v1.0.1
 	github.com/second-state/WasmEdge-go v0.13.4
+	github.com/segmentio/kafka-go v0.4.47
 	github.com/siddontang/go-log v0.0.0-20190221022429-1e957dd83bed
 	github.com/sirupsen/logrus v1.9.3
 	github.com/sjwhitworth/golearn v0.0.0-20221228163002-74ae077eafb2
+	github.com/streadway/amqp v1.1.0
 	github.com/sugarme/gotch v0.9.1
 	github.com/urfave/cli/v2 v2.27.5
 	gopkg.in/yaml.v3 v3.0.1 // indirect

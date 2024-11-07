@@ -90,7 +90,26 @@ func (a *App) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 // enqueueTask enqueues a task for idempotent processing in RabbitMQ
 func (a *App) enqueueTask(task Task) error {
+	// Marshal the task into JSON
 	body, err := json.Marshal(task)
 	if err != nil {
 		return err
 	}
+
+	// Publish the task to the "idempotent_tasks" queue
+	err = a.mqChannel.Publish(
+		"",                 // exchange
+		"idempotent_tasks", // routing key (queue name)
+		false,              // mandatory
+		false,              // immediate
+		amqp.Publishing{
+			ContentType: "application/json",
+			Body:        body,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to publish task to RabbitMQ: %w", err)
+	}
+
+	return nil
+}
