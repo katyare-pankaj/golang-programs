@@ -161,6 +161,7 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/gonum/floats v0.0.0-20181209220543-c233463c7e82
+	github.com/gonum/graph v0.0.0-20190426092945-678096d81a4b
 	github.com/gonum/stat v0.0.0-20181125101827-41a0da705a5b
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.6.0
