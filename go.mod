@@ -176,6 +176,7 @@ require (
 	github.com/jinzhu/gorm v1.9.16
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
+	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/nats-io/nats.go v1.37.0
 	github.com/neo4j/neo4j-go-driver/v4 v4.4.7
 	github.com/nlpodyssey/gotokenizers v0.2.0
@@ -187,6 +188,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sajari/word2vec v1.0.1
+	github.com/second-state/WasmEdge-go v0.13.4
 	github.com/siddontang/go-log v0.0.0-20190221022429-1e957dd83bed
 	github.com/sirupsen/logrus v1.9.3
 	github.com/sjwhitworth/golearn v0.0.0-20221228163002-74ae077eafb2
