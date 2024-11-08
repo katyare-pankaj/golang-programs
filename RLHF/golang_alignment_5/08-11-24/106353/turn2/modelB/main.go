@@ -1,70 +1,115 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"strconv"
 	"sync"
-	"time"
 )
 
-const (
-	// Set the session expiration duration in minutes
-	sessionExpirationDuration = time.Minute * 10
-)
-
-type Session struct {
-	Data   interface{}
-	Expiry time.Time
+// Inventory represents the inventory of products
+type Inventory struct {
+	Items map[string]int `json:"items"`
+	lock  sync.RWMutex   `json:"-"`
 }
+
+// LoadInventory loads inventory data from a file
+func LoadInventory(filename string) *Inventory {
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		log.Fatalf("Error reading file: %v", err)
+	}
+
+	var inv Inventory
+	if err := json.Unmarshal(data, &inv); err != nil {
+		log.Fatalf("Error parsing JSON: %v", err)
+	}
+	return &inv
+}
+
+// AddItem adds an item to the inventory
+func (inv *Inventory) AddItem(item string, quantity int) {
+	inv.lock.Lock()
+	defer inv.lock.Unlock()
+
+	inv.Items[item] += quantity
+}
+
+// RemoveItem removes an item from the inventory
+func (inv *Inventory) RemoveItem(item string, quantity int) bool {
+	inv.lock.Lock()
+	defer inv.lock.Unlock()
+
+	currentQuantity, ok := inv.Items[item]
+	if !ok {
+		return false
+	}
+
+	if quantity > currentQuantity {
+		return false
+	}
+
+	inv.Items[item] -= quantity
+	if inv.Items[item] == 0 {
+		delete(inv.Items, item)
+	}
+	return true
+}
+
+// UpdateItem updates the quantity of an item in the inventory
+func (inv *Inventory) UpdateItem(item string, quantity int) {
+	inv.lock.Lock()
+	defer inv.lock.Unlock()
+
+	inv.Items[item] = quantity
+}
+
+// GetItemCount returns the count of a specific item in the inventory
+func (inv *Inventory) GetItemCount(item string) int {
+	inv.lock.RLock()
+	defer inv.lock.RUnlock()
+
+	return inv.Items[item]
+}
+
+func handleAddItem(w http.ResponseWriter, r *http.Request) {
+	item := r.FormValue("item")
+	quantityStr := r.FormValue("quantity")
+
+	quantity, err := strconv.Atoi(quantityStr)
+	if err != nil {
+		http.Error(w, "Invalid quantity", http.StatusBadRequest)
+		return
+	}
+
+	inv.AddItem(item, quantity)
+	fmt.Fprintf(w, "Item added successfully!")
+}
+
+func handleRemoveItem(w http.ResponseWriter, r *http.Request) {
+	// Implement similar logic for remove item
+}
+
+func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
+	// Implement similar logic for update item
+}
+
+func handleGetItemCount(w http.ResponseWriter, r *http.Request) {
+	// Implement similar logic for get item count
+}
+
+var inv *Inventory
 
 func main() {
-	// Create a sync.Map to store sessions
-	sessions := &sync.Map{}
+	inv = LoadInventory("inventory.json")
+	http.HandleFunc("/add", handleAddItem)
+	http.HandleFunc("/remove", handleRemoveItem)
+	http.HandleFunc("/update", handleUpdateItem)
+	http.HandleFunc("/count", handleGetItemCount)
 
-	// Start the session expiration goroutine
-	go manageSessionExpiration(sessions, sessionExpirationDuration)
-
-	// Simulate some sessions
-	simulateSessions(sessions)
-}
-
-// Simulate session creation and updates
-func simulateSessions(sessions *sync.Map) {
-	for sessionID := 0; sessionID < 10; sessionID++ {
-		newSession := Session{
-			Data:   map[string]interface{}{"user": "user" + fmt.Sprint(sessionID)},
-			Expiry: time.Now().Add(sessionExpirationDuration),
-		}
-		sessions.Store(fmt.Sprint(sessionID), newSession)
-		fmt.Printf("Session %d created.\n", sessionID)
-
-		// Modify the session data after some time to demonstrate updates
-		time.Sleep(time.Duration(sessionID*2) * time.Second)
-		updateSession, _ := sessions.Load(fmt.Sprint(sessionID))
-		if updateSession != nil {
-			updatedSession := updateSession.(Session)
-			updatedSession.Data.(map[string]interface{})["key"] = "value" + fmt.Sprint(sessionID)
-			updatedSession.Expiry = time.Now().Add(sessionExpirationDuration)
-			sessions.Store(fmt.Sprint(sessionID), updatedSession)
-			fmt.Printf("Session %d updated.\n", sessionID)
-		}
-	}
-}
-
-// Manage session expiration in a separate goroutine
-func manageSessionExpiration(sessions *sync.Map, expirationDuration time.Duration) {
-	for {
-		// Check for expired sessions every 30 seconds
-		time.Sleep(30 * time.Second)
-		now := time.Now()
-
-		sessions.Range(func(key, value interface{}) bool {
-			session := value.(Session)
-			if session.Expiry.Before(now) {
-				// Session expired, remove it from the map
-				sessions.Delete(key)
-				fmt.Printf("Session %s expired.\n", key)
-			}
-			return true // Continue the iteration
-		})
-	}
+	fmt.Println("Inventory management system running...")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
