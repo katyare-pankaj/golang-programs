@@ -2,78 +2,82 @@ package main
 
 import (
 	"fmt"
-	"sync"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/gorilla/mux"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/mysql"
 )
 
-// Define the SessionState struct to represent the state of a session
-type SessionState struct {
-	// You can add any fields here that represent the state of the session.
-	// For example, you might have count of events for a specific session,
-	// timestamps, and other data relevant to your CEP logic.
-	count                int64
-	latestEventTimestamp int64
+// Property represents a property in the system
+type Property struct {
+	ID      uint   `gorm:"primary_key"`
+	Address string `gorm:"not null"`
+	City    string `gorm:"not null"`
+	State   string `gorm:"not null"`
+	Zip     string `gorm:"not null"`
+	Price   uint   `gorm:"not null"`
+	Sold    bool   `gorm:"default:false"`
 }
 
-type SessionStateManager struct {
-	// Mutex to protect concurrent access to the sessionStateMap
-	mu sync.Mutex
-	// Use a map to store session states. The key can be any type that can be hashed.
-	// For example, you could use a string, int, or a custom struct.
-	sessionStateMap map[string]SessionState
-}
+// InitDB initializes the database connection
+func InitDB() *gorm.DB {
+	dbURI := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		os.Getenv("DB_USER"),
+		os.Getenv("DB_PASS"),
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_PORT"),
+		os.Getenv("DB_NAME"),
+	)
 
-func (ssm *SessionStateManager) GetOrCreateSessionState(sessionKey string) *SessionState {
-	ssm.mu.Lock()
-	defer ssm.mu.Unlock()
-
-	state, exists := ssm.sessionStateMap[sessionKey]
-	if !exists {
-		// Create a new session state if it doesn't exist
-		state = SessionState{}
-		ssm.sessionStateMap[sessionKey] = state
+	db, err := gorm.Open("mysql", dbURI)
+	if err != nil {
+		log.Fatalf("Error connecting to the database: %v", err)
 	}
-	return &state
+
+	return db
 }
 
-func (ssm *SessionStateManager) UpdateSessionState(sessionKey string, updateFunc func(*SessionState)) {
-	ssm.mu.Lock()
-	defer ssm.mu.Unlock()
-
-	state, exists := ssm.sessionStateMap[sessionKey]
-	if exists {
-		// Update the session state using the provided update function
-		updateFunc(&state)
-		ssm.sessionStateMap[sessionKey] = state
-	}
+// CreatePropertyHandler handles the creation of a new property
+func CreatePropertyHandler(w http.ResponseWriter, r *http.Request) {
+	// Implementation code for creating a new property
 }
 
-func (ssm *SessionStateManager) RemoveSessionState(sessionKey string) {
-	ssm.mu.Lock()
-	defer ssm.mu.Unlock()
+// GetPropertyHandler handles the retrieval of a property by its ID
+func GetPropertyHandler(w http.ResponseWriter, r *http.Request) {
+	// Implementation code for retrieving a property by its ID
+}
 
-	delete(ssm.sessionStateMap, sessionKey)
+// UpdatePropertyHandler handles the updating of a property by its ID
+func UpdatePropertyHandler(w http.ResponseWriter, r *http.Request) {
+	// Implementation code for updating a property by its ID
+}
+
+// DeletePropertyHandler handles the deletion of a property by its ID
+func DeletePropertyHandler(w http.ResponseWriter, r *http.Request) {
+	// Implementation code for deleting a property by its ID
 }
 
 func main() {
-	// Create an instance of the SessionStateManager
-	ssm := SessionStateManager{sessionStateMap: make(map[string]SessionState)}
+	// Initialize the database
+	db := InitDB()
+	defer db.Close()
 
-	// Simulate processing events for different sessions
-	for eventTimestamp := 0; eventTimestamp < 100; eventTimestamp++ {
-		// Get or create the session state for a specific session
-		sessionKey := fmt.Sprintf("session-%d", eventTimestamp%5) // For simplicity, we'll use a modulo-based session key
-		state := ssm.GetOrCreateSessionState(sessionKey)
+	// Create the table if it doesn't exist
+	db.AutoMigrate(&Property{})
 
-		// Update the session state with the event data
-		ssm.UpdateSessionState(sessionKey, func(s *SessionState) {
-			s.count++
-			s.latestEventTimestamp = int64(eventTimestamp)
-		})
+	// Create a new router
+	router := mux.NewRouter()
 
-		// Perform any CEP processing based on the updated session state
-		// For example, you might check if the state meets certain conditions to trigger an action.
-		if state.count == 3 {
-			fmt.Printf("Session %s triggered at timestamp %d\n", sessionKey, eventTimestamp)
-		}
-	}
+	// Register the routes
+	router.HandleFunc("/properties", CreatePropertyHandler).Methods("POST")
+	router.HandleFunc("/properties/{id}", GetPropertyHandler).Methods("GET")
+	router.HandleFunc("/properties/{id}", UpdatePropertyHandler).Methods("PUT")
+	router.HandleFunc("/properties/{id}", DeletePropertyHandler).Methods("DELETE")
+
+	// Start the server
+	fmt.Println("Server is running on http://localhost:8080")
+	log.Fatal(http.ListenAndServe(":8080", router))
 }
