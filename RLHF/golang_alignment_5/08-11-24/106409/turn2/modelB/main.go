@@ -2,69 +2,70 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 )
 
-const (
-	// Set the session expiration duration in minutes
-	sessionExpirationDuration = time.Minute * 10
-)
+// SensitiveData represents a class holding sensitive data
+type SensitiveData struct {
+	Data  []byte
+	mutex sync.RWMutex
+}
 
-type Session struct {
-	Data   interface{}
-	Expiry time.Time
+// NewSensitiveData creates a new SensitiveData instance
+func NewSensitiveData(data []byte) *SensitiveData {
+	return &SensitiveData{Data: data}
+}
+
+// Read reads the sensitive data safely
+func (sd *SensitiveData) Read() []byte {
+	sd.mutex.RLock()
+	defer sd.mutex.RUnlock()
+	return sd.Data
+}
+
+// Update updates the sensitive data safely
+func (sd *SensitiveData) Update(data []byte) {
+	sd.mutex.Lock()
+	defer sd.mutex.Unlock()
+	sd.Data = data
+}
+
+// accessSensitiveData simulates concurrent access to sensitive data
+func accessSensitiveData(wg *sync.WaitGroup, data *SensitiveData) {
+	defer wg.Done()
+
+	for i := 0; i < 10; i++ {
+		time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
+		// Simulate read access
+		readData := data.Read()
+		fmt.Printf("Read: %s\n", readData)
+
+		// Simulate update access
+		newData := []byte(fmt.Sprintf("Updated data %d", i))
+		data.Update(newData)
+	}
 }
 
 func main() {
-	// Create a sync.Map to store sessions
-	sessions := &sync.Map{}
+	const sensitiveDataSize = 32
+	sensitiveData := NewSensitiveData(make([]byte, sensitiveDataSize))
+	rand.Seed(time.Now().UnixNano())
 
-	// Start the session expiration goroutine
-	go manageSessionExpiration(sessions, sessionExpirationDuration)
-
-	// Simulate some sessions
-	simulateSessions(sessions)
-}
-
-// Simulate session creation and updates
-func simulateSessions(sessions *sync.Map) {
-	for sessionID := 0; sessionID < 10; sessionID++ {
-		newSession := Session{
-			Data:   map[string]interface{}{"user": "user" + fmt.Sprint(sessionID)},
-			Expiry: time.Now().Add(sessionExpirationDuration),
-		}
-		sessions.Store(fmt.Sprint(sessionID), newSession)
-		fmt.Printf("Session %d created.\n", sessionID)
-
-		// Modify the session data after some time to demonstrate updates
-		time.Sleep(time.Duration(sessionID*2) * time.Second)
-		updateSession, _ := sessions.Load(fmt.Sprint(sessionID))
-		if updateSession != nil {
-			updatedSession := updateSession.(Session)
-			updatedSession.Data.(map[string]interface{})["key"] = "value" + fmt.Sprint(sessionID)
-			updatedSession.Expiry = time.Now().Add(sessionExpirationDuration)
-			sessions.Store(fmt.Sprint(sessionID), updatedSession)
-			fmt.Printf("Session %d updated.\n", sessionID)
-		}
+	// Generate random initial data
+	for i := range sensitiveData.Data {
+		sensitiveData.Data[i] = byte(rand.Intn(256))
 	}
-}
 
-// Manage session expiration in a separate goroutine
-func manageSessionExpiration(sessions *sync.Map, expirationDuration time.Duration) {
-	for {
-		// Check for expired sessions every 30 seconds
-		time.Sleep(30 * time.Second)
-		now := time.Now()
+	var wg sync.WaitGroup
+	numConcurrentAccesses := 5
+	wg.Add(numConcurrentAccesses)
 
-		sessions.Range(func(key, value interface{}) bool {
-			session := value.(Session)
-			if session.Expiry.Before(now) {
-				// Session expired, remove it from the map
-				sessions.Delete(key)
-				fmt.Printf("Session %s expired.\n", key)
-			}
-			return true // Continue the iteration
-		})
+	for i := 0; i < numConcurrentAccesses; i++ {
+		go accessSensitiveData(&wg, sensitiveData)
 	}
+
+	wg.Wait()
+	fmt.Println("Sensitive data processing completed")
 }

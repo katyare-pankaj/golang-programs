@@ -1,116 +1,102 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
 	"sync"
-	"time"
 )
 
-// Session represents a single session with an expiration time
-type Session struct {
-	Data       interface{}
-	Expiration time.Time
+// SecureDataStore represents a secure store for sensitive data
+type SecureDataStore struct {
+	data map[string][]byte
+	mu   sync.RWMutex
 }
 
-// SessionManager manages sessions using a sync.Map
-type SessionManager struct {
-	sessions sync.Map
-	duration time.Duration
-	ticker   *time.Ticker
-	quit     chan struct{}
-}
-
-// NewSessionManager creates a new SessionManager with a specified expiration duration
-func NewSessionManager(duration time.Duration) *SessionManager {
-	sm := &SessionManager{
-		duration: duration,
-		quit:     make(chan struct{}),
+// NewSecureDataStore creates a new SecureDataStore
+func NewSecureDataStore() *SecureDataStore {
+	return &SecureDataStore{
+		data: make(map[string][]byte),
 	}
-	sm.ticker = time.NewTicker(time.Minute)
-	go sm.run()
-	return sm
 }
 
-// Stop the session manager
-func (sm *SessionManager) Stop() {
-	close(sm.quit)
-	sm.ticker.Stop()
+// StoreData securely stores sensitive data in the store
+func (s *SecureDataStore) StoreData(key string, data []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data[key] = data
 }
 
-// run is a background goroutine that expires sessions periodically
-func (sm *SessionManager) run() {
-	for {
-		select {
-		case <-sm.ticker.C:
-			sm.expireSessions()
-		case <-sm.quit:
-			return
+// RetrieveData securely retrieves sensitive data from the store
+func (s *SecureDataStore) RetrieveData(key string) ([]byte, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	data, ok := s.data[key]
+	return data, ok
+}
+
+// DeleteData securely deletes sensitive data from the store
+func (s *SecureDataStore) DeleteData(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.data, key)
+}
+
+func generateRandomData(size int) []byte {
+	data := make([]byte, size)
+	_, err := rand.Read(data)
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
+func handleSensitiveDataConcurrently(store *SecureDataStore, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	// Simulate concurrent access to the store
+	for i := 0; i < 100; i++ {
+		key := fmt.Sprintf("data-%d", i)
+		data := generateRandomData(32)
+
+		// Store data concurrently
+		go store.StoreData(key, data)
+
+		// Retrieve data concurrently
+		go func(k string) {
+			storedData, ok := store.RetrieveData(k)
+			if !ok {
+				fmt.Printf("Data for key %s not found\n", k)
+				return
+			}
+			if len(storedData) != len(data) || !compareData(storedData, data) {
+				fmt.Printf("Data integrity error for key %s\n", k)
+			}
+		}(key)
+
+		// Delete data concurrently
+		go store.DeleteData(key)
+	}
+}
+
+func compareData(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
 		}
 	}
-}
-
-// expireSessions removes all sessions that have expired
-func (sm *SessionManager) expireSessions() {
-	now := time.Now()
-	sm.sessions.Range(func(key, value interface{}) bool {
-		session := value.(*Session)
-		if session.Expiration.Before(now) {
-			sm.sessions.Delete(key)
-		}
-		return true
-	})
-}
-
-// SetSession sets a new session or updates an existing one
-func (sm *SessionManager) SetSession(key string, data interface{}) {
-	expiration := time.Now().Add(sm.duration)
-	session := &Session{Data: data, Expiration: expiration}
-	sm.sessions.Store(key, session)
-}
-
-// GetSession retrieves a session by key
-func (sm *SessionManager) GetSession(key string) (interface{}, bool) {
-	value, ok := sm.sessions.Load(key)
-	if !ok {
-		return nil, false
-	}
-	session := value.(*Session)
-	if session.Expiration.Before(time.Now()) {
-		sm.sessions.Delete(key)
-		return nil, false
-	}
-	return session.Data, true
-}
-
-// DeleteSession deletes a session by key
-func (sm *SessionManager) DeleteSession(key string) {
-	sm.sessions.Delete(key)
+	return true
 }
 
 func main() {
-	// Create a session manager with a session expiration of 10 seconds
-	sessionManager := NewSessionManager(10 * time.Second)
-	defer sessionManager.Stop()
+	store := NewSecureDataStore()
+	var wg sync.WaitGroup
 
-	// Set some sessions
-	sessionManager.SetSession("user1", "some data for user1")
-	sessionManager.SetSession("user2", "some data for user2")
+	wg.Add(1)
+	go handleSensitiveDataConcurrently(store, &wg)
 
-	// Retrieve and print sessions
-	data, ok := sessionManager.GetSession("user1")
-	if ok {
-		fmt.Println("User1 session data:", data)
-	} else {
-		fmt.Println("User1 session expired")
-	}
-
-	// Wait for sessions to expire
-	time.Sleep(15 * time.Second)
-
-	data, ok = sessionManager.GetSession("user1")
-	if ok {
-		fmt.Println("User1 session data:", data)
-	} else {
-		fmt.Println("User1 session expired")
-	}
+	wg.Wait()
+	fmt.Println("Concurrent data handling completed successfully")
 }
