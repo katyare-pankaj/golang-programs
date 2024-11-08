@@ -1,70 +1,26 @@
 package main
 
-import (
-	"fmt"
-	"sync"
-	"time"
-)
+import "fmt"
 
-const (
-	// Set the session expiration duration in minutes
-	sessionExpirationDuration = time.Minute * 10
-)
+// Refactored Code (Functional Approach)
 
-type Session struct {
-	Data   interface{}
-	Expiry time.Time
+func calculateAreaFunctional(radius float64) float64 {
+	// Pure function to calculate the square
+	square := func(x float64) float64 {
+		return x * x
+	}
+
+	// Pure function to calculate the area using pi
+	areaWithPi := func(r float64) float64 {
+		return 3.14 * square(r)
+	}
+
+	return areaWithPi(radius)
 }
 
 func main() {
-	// Create a sync.Map to store sessions
-	sessions := &sync.Map{}
 
-	// Start the session expiration goroutine
-	go manageSessionExpiration(sessions, sessionExpirationDuration)
+	area := calculateAreaFunctional(5)
 
-	// Simulate some sessions
-	simulateSessions(sessions)
-}
-
-// Simulate session creation and updates
-func simulateSessions(sessions *sync.Map) {
-	for sessionID := 0; sessionID < 10; sessionID++ {
-		newSession := Session{
-			Data:   map[string]interface{}{"user": "user" + fmt.Sprint(sessionID)},
-			Expiry: time.Now().Add(sessionExpirationDuration),
-		}
-		sessions.Store(fmt.Sprint(sessionID), newSession)
-		fmt.Printf("Session %d created.\n", sessionID)
-
-		// Modify the session data after some time to demonstrate updates
-		time.Sleep(time.Duration(sessionID*2) * time.Second)
-		updateSession, _ := sessions.Load(fmt.Sprint(sessionID))
-		if updateSession != nil {
-			updatedSession := updateSession.(Session)
-			updatedSession.Data.(map[string]interface{})["key"] = "value" + fmt.Sprint(sessionID)
-			updatedSession.Expiry = time.Now().Add(sessionExpirationDuration)
-			sessions.Store(fmt.Sprint(sessionID), updatedSession)
-			fmt.Printf("Session %d updated.\n", sessionID)
-		}
-	}
-}
-
-// Manage session expiration in a separate goroutine
-func manageSessionExpiration(sessions *sync.Map, expirationDuration time.Duration) {
-	for {
-		// Check for expired sessions every 30 seconds
-		time.Sleep(30 * time.Second)
-		now := time.Now()
-
-		sessions.Range(func(key, value interface{}) bool {
-			session := value.(Session)
-			if session.Expiry.Before(now) {
-				// Session expired, remove it from the map
-				sessions.Delete(key)
-				fmt.Printf("Session %s expired.\n", key)
-			}
-			return true // Continue the iteration
-		})
-	}
+	fmt.Println("Area =", area)
 }
