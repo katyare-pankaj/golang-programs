@@ -1,70 +1,27 @@
+// main.go
 package main
 
 import (
 	"fmt"
-	"sync"
-	"time"
-)
+	"go-programs/RLHF/golang_alignment_5/08-11-24/106485/turn2/modelB/handlers"
+	"log"
+	"net/http"
 
-const (
-	// Set the session expiration duration in minutes
-	sessionExpirationDuration = time.Minute * 10
+	"github.com/gorilla/mux"
 )
-
-type Session struct {
-	Data   interface{}
-	Expiry time.Time
-}
 
 func main() {
-	// Create a sync.Map to store sessions
-	sessions := &sync.Map{}
+	// Initialize the router
+	router := mux.NewRouter()
 
-	// Start the session expiration goroutine
-	go manageSessionExpiration(sessions, sessionExpirationDuration)
+	// Register the routes
 
-	// Simulate some sessions
-	simulateSessions(sessions)
-}
+	router.HandleFunc("/properties", handlers.CreatePropertyHandler).Methods("POST")
+	router.HandleFunc("/properties/{id}", handlers.GetPropertyHandler).Methods("GET")
+	router.HandleFunc("/properties/{id}", handlers.UpdatePropertyHandler).Methods("PUT")
+	router.HandleFunc("/properties/{id}", handlers.DeletePropertyHandler).Methods("DELETE")
 
-// Simulate session creation and updates
-func simulateSessions(sessions *sync.Map) {
-	for sessionID := 0; sessionID < 10; sessionID++ {
-		newSession := Session{
-			Data:   map[string]interface{}{"user": "user" + fmt.Sprint(sessionID)},
-			Expiry: time.Now().Add(sessionExpirationDuration),
-		}
-		sessions.Store(fmt.Sprint(sessionID), newSession)
-		fmt.Printf("Session %d created.\n", sessionID)
-
-		// Modify the session data after some time to demonstrate updates
-		time.Sleep(time.Duration(sessionID*2) * time.Second)
-		updateSession, _ := sessions.Load(fmt.Sprint(sessionID))
-		if updateSession != nil {
-			updatedSession := updateSession.(Session)
-			updatedSession.Data.(map[string]interface{})["key"] = "value" + fmt.Sprint(sessionID)
-			updatedSession.Expiry = time.Now().Add(sessionExpirationDuration)
-			sessions.Store(fmt.Sprint(sessionID), updatedSession)
-			fmt.Printf("Session %d updated.\n", sessionID)
-		}
-	}
-}
-
-// Manage session expiration in a separate goroutine
-func manageSessionExpiration(sessions *sync.Map, expirationDuration time.Duration) {
-	for {
-		// Check for expired sessions every 30 seconds
-		time.Sleep(30 * time.Second)
-		now := time.Now()
-
-		sessions.Range(func(key, value interface{}) bool {
-			session := value.(Session)
-			if session.Expiry.Before(now) {
-				// Session expired, remove it from the map
-				sessions.Delete(key)
-				fmt.Printf("Session %s expired.\n", key)
-			}
-			return true // Continue the iteration
-		})
-	}
+	// Start the server
+	fmt.Println("Server is running on http://localhost:8080")
+	log.Fatal(http.ListenAndServe(":8080", router))
 }
