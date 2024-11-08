@@ -167,6 +167,7 @@ require (
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.6.0
 	github.com/google/go-github/v32 v32.1.0
+	github.com/google/uuid v1.6.0
 	github.com/goplus/gop v1.2.6
 	github.com/gorilla/mux v1.8.1
 	github.com/hashicorp/consul/api v1.30.0
