@@ -73,11 +73,11 @@ func processDataHighCohesion(data [][]int, ops []func(int) int) [][]int {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	dataSize := 1000
+	dataSize := 10
 	data := make([][]int, dataSize)
 	for i := 0; i < dataSize; i++ {
-		data[i] = make([]int, 1000)
-		for j := 0; j < 1000; j++ {
+		data[i] = make([]int, 10)
+		for j := 0; j < 10; j++ {
 			data[i][j] = j
 		}
 	}
@@ -86,11 +86,13 @@ func main() {
 	start := time.Now()
 	sums := calculateSumsLowCohesion(data)
 	products := calculateProductsLowCohesion(data)
+	fmt.Println("Low Cohesion Result: Sum =", sums, ", Product =", products)
 	fmt.Println("Low Cohesion Time:", time.Since(start))
 
 	// High Cohesion Example
 	start = time.Now()
 	ops := []func(int) int{func(x int) int { return x + 10 }, func(x int) int { return x * 2 }}
 	processedData := processDataHighCohesion(data, ops)
+	fmt.Println("High Cohesion Results:", processedData)
 	fmt.Println("High Cohesion Time:", time.Since(start))
 }
