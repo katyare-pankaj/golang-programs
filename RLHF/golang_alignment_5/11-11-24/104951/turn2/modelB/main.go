@@ -1,59 +1,80 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
+	"hash/fnv"
 	"net/http"
-	"strings"
+	"strconv"
 
-	"github.com/miekg/dns"
+	"github.com/spf13/afero"
 )
 
-func main() {
-	http.HandleFunc("/", homeHandler)
-	fmt.Println("Server running on http://localhost:8080")
-	err := http.ListenAndServe(":8080", nil)
-	if err != nil {
-		panic(err)
+const (
+	cdnURL      = "https://example.cdn.com/archive"
+	numShards   = 10
+	logFilePath = "logfile.log"
+)
+
+func uploadLogDataToCDN(shardNumber int, logData []byte) error {
+	url := cdnURL + strconv.Itoa(shardNumber)
+
+	// Compress the log data before uploading
+	var compressedData bytes.Buffer
+	gz := gzip.NewWriter(&compressedData)
+	if _, err := gz.Write(logData); err != nil {
+		return fmt.Errorf("error compressing log data: %w", err)
 	}
+	if err := gz.Close(); err != nil {
+		return fmt.Errorf("error closing gzip writer: %w", err)
+	}
+
+	req, err := http.NewRequest("PUT", url, &compressedData)
+	if err != nil {
+		return fmt.Errorf("error creating HTTP request: %w", err)
+	}
+	req.Header.Set("Content-Encoding", "gzip")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error uploading log data to CDN: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("upload failed with status: %s", resp.Status)
+	}
+
+	return nil
 }
 
-func homeHandler(w http.ResponseWriter, r *http.Request) {
-	// Set security headers
-	w.Header().Set("X-XSS-Protection", "1; mode=block")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'")
-	w.Header().Set("Strict-Transport-Security", "max-age=31536000")
-	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
-
-	// Perform DNS lookup for the request hostname using DNSSEC
-	domain := r.Host
-	if !strings.HasSuffix(domain, ".") {
-		domain = domain + "."
-	}
-
-	m := new(dns.Msg)
-	m.SetQuestion(domain, dns.TypeSOA)
-	m.SetEdns0(4096, true)
-
-	c := new(dns.Client)
-	in, _, err := c.Exchange(m, "8.8.8.8:53") // Use Google DNS as an example
+func main() {
+	// Read log data from file
+	fs := afero.NewOsFs()
+	logData, err := afero.ReadFile(fs, logFilePath)
 	if err != nil {
-		fmt.Println("DNS lookup failed:", err)
+		fmt.Println("Error reading log file:", err)
 		return
 	}
 
-	// Validate the DNSSEC response
-	if !in.Rcode == dns.RcodeSuccess {
-		fmt.Println("DNS lookup failed: Rcode", in.Rcode)
+	// Determine the shard number based on a key (e.g., log file name or timestamp)
+	// For simplicity, using the log file name as the key
+	shardNumber := getShardNumber(logFilePath, numShards)
+
+	// Upload the log data to the CDN
+	if err := uploadLogDataToCDN(shardNumber, logData); err != nil {
+		fmt.Println("Error uploading log data to CDN:", err)
 		return
 	}
 
-	err = in.Validate()
-	if err != nil {
-		fmt.Println("DNSSEC validation failed:", err)
-		// You can decide to handle this error appropriately, such as returning a 503 Service Unavailable response.
-		return
-	}
+	fmt.Println("Log data uploaded to CDN shard:", shardNumber)
+}
 
-	// Handle the request here
-	fmt.Fprintf(w, "Welcome to our nonprofit application!")
+func getShardNumber(key string, numShards int) int {
+	// Simple hashing method for sharding
+	h := fnv.New32a()
+	h.Write([]byte(key))
+	return int(h.Sum32() % uint32(numShards))
 }
