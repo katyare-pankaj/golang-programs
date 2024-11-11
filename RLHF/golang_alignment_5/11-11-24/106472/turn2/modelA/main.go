@@ -2,95 +2,48 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"runtime"
-	"sync"
 	"time"
 )
 
-// Low Cohesive Code
-func calculateSumsLowCohesion(data [][]int) [][]int {
-	results := make([][]int, len(data))
-	wg := sync.WaitGroup{}
-
-	for i, row := range data {
-		wg.Add(1)
-		go func(i int, row []int) {
-			defer wg.Done()
-			sums := make([]int, len(row))
-			for j, num := range row {
-				sums[j] = num + 10 // Some arbitrary operation
-			}
-			results[i] = sums
-		}(i, row)
-	}
-
-	wg.Wait()
-	return results
-}
-
-func calculateProductsLowCohesion(data [][]int) [][]int {
-	results := make([][]int, len(data))
-	wg := sync.WaitGroup{}
-
-	for i, row := range data {
-		wg.Add(1)
-		go func(i int, row []int) {
-			defer wg.Done()
-			products := make([]int, len(row))
-			for j, num := range row {
-				products[j] = num * 2 // Some arbitrary operation
-			}
-			results[i] = products
-		}(i, row)
-	}
-	wg.Wait()
-	return results
-}
-
-// Highly Cohesive Code
-func processDataHighCohesion(data [][]int, ops []func(int) int) [][]int {
-	results := make([][]int, len(data))
-	wg := sync.WaitGroup{}
-
-	for i, row := range data {
-		wg.Add(1)
-		go func(i int, row []int) {
-			defer wg.Done()
-			processedRow := make([]int, len(row))
-			for j, num := range row {
-				for _, op := range ops {
-					processedRow[j] = op(num)
-				}
-			}
-			results[i] = processedRow
-		}(i, row)
-	}
-
-	wg.Wait()
-	return results
-}
-
 func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
+	// Generate a large dataset for processing
+	data := generateLargeDataset(10000000)
 
-	dataSize := 1000
-	data := make([][]int, dataSize)
-	for i := 0; i < dataSize; i++ {
-		data[i] = make([]int, 1000)
-		for j := 0; j < 1000; j++ {
-			data[i][j] = j
-		}
-	}
-
-	// Low Cohesion Example
+	// Perform processing and calculate statistics
 	start := time.Now()
-	sums := calculateSumsLowCohesion(data)
-	products := calculateProductsLowCohesion(data)
-	fmt.Println("Low Cohesion Time:", time.Since(start))
+	min, max, sum := processData(data)
+	duration := time.Since(start)
 
-	// High Cohesion Example
-	start = time.Now()
-	ops := []func(int) int{func(x int) int { return x + 10 }, func(x int) int { return x * 2 }}
-	processedData := processDataHighCohesion(data, ops)
-	fmt.Println("High Cohesion Time:", time.Since(start))
+	fmt.Println("Processing time:", duration)
+	fmt.Println("Min:", min)
+	fmt.Println("Max:", max)
+	fmt.Println("Sum:", sum)
+	fmt.Println("Memory Usage:", runtime.MemStats{}.Alloc)
+}
+
+func generateLargeDataset(size int) []int {
+	data := make([]int, size)
+	for i := 0; i < size; i++ {
+		data[i] = rand.Intn(1000)
+	}
+	return data
+}
+
+func processData(data []int) (min, max, sum int) {
+	// Using slices for in-place processing to reduce memory allocation
+	min = data[0]
+	max = data[0]
+	sum = data[0]
+
+	for _, value := range data[1:] {
+		if value < min {
+			min = value
+		} else if value > max {
+			max = value
+		}
+		sum += value
+	}
+	return
 }

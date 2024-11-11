@@ -1,63 +1,54 @@
 package main
 
 import (
-	"fmt"
-	"runtime"
+	"encoding/csv"
+	"io"
+	"log"
+	"os"
 	"sync"
-	"time"
 )
 
-// Low Cohesive Code
-func calculateSumLowCohesion(numbers []int) int {
-	sum := 0
-	for _, num := range numbers {
-		sum += num
-	}
-	return sum
-}
-func calculateProductLowCohesion(numbers []int) int {
-	product := 1
-	for _, num := range numbers {
-		product *= num
-	}
-	return product
-}
-
-// Highly Cohesive Code
-func processNumbersHighCohesion(numbers []int, ops []func(int) int) []int {
-	results := make([]int, len(ops))
-	wg := sync.WaitGroup{}
-	for i, op := range ops {
-		wg.Add(1)
-		go func(i int, op func(int) int) {
-			defer wg.Done()
-			result := 0
-			for _, num := range numbers {
-				result = op(num)
-			}
-			results[i] = result
-		}(i, op)
-	}
-	wg.Wait()
-	return results
-}
 func main() {
+	// Process the CSV file
+	processCSVFile("large_data.csv")
+}
 
-	runtime.GOMAXPROCS(runtime.NumCPU()) // Use all available cores    numElements := 1_000_000
-	numbers := make([]int, numElements)
-	for i := 0; i < numElements; i++ {
-		numbers[i] = i + 1
+func processCSVFile(filename string) {
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatalf("Error opening file: %v", err)
 	}
-	// Low Cohesion Example
-	start := time.Now()
-	sum := calculateSumLowCohesion(numbers)
-	product := calculateProductLowCohesion(numbers)
-	fmt.Println("Low Cohesion Result: Sum =", sum, ", Product =", product)
-	fmt.Println("Low Cohesion Time:", time.Since(start))
-	// High Cohesion Example
-	start = time.Now()
-	ops := []func(int) int{calculateSum, calculateProduct}
-	results := processNumbersHighCohesion(numbers, ops)
-	fmt.Println("High Cohesion Results:", results)
-	fmt.Println("High Cohesion Time:", time.Since(start))
+	defer file.Close()
+
+	// Create a reader for the CSV file
+	reader := csv.NewReader(file)
+
+	// Store data in memory using a sync.Map
+	dataMap := &sync.Map{}
+
+	// Read the CSV file and store data in the sync.Map
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatalf("Error reading record: %v", err)
+		}
+
+		// Assuming the CSV file has two columns: key and value
+		key := record[0]
+		value := record[1]
+
+		dataMap.Store(key, value)
+	}
+
+	// Perform analysis on the data (using the dataMap)
+	// ...
+
+	// Clear the dataMap to free up memory
+	dataMap.Range(func(key, _ interface{}) bool {
+		dataMap.Delete(key)
+		return true
+	})
 }
