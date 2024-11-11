@@ -1,0 +1,5 @@
+2024-11-12 10:00:00 - User login attempt: user_id=1234, status=success
+2024-11-12 10:01:45 - User action: user_id=1234, action=update_profile
+2024-11-12 10:05:30 - System error: error_code=500, message="Internal server error"
+2024-11-12 10:10:00 - User logout: user_id=1234, status=success
+2024-11-12 10:12:15 - User action: user_id=1234, action=delete_account
