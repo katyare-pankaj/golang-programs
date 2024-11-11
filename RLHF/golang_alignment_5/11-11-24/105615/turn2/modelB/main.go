@@ -1,54 +1,59 @@
 package main
 
 import (
-	"encoding/csv"
-	"io"
-	"log"
-	"os"
-	"sync"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/miekg/dns"
 )
 
 func main() {
-	// Process the CSV file
-	processCSVFile("large_data.csv")
+	http.HandleFunc("/", homeHandler)
+	fmt.Println("Server running on http://localhost:8080")
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		panic(err)
+	}
 }
 
-func processCSVFile(filename string) {
-	file, err := os.Open(filename)
+func homeHandler(w http.ResponseWriter, r *http.Request) {
+	// Set security headers
+	w.Header().Set("X-XSS-Protection", "1; mode=block")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'")
+	w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+
+	// Perform DNS lookup for the request hostname using DNSSEC
+	domain := r.Host
+	if !strings.HasSuffix(domain, ".") {
+		domain = domain + "."
+	}
+
+	m := new(dns.Msg)
+	m.SetQuestion(domain, dns.TypeSOA)
+	m.SetEdns0(4096, true)
+
+	c := new(dns.Client)
+	in, _, err := c.Exchange(m, "8.8.8.8:53") // Use Google DNS as an example
 	if err != nil {
-		log.Fatalf("Error opening file: %v", err)
-	}
-	defer file.Close()
-
-	// Create a reader for the CSV file
-	reader := csv.NewReader(file)
-
-	// Store data in memory using a sync.Map
-	dataMap := &sync.Map{}
-
-	// Read the CSV file and store data in the sync.Map
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Fatalf("Error reading record: %v", err)
-		}
-
-		// Assuming the CSV file has two columns: key and value
-		key := record[0]
-		value := record[1]
-
-		dataMap.Store(key, value)
+		fmt.Println("DNS lookup failed:", err)
+		return
 	}
 
-	// Perform analysis on the data (using the dataMap)
-	// ...
+	// Validate the DNSSEC response
+	if !in.Rcode == dns.RcodeSuccess {
+		fmt.Println("DNS lookup failed: Rcode", in.Rcode)
+		return
+	}
 
-	// Clear the dataMap to free up memory
-	dataMap.Range(func(key, _ interface{}) bool {
-		dataMap.Delete(key)
-		return true
-	})
+	err = in.Validate()
+	if err != nil {
+		fmt.Println("DNSSEC validation failed:", err)
+		// You can decide to handle this error appropriately, such as returning a 503 Service Unavailable response.
+		return
+	}
+
+	// Handle the request here
+	fmt.Fprintf(w, "Welcome to our nonprofit application!")
 }

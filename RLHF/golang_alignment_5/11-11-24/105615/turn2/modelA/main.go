@@ -2,48 +2,29 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"runtime"
-	"time"
+	"log"
+	"net/http"
 )
 
 func main() {
-	// Generate a large dataset for processing
-	data := generateLargeDataset(10000000)
+	http.HandleFunc("/", homeHandler)
 
-	// Perform processing and calculate statistics
-	start := time.Now()
-	min, max, sum := processData(data)
-	duration := time.Since(start)
-
-	fmt.Println("Processing time:", duration)
-	fmt.Println("Min:", min)
-	fmt.Println("Max:", max)
-	fmt.Println("Sum:", sum)
-	fmt.Println("Memory Usage:", runtime.MemStats{}.Alloc)
+	fmt.Println("Server running on http://localhost:8080")
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
 }
 
-func generateLargeDataset(size int) []int {
-	data := make([]int, size)
-	for i := 0; i < size; i++ {
-		data[i] = rand.Intn(1000)
-	}
-	return data
-}
+func homeHandler(w http.ResponseWriter, r *http.Request) {
+	// Set DNS security headers
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://*.googleapis.com; style-src 'self' https://*.googleapis.com; img-src 'self' data: https://*.googleapis.com;")
+	w.Header().Set("X-XSS-Protection", "1; mode=block")
+	w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+	w.Header().Set("Feature-Policy", "geolocation 'none'; microphone 'none'; camera 'none'; magnetometer 'none'; gyroscope 'none'; speaker 'none'; fullscreen 'self'; payment 'none'")
+	w.Header().Set("Permissions-Policy", "interest-cohort=()")
 
-func processData(data []int) (min, max, sum int) {
-	// Using slices for in-place processing to reduce memory allocation
-	min = data[0]
-	max = data[0]
-	sum = data[0]
-
-	for _, value := range data[1:] {
-		if value < min {
-			min = value
-		} else if value > max {
-			max = value
-		}
-		sum += value
-	}
-	return
+	fmt.Fprintf(w, "Welcome to our nonprofit application!")
 }

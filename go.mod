@@ -178,6 +178,7 @@ require (
 	github.com/jinzhu/gorm v1.9.16
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
+	github.com/miekg/dns v1.1.62
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/nats-io/nats.go v1.37.0
 	github.com/neo4j/neo4j-go-driver/v4 v4.4.7
