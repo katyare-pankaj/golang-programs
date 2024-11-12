@@ -5,42 +5,35 @@ import (
 	"time"
 )
 
-const (
-	// Maximum number of requests allowed per second
-	rateLimit = 5
-)
-
 func main() {
-	// Create a channel to receive requests
-	requests := make(chan int)
+	// Create a channel to receive data from the data streams
+	dataChan := make(chan string)
 
-	// Create a ticker that ticks once per second
-	ticker := time.NewTicker(time.Second)
+	// Start a goroutine to simulate receiving data from a stream
+	go receiveData(dataChan)
 
-	// Go routine to process requests
-	go func() {
-		for range ticker.C {
-			for i := 0; i < rateLimit; i++ {
-				select {
-				case req := <-requests:
-					fmt.Println("Processing request:", req)
-					// Simulate API call time
-					time.Sleep(100 * time.Millisecond)
-				default:
-					// No more requests to process, exit the loop
-					break
-				}
-			}
-		}
-	}()
+	// Start another goroutine to process the received data
+	go processData(dataChan)
 
-	// Simulate sending requests
-	for i := 0; i < 20; i++ {
-		requests <- i
-		// Add a small delay between requests
-		time.Sleep(50 * time.Millisecond)
+	// Wait for both goroutines to finish
+	time.Sleep(2 * time.Second)
+}
+
+// receiveData simulates receiving data from a stream and sends it over the channel
+func receiveData(dataChan chan<- string) {
+	for i := 0; i < 5; i++ {
+		data := fmt.Sprintf("Data %d", i)
+		fmt.Println("Received:", data)
+		dataChan <- data
+		time.Sleep(1 * time.Second)
 	}
+	close(dataChan) // Close the channel to signal the end of data
+}
 
-	// Stop the ticker to exit the program
-	ticker.Stop()
+// processData receives data from the channel and processes it
+func processData(dataChan <-chan string) {
+	for data := range dataChan {
+		fmt.Println("Processing:", data)
+		// Perform processing here
+	}
 }

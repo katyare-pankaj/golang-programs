@@ -2,47 +2,46 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
+	"sync"
 	"time"
 )
 
-const (
-	apiRequestLimitPerSecond = 5 // Set the desired API request limit per second
-)
-
-var (
-	requestCount     int
-	lastRequestTime  time.Time
-	throttleDuration time.Duration
-)
-
-func init() {
-	throttleDuration = time.Second / time.Duration(apiRequestLimitPerSecond)
-}
-
-func allowRequest() bool {
-	currentTime := time.Now()
-	if currentTime.Sub(lastRequestTime) >= throttleDuration {
-		requestCount = 0
-		lastRequestTime = currentTime
+// worker represents a goroutine that processes tasks from a channel
+func worker(id int, tasks <-chan int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for task := range tasks {
+		fmt.Printf("Worker %d started task: %d\n", id, task)
+		time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
+		fmt.Printf("Worker %d completed task: %d\n", id, task)
 	}
-
-	if requestCount < apiRequestLimitPerSecond {
-		requestCount++
-		return true
-	}
-
-	return false
 }
 
 func main() {
-	for i := 0; i < 20; i++ {
-		if allowRequest() {
-			fmt.Println("Making API request...")
-			// Simulate API call duration
-			time.Sleep(200 * time.Millisecond)
-		} else {
-			fmt.Println("Rate limit exceeded. Waiting...")
-			time.Sleep(throttleDuration)
-		}
+	const numWorkers = 3
+	const numTasks = 10
+
+	// Create a wait group to wait for all workers to finish
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+
+	// Create a channel to send tasks to workers
+	tasks := make(chan int)
+
+	// Start the worker goroutines
+	for i := 0; i < numWorkers; i++ {
+		go worker(i, tasks, &wg)
 	}
+
+	// Generate and send tasks to the channel
+	for i := 0; i < numTasks; i++ {
+		tasks <- i
+	}
+
+	// Close the channel to signal to workers that no more tasks will be sent
+	close(tasks)
+
+	// Wait for all workers to finish
+	wg.Wait()
+	fmt.Println("All tasks completed.")
 }
