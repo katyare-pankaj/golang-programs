@@ -41,6 +41,9 @@ func main() {
 	}
 
 	// Use reflect.MakeFunc to create an actual function from the generated code and call it.
-	fn := reflect.MakeFunc(reflect.TypeOf(f), []reflect.Value{}, reflect.FuncFlagNilReceiver)
+	fn := reflect.MakeFunc(reflect.TypeOf(f), func(args []reflect.Value) []reflect.Value {
+		f() // Call the function `f` that we defined earlier
+		return nil
+	})
 	fn.Call([]reflect.Value{})
 }

@@ -1,20 +1,49 @@
 package main
 
 import (
-	"log"
-	"net/http"
-	"net/http/gzip"
+	"encoding/json"
+	"fmt"
+	"reflect"
 )
 
-func main() {
-	http.HandleFunc("/", gzippedHandler)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+// implement JSONMarshaler using reflection
+func reflectJSONMarshal(v interface{}) ([]byte, error) {
+	rt := reflect.ValueOf(v)
+	if rt.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("cannot marshal non-struct type: %T", v)
+	}
+
+	m := make(map[string]interface{})
+	rt = rt.Elem()
+
+	for i := 0; i < rt.NumField(); i++ {
+		field := rt.Field(i)
+		tag := field.Tag.Get("json")
+		if tag == "" {
+			continue
+		}
+
+		m[tag] = field.Interface()
+	}
+
+	return json.Marshal(m)
 }
 
-func gzippedHandler(w http.ResponseWriter, r *http.Request) {
-	// Your actual handler code here
-	// ...
-	// Compress the response automatically
-	gzipHandler := gzip.NewHandler(w)
-	gzipHandler.ServeHTTP(w, r)
+func main() {
+	type Point struct {
+		X int `json:"x"`
+		Y int `json:"y"`
+	}
+
+	point := &Point{
+		X: 1,
+		Y: 2,
+	}
+
+	// Generate and use the custom reflectJSONMarshal
+	b, err := reflectJSONMarshal(point)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(b)) // Output: {"x":1,"y":2}
 }
