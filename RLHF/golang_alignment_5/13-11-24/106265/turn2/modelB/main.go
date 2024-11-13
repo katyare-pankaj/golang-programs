@@ -1,49 +1,41 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"reflect"
+	"time"
 )
 
-// implement JSONMarshaler using reflection
-func reflectJSONMarshal(v interface{}) ([]byte, error) {
-	rt := reflect.ValueOf(v)
-	if rt.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("cannot marshal non-struct type: %T", v)
+func main() {
+	start := time.Now()
+	for i := 0; i < 1000000; i++ {
+		_ = originalMul(uint8(i%16), uint8(i%16))
 	}
+	end := time.Since(start)
+	fmt.Println()
+	fmt.Println("Original Mul:", end)
 
-	m := make(map[string]interface{})
-	rt = rt.Elem()
-
-	for i := 0; i < rt.NumField(); i++ {
-		field := rt.Field(i)
-		tag := field.Tag.Get("json")
-		if tag == "" {
-			continue
-		}
-
-		m[tag] = field.Interface()
+	start = time.Now()
+	for i := 0; i < 1000000; i++ {
+		_ = optimizedMul(uint8(i%16), uint8(i%16))
 	}
-
-	return json.Marshal(m)
+	end = time.Since(start)
+	fmt.Println("Optimized Mul:", end)
 }
 
-func main() {
-	type Point struct {
-		X int `json:"x"`
-		Y int `json:"y"`
-	}
+// Original multiplication function
+func originalMul(a, b uint8) uint8 {
+	return a * b
+}
 
-	point := &Point{
-		X: 1,
-		Y: 2,
+// Optimized multiplication function using bit manipulation (for uint8 values)
+func optimizedMul(a, b uint8) uint8 {
+	result := uint8(0)
+	for b != 0 {
+		if b&1 == 1 {
+			result += a
+		}
+		a <<= 1 // Multiply a by 2 using left shift
+		b >>= 1 // Divide b by 2 using right shift
 	}
-
-	// Generate and use the custom reflectJSONMarshal
-	b, err := reflectJSONMarshal(point)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(string(b)) // Output: {"x":1,"y":2}
+	return result
 }

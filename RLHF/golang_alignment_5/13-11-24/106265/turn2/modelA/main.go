@@ -2,45 +2,45 @@ package main
 
 import (
 	"fmt"
-	"reflect"
+	"time"
 )
 
-func generateStringMethod(t reflect.Type) string {
-	var code string
-	code += "func (s " + t.Name() + ") String() string {\n"
-	code += "    var fields []string\n"
-
-	// Loop through the fields of the struct
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		code += fmt.Sprintf("    fields = append(fields, fmt.Sprintf(\"%s:%%v\", \"%s\"))\n", field.Name, field.Name)
-	}
-
-	code += "    return fmt.Sprintf(\"{%s}\", strings.Join(fields, \", \"))\n"
-	code += "}\n"
-
-	return code
-}
+const (
+	MAX_VALUE = 15 // uint8 maximum value
+)
 
 func main() {
-	type Point struct {
-		X int
-		Y int
+	// Original multiplication function
+	start := time.Now()
+	for i := 0; i < 10000000; i++ {
+		_ = originalMul(uint8(i%MAX_VALUE), uint8(i%MAX_VALUE))
 	}
+	end := time.Since(start)
+	fmt.Println("Original Mul:", end)
 
-	t := reflect.TypeOf(Point{})
-	generatedCode := generateStringMethod(t)
-
-	// Define a new function to execute the generated code
-	f := func() {
-		println("Generated String() method:")
-		println(generatedCode)
-
-		p := Point{X: 1, Y: 2}
-		fmt.Println(p) // Output will be: {X:1, Y:2}
+	// Bitwise optimized multiplication
+	start = time.Now()
+	for i := 0; i < 10000000; i++ {
+		_ = optimizedMul(uint8(i%MAX_VALUE), uint8(i%MAX_VALUE))
 	}
+	end = time.Since(start)
+	fmt.Println("Optimized Mul:", end)
+}
 
-	// Use reflect.MakeFunc to create an actual function from the generated code and call it.
-	fn := reflect.MakeFunc(reflect.TypeOf(f), []reflect.Value{}, reflect.FuncFlagNilReceiver)
-	fn.Call([]reflect.Value{})
+// Original multiplication function
+func originalMul(a, b uint8) uint8 {
+	return a * b
+}
+
+// Bitwise optimized multiplication function (for uint8 values)
+func optimizedMul(a, b uint8) uint8 {
+	result := uint8(0)
+	for b != 0 {
+		if b&1 == 1 {
+			result ^= a
+		}
+		a <<= 1 // Same as a *= 2
+		b >>= 1 // Same as b /= 2
+	}
+	return result
 }
