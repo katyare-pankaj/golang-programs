@@ -27,6 +27,14 @@ func partition(arr []int, low, high int) int {
 	return i + 1
 }
 
+func quicksortInlined(arr []int, low, high int) {
+	if low < high {
+		pi := partition(arr, low, high)
+		quicksortInlined(arr, low, pi-1)
+		quicksortInlined(arr, pi+1, high)
+	}
+}
+
 func main() {
 	runtime.GOMAXPROCS(1) // Set GOMAXPROCS to 1 for single-threaded execution
 	const size = 100000
@@ -43,4 +51,10 @@ func main() {
 
 	fmt.Printf("Sorted array: %v\n", arr)
 	fmt.Printf("Time elapsed: %s\n", elapsed)
+
+	start = time.Now()
+	quicksortInlined(arr, 0, size-1)
+	elapsedInlined := time.Since(start)
+
+	fmt.Printf("Time elapsed (inlined): %s\n", elapsedInlined)
 }
