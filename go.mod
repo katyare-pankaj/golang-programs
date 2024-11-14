@@ -188,6 +188,7 @@ require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/andybalholm/brotli v1.1.1
 	github.com/apache/arrow/go/arrow v0.0.0-20211112161151-bc219186db40
+	github.com/aws/aws-lambda-go v1.47.0
 	github.com/aws/aws-sdk-go v1.55.5
 	github.com/aymerick/raymond v2.0.2+incompatible
 	github.com/blevesearch/bleve v1.0.14
