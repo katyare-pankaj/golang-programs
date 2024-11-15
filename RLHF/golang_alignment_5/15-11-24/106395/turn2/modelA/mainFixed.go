@@ -41,6 +41,7 @@ func processChunk(chunk dataChunk, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// Process the chunk here
 	for _, row := range chunk.rows {
+		fmt.Println("Processing row:", row)
 		// Processing logic for each row
 	}
 }

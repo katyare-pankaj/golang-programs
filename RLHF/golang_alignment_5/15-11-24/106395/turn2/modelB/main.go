@@ -1,64 +1,88 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"os"
-	"strings"
-
-	"github.com/Azure/azure-functions-go/functions"
+	"math/rand"
+	"runtime"
+	"sync"
+	"time"
 )
 
-// DataTransformationInput is the input structure for the Azure Function.
-type DataTransformationInput struct {
-	Data string `json:"data"`
+const (
+	dataSize   = 1_000_000 // Large dataset size
+	chunkSize  = 10_000    // Size of each data chunk
+	numWorkers = 4         // Number of concurrent workers
+)
+
+type dataChunk []int
+
+func generateData() dataChunk {
+	data := make(dataChunk, dataSize)
+	for i := range data {
+		data[i] = rand.Intn(1000)
+	}
+	return data
 }
 
-// DataTransformationOutput is the output structure for the Azure Function.
-type DataTransformationOutput struct {
-	TransformedData string `json:"transformedData"`
-}
-
-// DataTransformation is the Azure Function handler.
-func DataTransformation(ctx context.Context, req *http.Request) (resp *http.Response, err error) {
-	// Parse the request body into DataTransformationInput
-	var input DataTransformationInput
-	if err = json.NewDecoder(req.Body).Decode(&input); err != nil {
-		return nil, functions.NewHttpError(http.StatusBadRequest, fmt.Sprintf("Error parsing request body: %v", err))
+func processChunk(chunk dataChunk, result chan int) {
+	var sum int
+	for _, value := range chunk {
+		sum += value
 	}
-
-	// Perform the data transformation (uppercasing each string)
-	transformedData := strings.ToUpper(input.Data)
-
-	// Create the DataTransformationOutput response
-	output := DataTransformationOutput{
-		TransformedData: transformedData,
-	}
-
-	// Marshal the response body
-	respBody, err := json.Marshal(output)
-	if err != nil {
-		return nil, functions.NewHttpError(http.StatusInternalServerError, fmt.Sprintf("Error marshaling response body: %v", err))
-	}
-
-	// Return the response
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       ioutil.NopCloser(strings.NewReader(string(respBody))),
-	}, nil
+	result <- sum
 }
 
 func main() {
-	port := os.Getenv("FUNCTIONS_WORKER_RUNTIME_PORT")
-	if port == "" {
-		log.Fatal("FUNCTIONS_WORKER_RUNTIME_PORT environment variable not set.")
+	rand.Seed(time.Now().UnixNano())
+
+	startTime := time.Now()
+
+	data := generateData()
+	fmt.Println("Data generation completed in", time.Since(startTime))
+
+	numChunks := (dataSize + chunkSize - 1) / chunkSize
+	chunks := make([]dataChunk, numChunks)
+	for i := range chunks {
+		start := i * chunkSize
+		end := min((i+1)*chunkSize, dataSize)
+		chunks[i] = data[start:end]
 	}
 
-	// Start the Azure Function runtime
-	log.Printf("Starting Azure Function on port %s", port)
-	functions.Start(DataTransformation)
+	results := make(chan int, numChunks)
+	var wg sync.WaitGroup
+
+	for _, chunk := range chunks {
+		wg.Add(1)
+		go func(chunk dataChunk) {
+			defer wg.Done()
+			processChunk(chunk, results)
+		}(chunk)
+	}
+
+	wg.Wait()
+	close(results)
+
+	var totalSum int
+	for result := range results {
+		totalSum += result
+	}
+
+	fmt.Println("Data processing completed in", time.Since(startTime))
+	fmt.Println("Total sum:", totalSum)
+
+	// Memory cleanup
+	data = nil
+	for i := range chunks {
+		chunks[i] = nil
+	}
+
+	runtime.GC()
+	fmt.Println("Memory cleaned up and GC completed")
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
