@@ -95,6 +95,7 @@ require (
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/serf v0.10.1 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
@@ -254,6 +255,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/sjwhitworth/golearn v0.0.0-20221228163002-74ae077eafb2
 	github.com/spf13/afero v1.11.0
+	github.com/spf13/cobra v1.8.1
 	github.com/streadway/amqp v1.1.0
 	github.com/sugarme/gotch v0.9.1
 	github.com/urfave/cli/v2 v2.27.5
