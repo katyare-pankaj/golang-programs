@@ -1,75 +1,74 @@
 package main
 
-import (
-	"encoding/csv"
-	"fmt"
-	"log"
-	"os"
-	"sync"
-)
+import "fmt"
 
-const (
-	fileName  = "data.csv"
-	chunkSize = 1000 // Process 1000 rows at a time
-)
-
-type dataChunk struct {
-	rows [][]string
+type WorkflowStep interface {
+	Execute()
 }
 
-func readCSV(filePath string) ([][]string, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	return reader.ReadAll()
+type PrimitiveStep struct {
+	name   string
+	action func()
 }
 
-func splitData(data [][]string) []dataChunk {
-	var chunks []dataChunk
-	for i := 0; i < len(data); i += chunkSize {
-		end := min(i+chunkSize, len(data))
-		chunks = append(chunks, dataChunk{data[i:end]})
-	}
-	return chunks
+func (s *PrimitiveStep) Execute() {
+	fmt.Println(fmt.Sprintf("Executing step: %s", s.name))
+	s.action()
 }
 
-func processChunk(chunk dataChunk, wg *sync.WaitGroup) {
-	defer wg.Done()
-	// Process the chunk here
-	for _, row := range chunk.rows {
-		// Processing logic for each row
+func NewPrimitiveStep(name string, action func()) *PrimitiveStep {
+	return &PrimitiveStep{name: name, action: action}
+}
+
+type CompositeStep struct {
+	steps []WorkflowStep
+}
+
+func (s *CompositeStep) Execute() {
+	fmt.Println("Executing composite step:")
+	for _, step := range s.steps {
+		step.Execute()
 	}
 }
 
-func processDataConcurrently(data [][]string) {
-	wg := &sync.WaitGroup{}
-	chunks := splitData(data)
-
-	for _, chunk := range chunks {
-		wg.Add(1)
-		go processChunk(chunk, wg)
-	}
-
-	wg.Wait()
-	fmt.Println("Data processing completed.")
+func (s *CompositeStep) AddStep(step WorkflowStep) {
+	s.steps = append(s.steps, step)
 }
 
 func main() {
-	data, err := readCSV(fileName)
-	if err != nil {
-		log.Fatalf("Error reading CSV file: %v", err)
-	}
+	// Create some primitive steps
+	sendEmail := NewPrimitiveStep("Send Email", func() {
+		fmt.Println("Email sent.")
+	})
 
-	processDataConcurrently(data)
-}
+	processData := NewPrimitiveStep("Process Data", func() {
+		fmt.Println("Data processed.")
+	})
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	uploadData := NewPrimitiveStep("Upload Data", func() {
+		fmt.Println("Data uploaded.")
+	})
+
+	validateInput := NewPrimitiveStep("Validate Input", func() {
+		fmt.Println("Input validated.")
+	})
+
+	// Create composite steps
+	dataProcessingPipeline := &CompositeStep{steps: []WorkflowStep{
+		validateInput,
+		processData,
+		uploadData,
+	}}
+
+	customerOnboarding := &CompositeStep{steps: []WorkflowStep{
+		sendEmail,
+		dataProcessingPipeline,
+	}}
+
+	// Create a workflow by composing steps
+	workflow := &CompositeStep{steps: []WorkflowStep{
+		customerOnboarding,
+	}}
+
+	workflow.Execute()
 }

@@ -2,87 +2,82 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"runtime"
-	"sync"
-	"time"
 )
 
-const (
-	dataSize   = 1_000_000 // Large dataset size
-	chunkSize  = 10_000    // Size of each data chunk
-	numWorkers = 4         // Number of concurrent workers
-)
-
-type dataChunk []int
-
-func generateData() dataChunk {
-	data := make(dataChunk, dataSize)
-	for i := range data {
-		data[i] = rand.Intn(1000)
-	}
-	return data
+type WorkflowStep interface {
+	Execute()
 }
 
-func processChunk(chunk dataChunk, result chan int) {
-	var sum int
-	for _, value := range chunk {
-		sum += value
+type EmailStep struct {
+	message string
+}
+
+func (s *EmailStep) Execute() {
+	fmt.Println("Sending email:", s.message)
+}
+
+func newEmailStep(message string) *EmailStep {
+	return &EmailStep{message: message}
+}
+
+type DataProcessingStep struct {
+	data string
+}
+
+func (s *DataProcessingStep) Execute() {
+	fmt.Println("Processing data:", s.data)
+}
+
+func newDataProcessingStep(data string) *DataProcessingStep {
+	return &DataProcessingStep{data: data}
+}
+
+type WorkflowSequence struct {
+	steps []WorkflowStep
+}
+
+func (w *WorkflowSequence) Execute() {
+	for _, step := range w.steps {
+		step.Execute()
 	}
-	result <- sum
+}
+
+func (w *WorkflowSequence) AddStep(step WorkflowStep) {
+	w.steps = append(w.steps, step)
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	// Creating primitive workflow steps
+	emailStep1 := newEmailStep("Welcome aboard!")
+	dataProcessingStep1 := newDataProcessingStep("Customer data")
+	emailStep2 := newEmailStep("Data processing complete")
 
-	startTime := time.Now()
-
-	data := generateData()
-	fmt.Println("Data generation completed in", time.Since(startTime))
-
-	numChunks := (dataSize + chunkSize - 1) / chunkSize
-	chunks := make([]dataChunk, numChunks)
-	for i := range chunks {
-		start := i * chunkSize
-		end := min((i+1)*chunkSize, dataSize)
-		chunks[i] = data[start:end]
+	// Composite workflow step: Data processing pipeline
+	dataProcessingPipeline := &WorkflowSequence{
+		steps: []WorkflowStep{
+			dataProcessingStep1,
+		},
 	}
 
-	results := make(chan int, numChunks)
-	var wg sync.WaitGroup
-
-	for _, chunk := range chunks {
-		wg.Add(1)
-		go func(chunk dataChunk) {
-			defer wg.Done()
-			processChunk(chunk, results)
-		}(chunk)
+	// Customer onboarding workflow
+	customerOnboarding := &WorkflowSequence{
+		steps: []WorkflowStep{
+			emailStep1,
+			dataProcessingPipeline,
+			emailStep2,
+		},
 	}
 
-	wg.Wait()
-	close(results)
-
-	var totalSum int
-	for result := range results {
-		totalSum += result
+	// Data backup workflow
+	dataBackup := &WorkflowSequence{
+		steps: []WorkflowStep{
+			newDataProcessingStep("Backup data"),
+		},
 	}
 
-	fmt.Println("Data processing completed in", time.Since(startTime))
-	fmt.Println("Total sum:", totalSum)
+	fmt.Println("Running Customer Onboarding Workflow:")
+	customerOnboarding.Execute()
 
-	// Memory cleanup
-	data = nil
-	for i := range chunks {
-		chunks[i] = nil
-	}
-
-	runtime.GC()
-	fmt.Println("Memory cleaned up and GC completed")
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	fmt.Println("\nRunning Data Backup Workflow:")
+	dataBackup.Execute()
 }
