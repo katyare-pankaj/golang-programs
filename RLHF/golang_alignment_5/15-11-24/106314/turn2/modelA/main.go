@@ -1,85 +1,119 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"net/http"
+	"math/rand"
+	"sync"
 	"time"
 )
 
-// Order represents an e-commerce order.
-type Order struct {
-	ID        string  `json:"id"`
-	Status    string  `json:"status"`
-	Timestamp string  `json:"timestamp"`
-	Amount    float64 `json:"amount"`
+const (
+	maxConcurrentTransactions = 10
+	batchSize                 = 5
+	paymentProcessingTime     = time.Duration(rand.Intn(500)) * time.Millisecond
+)
+
+type Payment struct {
+	ID     string  `json:"id"`
+	Amount float64 `json:"amount"`
+}
+
+type TransactionProcessor struct {
+	semaphore chan struct{}
+	db        *PaymentDB
+}
+
+func NewTransactionProcessor(db *PaymentDB) *TransactionProcessor {
+	semaphore := make(chan struct{}, maxConcurrentTransactions)
+	return &TransactionProcessor{
+		semaphore: semaphore,
+		db:        db,
+	}
+}
+
+func (tp *TransactionProcessor) ProcessTransactions(ctx context.Context, transactions []Payment) {
+	for i := 0; i < len(transactions); i += batchSize {
+		batch := transactions[i : i+batchSize]
+		tp.processBatch(ctx, batch)
+	}
+}
+
+func (tp *TransactionProcessor) processBatch(ctx context.Context, batch []Payment) {
+	var wg sync.WaitGroup
+
+	for _, transaction := range batch {
+		wg.Add(1)
+		go func(t Payment) {
+			defer wg.Done()
+			tp.processTransaction(ctx, t)
+		}(transaction)
+	}
+
+	wg.Wait()
+}
+
+func (tp *TransactionProcessor) processTransaction(ctx context.Context, transaction Payment) {
+	<-tp.semaphore
+	defer func() {
+		tp.semaphore <- struct{}{}
+	}()
+
+	time.Sleep(paymentProcessingTime)
+
+	if err := tp.db.SavePayment(transaction); err != nil {
+		fmt.Println("Error saving payment:", err)
+	}
+
+	fmt.Println("Processed transaction:", transaction.ID)
+}
+
+type PaymentDB struct {
+	payments map[string]Payment
+	mu       sync.Mutex
+}
+
+func NewPaymentDB() *PaymentDB {
+	return &PaymentDB{
+		payments: make(map[string]Payment),
+	}
+}
+
+func (db *PaymentDB) SavePayment(payment Payment) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	db.payments[payment.ID] = payment
+	return nil
 }
 
 func main() {
-	http.HandleFunc("/orders", handleOrder)
-	http.ListenAndServe(":8080", nil)
+	ctx := context.Background()
+	db := NewPaymentDB()
+	processor := NewTransactionProcessor(db)
+
+	payments := generatePayments(100)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		processor.ProcessTransactions(ctx, payments)
+	}()
+
+	wg.Wait()
+
+	fmt.Println("Processed all payments. Total payments:", len(db.payments))
 }
 
-func handleOrder(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+func generatePayments(count int) []Payment {
+	payments := make([]Payment, count)
+	for i := 0; i < count; i++ {
+		payments[i] = Payment{
+			ID:     fmt.Sprintf("payment_%d", i+1),
+			Amount: rand.Float64() * 100.0,
+		}
 	}
-
-	idempotencyKey := r.Header.Get("Idempotency-Key")
-
-	if idempotencyKey == "" {
-		http.Error(w, "Idempotency-Key header is required", http.StatusBadRequest)
-		return
-	}
-
-	if hasAlreadyProcessed(idempotencyKey) {
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"message": "Order already processed successfully.",
-		})
-		return
-	}
-
-	var order Order
-	if err := json.NewDecoder(r.Body).Decode(&order); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Simulate order processing
-	newOrder, err := processOrder(idempotencyKey, order)
-	if err != nil {
-		http.Error(w, "Order processing failed", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(newOrder)
-}
-
-func processOrder(idempotencyKey string, order Order) (*Order, error) {
-	time.Sleep(2 * time.Second)
-
-	newOrder := &Order{
-		ID:        idempotencyKey,
-		Status:    "pending",
-		Timestamp: time.Now().Format(time.RFC3339),
-		Amount:    order.Amount,
-	}
-
-	storeOrder(newOrder)
-	return newOrder, nil
-}
-
-func storeOrder(order *Order) {
-	fmt.Println("Storing order:", order)
-	// In a real application, you would store the order in a database.
-}
-
-var processedOrders = make(map[string]bool)
-
-func hasAlreadyProcessed(idempotencyKey string) bool {
-	_, ok := processedOrders[idempotencyKey]
-	return ok
+	return payments
 }
