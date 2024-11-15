@@ -193,6 +193,7 @@ require (
 	github.com/aws/aws-sdk-go v1.55.5
 	github.com/aymerick/raymond v2.0.2+incompatible
 	github.com/blevesearch/bleve v1.0.14
+	github.com/boltdb/bolt v1.3.1
 	github.com/cockroachdb/cockroach-go/v2 v2.3.8
 	github.com/coreos/etcd v3.3.27+incompatible
 	github.com/coreos/go-oidc/v3 v3.11.0
