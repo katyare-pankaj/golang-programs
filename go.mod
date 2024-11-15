@@ -69,6 +69,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.20.0 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
+	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
@@ -211,6 +212,7 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/gofrs/uuid v4.4.0+incompatible
+	github.com/golang/geo v0.0.0-20230421003525-6adc56603217
 	github.com/gonum/floats v0.0.0-20181209220543-c233463c7e82
 	github.com/gonum/graph v0.0.0-20190426092945-678096d81a4b
 	github.com/gonum/stat v0.0.0-20181125101827-41a0da705a5b
@@ -237,7 +239,7 @@ require (
 	github.com/neo4j/neo4j-go-driver/v4 v4.4.7
 	github.com/nlpodyssey/gotokenizers v0.2.0
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.35.0
+	github.com/onsi/gomega v1.35.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pierrec/lz4 v2.6.1+incompatible
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
