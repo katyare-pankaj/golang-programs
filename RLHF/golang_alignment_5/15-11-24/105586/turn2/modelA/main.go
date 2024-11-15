@@ -1,79 +1,37 @@
 package main
 
 import (
-	"fmt"
-	"log"
-	"time"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
-// Process represents a job to be processed
-type Process struct {
-	ID int
+// User struct represents the user entity
+type User struct {
+	Name     string `json:"name" binding:"required"`
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
 }
 
-// Worker represents a worker that processes jobs
-type Worker struct {
-	id       int
-	queue    chan Process
-	shutdown chan struct{}
-}
-
-// NewWorker creates a new worker
-func NewWorker(id int, queue chan Process) *Worker {
-	return &Worker{
-		id:       id,
-		queue:    queue,
-		shutdown: make(chan struct{}),
+func createUser(c *gin.Context) {
+	var user User
+	if err := c.BindJSON(&user); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid user data",
+		})
+		return
 	}
-}
 
-// Start starts the worker
-func (w *Worker) Start() {
-	defer log.Printf("Worker %d exited", w.id)
+	// Add additional user creation logic here
 
-	for {
-		select {
-		case <-w.shutdown:
-			return
-		case p := <-w.queue:
-			w.process(p)
-		}
-	}
-}
-
-// process simulates processing a job
-func (w *Worker) process(p Process) {
-	fmt.Printf("Worker %d processing job %d\n", w.id, p.ID)
-	time.Sleep(time.Duration(p.ID%10) * 100 * time.Millisecond)
-}
-
-// shutdown stops the worker
-func (w *Worker) shutdown() {
-	close(w.shutdown)
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "User created successfully",
+		"user":    user,
+	})
 }
 
 func main() {
-	numWorkers := 4
-	workerQueue := make(chan Process)
-	workers := make([]*Worker, numWorkers)
-
-	for i := 0; i < numWorkers; i++ {
-		workers[i] = NewWorker(i, workerQueue)
-		go workers[i].Start()
-	}
-
-	processes := []Process{
-		{1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10},
-	}
-
-	for _, p := range processes {
-		workerQueue <- p
-	}
-
-	// Wait for all workers to finish
-	for _, w := range workers {
-		w.shutdown()
-	}
-
-	fmt.Println("All jobs completed.")
+	router := gin.Default()
+	router.POST("/users", createUser)
+	router.Run(":8080")
 }

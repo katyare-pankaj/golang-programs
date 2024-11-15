@@ -1,69 +1,43 @@
-package main
+// package api provides the RESTful API endpoints for our application.
+package api
 
 import (
-	"context"
-	"fmt"
-	"math/rand"
-	"sync"
-	"time"
+	"net/http"
 )
 
-const (
-	numWorkers = 10
-	maxTasks   = 1000
-	taskTime   = time.Millisecond * 100
-)
-
-type task struct {
-	id int
+// User represents a user in our system.
+type User struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
 }
 
-var wg sync.WaitGroup
-
-func worker(ctx context.Context, workCh <-chan task, resultCh chan<- int) {
-	defer wg.Done()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case task := <-workCh:
-			// Simulate work
-			time.Sleep(taskTime * time.Duration(rand.Intn(10)+1))
-			resultCh <- task.id
-		}
-	}
+// GetUsersHandler handles the GET /users endpoint.
+//
+// It returns a list of all users in the system.
+//
+// Response:
+//
+//	200 OK:  {
+//	    "users": [
+//	        {
+//	            "id": "user1",
+//	            "name": "Alice",
+//	            "email": "alice@example.com"
+//	        },
+//	        {
+//	            "id": "user2",
+//	            "name": "Bob",
+//	            "email": "bob@example.com"
+//	        }
+//	    ]
+//	}
+func GetUsersHandler(w http.ResponseWriter, r *http.Request) {
+	// Implement the handler logic
 }
 
-func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	workCh := make(chan task, numWorkers)
-	resultCh := make(chan int)
-
-	wg.Add(numWorkers)
-
-	// Start workers
-	for i := 0; i < numWorkers; i++ {
-		go worker(ctx, workCh, resultCh)
-	}
-
-	// Generate and send tasks
-	for i := 0; i < maxTasks; i++ {
-		workCh <- task{id: i}
-	}
-
-	// Collect results
-	var results []int
-	for i := 0; i < maxTasks; i++ {
-		select {
-		case result := <-resultCh:
-			results = append(results, result)
-		case <-ctx.Done():
-			fmt.Println("Timeout reached.")
-			return
-		}
-	}
-
-	fmt.Println("Results:", results)
-}
+// func main() {
+//     r := mux.NewRouter()
+//     r.HandleFunc("/users", GetUsersHandler).Methods("GET")
+//     // Start the server
+// }
