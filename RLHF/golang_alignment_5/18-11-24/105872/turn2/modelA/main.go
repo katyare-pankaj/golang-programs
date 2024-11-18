@@ -2,71 +2,52 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
-var (
-	db   *sql.DB
-	pool *sync.Pool
-)
-
-func init() {
-	dbConfig := "user:password@tcp(localhost:3306)/your_database?parseTime=True&loc=Local"
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		log.Fatal("Error connecting to database:", err)
-	}
-
-	pool = &sync.Pool{
-		New: func() interface{} {
-			conn, err := db.Conn(context.Background())
-			if err != nil {
-				log.Fatal("Error creating new connection:", err)
-			}
-			return conn
-		},
-	}
+// Product represents a product document in the MongoDB database
+type Product struct {
+	ID       bson.ObjectId `bson:"_id,omitempty"`
+	Name     string        `bson:"name"`
+	Price    float64       `bson:"price"`
+	Quantity int           `bson:"quantity"`
 }
 
-func queryExample() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func fetchProductsWithEfficientHandling(db *mgo.Database) ([]Product, error) {
+	c := db.C("products")
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn := pool.Get().(sql.Conn)
-	defer pool.Put(conn)
-
-	rows, err := conn.QueryContext(ctx, "SELECT * FROM your_table")
+	var products []Product
+	err := c.Find(nil).All(&products)
 	if err != nil {
-		log.Error("Error executing query:", err)
-		return
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var id int
-		var name string
-		err := rows.Scan(&id, &name)
-		if err != nil {
-			log.Error("Error scanning row:", err)
-			continue
-		}
-		fmt.Printf("ID: %d, Name: %s\n", id, name)
+		return nil, fmt.Errorf("error fetching products: %w", err)
 	}
 
-	if err := rows.Err(); err != nil {
-		log.Error("Error after rows.Next():", err)
-	}
+	return products, nil
 }
 
 func main() {
-	for {
-		queryExample()
-		time.Sleep(1 * time.Second)
+	session, err := mgo.Dial("mongodb://localhost:27017/retail_analytics")
+	if err != nil {
+		log.Fatalf("error connecting to MongoDB: %v", err)
+	}
+	defer session.Close()
+	db := session.DB("")
+	defer db.Session.Close() // Ensure session is closed properly
+
+	products, err := fetchProductsWithEfficientHandling(db)
+	if err != nil {
+		log.Printf("Error fetching products: %v", err)
+		return
+	}
+
+	for _, product := range products {
+		fmt.Println(product)
 	}
 }

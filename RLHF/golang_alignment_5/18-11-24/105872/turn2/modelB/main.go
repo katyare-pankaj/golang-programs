@@ -1,55 +1,53 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"math/rand"
-	"net/http"
-	"sync"
+	"log"
 	"time"
+
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
-const (
-	numWorkers = 4   // Number of goroutines for concurrent processing
-	dataBuffer = 100 // Buffer size for the channel
-)
+type Product struct {
+	ID    bson.ObjectId `bson:"_id,omitempty"`
+	Name  string        `bson:"name"`
+	Price float64       `bson:"price"`
+}
 
-func processData(data chan string) {
-	for item := range data {
-		// Simulate data processing time
-		time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
-		fmt.Println("Processed:", item)
+func fetchProducts(db *mgo.Database) ([]Product, error) {
+	c := db.C("products")
+
+	// Set a query timeout to prevent infinite waits
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var products []Product
+	err := c.Find(nil).Limit(100).All(&products) // Limit results to 100 for efficient memory usage
+	if err != nil {
+		return nil, fmt.Errorf("error fetching products: %w", err)
 	}
+
+	return products, nil
 }
 
 func main() {
-	dataChan := make(chan string, dataBuffer)
+	session, err := mgo.Dial("mongodb://localhost:27017/retail_analytics")
+	if err != nil {
+		log.Fatalf("error connecting to MongoDB: %w", err)
+	}
+	defer session.Close()
 
-	// Start worker goroutines
-	var wg sync.WaitGroup
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			processData(dataChan)
-			wg.Done()
-		}()
+	db := session.DB("")
+	db.SetReadPreference(&mgo.ReadPreference{Primary: true}) // Opt for primary read preference
+
+	products, err := fetchProducts(db)
+	if err != nil {
+		log.Fatalf("error fetching products: %w", err)
 	}
 
-	// Sample incoming data from HTTP requests
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		dataItem := r.URL.Query().Get("data")
-		if dataItem != "" {
-			dataChan <- dataItem
-		} else {
-			http.Error(w, "Invalid request", http.StatusBadRequest)
-		}
-	})
-
-	fmt.Println("Server started. Listening on http://localhost:8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		panic(err)
+	for _, product := range products {
+		fmt.Println(product)
 	}
-
-	// Close the channel to signal workers to finish
-	close(dataChan)
-	wg.Wait()
 }
