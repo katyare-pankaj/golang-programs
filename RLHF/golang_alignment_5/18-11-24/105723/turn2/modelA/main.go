@@ -2,48 +2,52 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"strings"
-
-	"github.com/dataflowx/dataflowx-go"
+	"math/big"
 )
 
+var zero = big.NewInt(0)
+
+func factorialIterative(n int) *big.Int {
+	if n < 0 {
+		return zero
+	}
+	result := big.NewInt(1)
+	if n == 0 || n == 1 {
+		return result
+	}
+
+	for i := 1; i <= n; i++ {
+		temp := big.NewInt(0)
+		temp.Mul(result, big.NewInt(int64(i)))
+		result = temp
+	}
+	return result
+}
+
+func factorialRecursive(n int) *big.Int {
+	if n < 0 {
+		return zero
+	}
+
+	return factorialHelper(n, big.NewInt(1))
+}
+
+func factorialHelper(n int, result *big.Int) *big.Int {
+	if n == 0 || n == 1 {
+		return result
+	}
+
+	temp := big.NewInt(0)
+	temp.Mul(result, big.NewInt(int64(n)))
+	return factorialHelper(n-1, temp)
+}
+
 func main() {
-	// Initialize DataFlowX client
-	dfx, err := dataflowx.NewClient("YOUR_DATAFLOWX_API_KEY")
-	if err != nil {
-		log.Fatalf("Error initializing DataFlowX client: %v", err)
-	}
+	n := 20
+	fmt.Println("Factorial of", n, "using iteration:", factorialIterative(n))
+	fmt.Println("Factorial of", n, "using recursion:", factorialRecursive(n))
 
-	// Define the data transformation pipeline using DataFlowX visual workflow builder
-	pipelineID, err := dfx.CreatePipeline("MyDataTransformationPipeline")
-	if err != nil {
-		log.Fatalf("Error creating pipeline: %v", err)
-	}
-
-	err = dfx.AddReadCSVStep(pipelineID, "input.csv")
-	if err != nil {
-		log.Fatalf("Error adding Read CSV step: %v", err)
-	}
-
-	err = dfx.AddTransformStep(pipelineID, "uppercase", func(data interface{}) interface{} {
-		str := data.(string)
-		return strings.ToUpper(str)
-	})
-	if err != nil {
-		log.Fatalf("Error adding Transform step: %v", err)
-	}
-
-	err = dfx.AddWriteCSVStep(pipelineID, "output.csv")
-	if err != nil {
-		log.Fatalf("Error adding Write CSV step: %v", err)
-	}
-
-	// Execute the data transformation pipeline
-	err = dfx.RunPipeline(pipelineID)
-	if err != nil {
-		log.Fatalf("Error running pipeline: %v", err)
-	}
-
-	fmt.Println("Data transformation pipeline executed successfully!")
+	n = 100
+	fmt.Println("Factorial of", n, "using iteration:", factorialIterative(n))
+	fmt.Println("Factorial of", n, "using recursion:", factorialRecursive(n))
 }
