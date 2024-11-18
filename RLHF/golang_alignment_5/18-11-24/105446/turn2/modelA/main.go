@@ -1,53 +1,83 @@
 package main
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"strings"
 	"time"
 
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	"github.com/gin-gonic/gin"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"golang.org/x/crypto/bcrypt"
 )
 
-// Product represents a product document in the MongoDB database
-type Product struct {
-	ID       bson.ObjectId `bson:"_id,omitempty"`
-	Name     string        `bson:"name"`
-	Price    float64       `bson:"price"`
-	Quantity int           `bson:"quantity"`
+type User struct {
+	gorm.Model
+	Username  string `json:"username"`
+	Password  string `json:"password"`
+	Email     string `json:"email"`
+	AuthToken string `json:"auth_token"`
 }
 
-func fetchProductsWithEfficientHandling(db *mgo.Database) ([]Product, error) {
-	c := db.C("products")
-	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+var db *gorm.DB
 
-	var products []Product
-	err := c.Find(nil).All(&products)
+func init() {
+	db, err := gorm.Open("sqlite3", ":memory:")
 	if err != nil {
-		return nil, fmt.Errorf("error fetching products: %w", err)
+		log.Fatal("Error connecting to database:", err)
 	}
+	defer db.Close()
 
-	return products, nil
+	db.AutoMigrate(&User{})
+}
+
+func hashPassword(password string) string {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Fatal("Error hashing password:", err)
+	}
+	return string(hashed)
+}
+
+func verifyPassword(hashedPassword, password string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+	return err == nil
+}
+
+func generateJWT(user User) string {
+	token := fmt.Sprintf("%s.%s.%s", "secret", user.Username, time.Now().UTC().Add(time.Hour * 24).Unix())
+	return token
 }
 
 func main() {
-	session, err := mgo.Dial("mongodb://localhost:27017/retail_analytics")
-	if err != nil {
-		log.Fatalf("error connecting to MongoDB: %v", err)
-	}
-	defer session.Close()
-	db := session.DB("")
-	defer db.Session.Close() // Ensure session is closed properly
+	r := gin.Default()
+	r.Use(gin.Logger())
+	r.Use(gin.Recovery())
 
-	products, err := fetchProductsWithEfficientHandling(db)
-	if err != nil {
-		log.Printf("Error fetching products: %v", err)
-		return
-	}
+	// Post User
+	r.POST("/api/users", func(c *gin.Context) {
+		var user User
+		if err := c.ShouldBindJSON(&user); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 
-	for _, product := range products {
-		fmt.Println(product)
-	}
-}
+		user.Password = hashPassword(user.Password)
+
+		if err := db.Create(&user).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		user.AuthToken = generateJWT(user)
+		c.JSON(http.StatusCreated, gin.H{"user": user})
+	})
+
+	// Post Login
+	r.POST("/api/login", func(c *gin.Context) {
+		var user User
+		if err := c.ShouldBindJSON(&user); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

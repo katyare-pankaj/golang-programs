@@ -219,6 +219,7 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/gofrs/uuid v4.4.0+incompatible
+	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang/geo v0.0.0-20230421003525-6adc56603217
 	github.com/gonum/floats v0.0.0-20181209220543-c233463c7e82
 	github.com/gonum/graph v0.0.0-20190426092945-678096d81a4b
