@@ -1,53 +1,72 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
-	"math/big"
+	"log"
+	"sync"
+	"time"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
-var zero = big.NewInt(0)
+var (
+	db   *sql.DB
+	pool *sync.Pool
+)
 
-func factorialIterative(n int) *big.Int {
-	if n < 0 {
-		return zero
-	}
-	result := big.NewInt(1)
-	if n == 0 || n == 1 {
-		return result
+func init() {
+	dbConfig := "user:password@tcp(localhost:3306)/your_database?parseTime=True&loc=Local"
+	db, err := sql.Open("mysql", dbConfig)
+	if err != nil {
+		log.Fatal("Error connecting to database:", err)
 	}
 
-	for i := 1; i <= n; i++ {
-		temp := big.NewInt(0)
-		temp.Mul(result, big.NewInt(int64(i)))
-		result = temp
+	pool = &sync.Pool{
+		New: func() interface{} {
+			conn, err := db.Conn(context.Background())
+			if err != nil {
+				log.Fatal("Error creating new connection:", err)
+			}
+			return conn
+		},
 	}
-	return result
 }
 
-func factorialRecursive(n int) *big.Int {
-	if n < 0 {
-		return zero
+func queryExample() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn := pool.Get().(sql.Conn)
+	defer pool.Put(conn)
+
+	rows, err := conn.QueryContext(ctx, "SELECT * FROM your_table")
+	if err != nil {
+		log.Error("Error executing query:", err)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id int
+		var name string
+		err := rows.Scan(&id, &name)
+		if err != nil {
+			log.Error("Error scanning row:", err)
+			continue
+		}
+		fmt.Printf("ID: %d, Name: %s\n", id, name)
 	}
 
-	return factorialHelper(n, big.NewInt(1))
-}
-
-func factorialHelper(n int, result *big.Int) *big.Int {
-	if n == 0 || n == 1 {
-		return result
+	if err := rows.Err(); err != nil {
+		log.Error("Error after rows.Next():", err)
 	}
-
-	temp := big.NewInt(0)
-	temp.Mul(result, big.NewInt(int64(n)))
-	return factorialHelper(n-1, temp)
 }
 
 func main() {
-	n := 20
-	fmt.Println("Factorial of", n, "using iteration:", factorialIterative(n))
-	fmt.Println("Factorial of", n, "using recursion:", factorialRecursive(n))
-
-	n = 100
-	fmt.Println("Factorial of", n, "using iteration:", factorialIterative(n))
-	fmt.Println("Factorial of", n, "using recursion:", factorialRecursive(n))
+	for {
+		queryExample()
+		time.Sleep(1 * time.Second)
+	}
 }
