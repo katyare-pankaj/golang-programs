@@ -2,47 +2,63 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
-	"strings"
-	"sync"
 )
 
-func countWords(filename string, wordCount chan int) {
-	content, err := ioutil.ReadFile(filename)
-	if err != nil {
-		fmt.Println("Error reading file:", err)
-		return
-	}
-	words := strings.Fields(string(content))
-	wordCount <- len(words)
+type PaymentMethod interface {
+	ProcessPayment(amount float64) error
 }
+
+type CreditCard struct {
+	Number string
+	CVV    string
+	Expiry string
+}
+
+func (cc CreditCard) ProcessPayment(amount float64) error {
+	// Simulate credit card payment processing
+	fmt.Printf("Processing payment of $%.2f using Credit Card %s...\n", amount, cc.Number)
+	return nil
+}
+
+type PayPal struct {
+	Email string
+}
+
+func (pp PayPal) ProcessPayment(amount float64) error {
+	// Simulate PayPal payment processing
+	fmt.Printf("Processing payment of $%.2f using PayPal %s...\n", amount, pp.Email)
+	return nil
+}
+
+type BankTransfer struct {
+	AccountNumber string
+	SortCode      string
+}
+
+func (bt BankTransfer) ProcessPayment(amount float64) error {
+	// Simulate bank transfer payment processing
+	fmt.Printf("Processing payment of $%.2f using Bank Transfer %s...\n", amount, bt.AccountNumber)
+	return nil
+}
+
+func processPayment(pm PaymentMethod, amount float64) error {
+	return pm.ProcessPayment(amount)
+}
+
 func main() {
-	filenames := []string{"file1.txt", "file2.txt", "file3.txt"}
-	wordCountChan := make(chan int)
-	var wg sync.WaitGroup
-	// Start a goroutine for each file to count words
-	for _, filename := range filenames {
-		wg.Add(1)
-		go func(f string) {
-			countWords(f, wordCountChan)
-			wg.Done()
-		}(filename)
+	// Define payment methods
+	creditCard := CreditCard{Number: "1234-5678-9012-3456", CVV: "123", Expiry: "01/24"}
+	payPal := PayPal{Email: "example@example.com"}
+	bankTransfer := BankTransfer{AccountNumber: "78901234", SortCode: "56-78-90"}
+
+	// Process payments using different methods
+	if err := processPayment(creditCard, 100.00); err != nil {
+		fmt.Println("Error processing payment:", err)
 	}
-
-	// Total word count will be stored here
-	totalWordCount := 0
-
-	// Receive word counts from the channel and add them to total
-	go func() {
-		for count := range wordCountChan {
-			totalWordCount += count
-		}
-	}()
-
-	wg.Wait() // Wait for all goroutines to finish
-
-	// Close the wordCount channel to signal the end of data
-	close(wordCountChan)
-
-	fmt.Println("Total words:", totalWordCount)
+	if err := processPayment(payPal, 50.00); err != nil {
+		fmt.Println("Error processing payment:", err)
+	}
+	if err := processPayment(bankTransfer, 75.00); err != nil {
+		fmt.Println("Error processing payment:", err)
+	}
 }
