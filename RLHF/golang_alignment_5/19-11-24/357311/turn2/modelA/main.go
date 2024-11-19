@@ -4,78 +4,95 @@ import (
 	"fmt"
 )
 
-// Define the Payment interface
-type Payment interface {
-	Charge(amount float64) error
-	String() string
+// Graph represents an undirected graph using an adjacency list.
+type Graph struct {
+	vertices map[string]*Vertex
 }
 
-// Implement the CreditCard struct that conforms to the Payment interface
-type CreditCard struct {
-	number string
-	expiry string
-	cvv    string
-}
-
-func (cc CreditCard) Charge(amount float64) error {
-	fmt.Printf("Charging CreditCard %s for $%.2f...\n", cc.number, amount)
-	return nil
-}
-
-func (cc CreditCard) String() string {
-	return fmt.Sprintf("CreditCard {number: %s, expiry: %s, cvv: %s}", cc.number, cc.expiry, cc.cvv)
-}
-
-// Implement the PayPal struct that conforms to the Payment interface
-type PayPal struct {
-	email string
-}
-
-func (pp PayPal) Charge(amount float64) error {
-	fmt.Printf("Charging PayPal %s for $%.2f...\n", pp.email, amount)
-	return nil
-}
-
-func (pp PayPal) String() string {
-	return fmt.Sprintf("PayPal {email: %s}", pp.email)
-}
-
-// Implement the BankTransfer struct that conforms to the Payment interface
-type BankTransfer struct {
-	accountNumber string
-	routingNumber string
-}
-
-func (bt BankTransfer) Charge(amount float64) error {
-	fmt.Printf("Processing BankTransfer %s for $%.2f...\n", bt.accountNumber, amount)
-	return nil
-}
-
-func (bt BankTransfer) String() string {
-	return fmt.Sprintf("BankTransfer {accountNumber: %s, routingNumber: %s}", bt.accountNumber, bt.routingNumber)
-}
-
-// Function to process payments for a list of payment methods
-func processPayments(payments []Payment) {
-	for _, payment := range payments {
-		fmt.Println("Payment Method:", payment)
-		if err := payment.Charge(100.0); err != nil {
-			fmt.Println("Error charging payment:", err)
-		} else {
-			fmt.Println("Payment successful.")
-		}
+// NewGraph creates a new graph instance.
+func NewGraph() *Graph {
+	return &Graph{
+		vertices: make(map[string]*Vertex),
 	}
 }
 
+// Vertex represents a vertex in the graph.
+type Vertex struct {
+	id      string
+	edges   []*Vertex
+	visited bool
+}
+
+// NewVertex creates a new vertex with a given ID.
+func NewVertex(id string) *Vertex {
+	return &Vertex{
+		id:      id,
+		edges:   make([]*Vertex, 0),
+		visited: false,
+	}
+}
+
+// AddVertex adds a new vertex to the graph.
+func (g *Graph) AddVertex(v *Vertex) {
+	g.vertices[v.id] = v
+}
+
+// AddEdge adds an edge between two vertices.
+func (g *Graph) AddEdge(from *Vertex, to *Vertex) {
+	from.edges = append(from.edges, to)
+	to.edges = append(to.edges, from) // Since the graph is undirected
+}
+
+// BFS performs a breadth-first search starting from the given vertex.
+// Returns a list of vertices in the order they are visited.
+func (g *Graph) BFS(startVertex string) []string {
+	start, exists := g.vertices[startVertex]
+	if !exists {
+		fmt.Printf("Vertex %s does not exist in the graph.\n", startVertex)
+		return nil
+	}
+
+	queue := []*Vertex{start}
+	start.visited = true
+	result := []string{}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		result = append(result, current.id)
+
+		for _, neighbor := range current.edges {
+			if !neighbor.visited {
+				queue = append(queue, neighbor)
+				neighbor.visited = true
+			}
+		}
+	}
+
+	return result
+}
+
 func main() {
-	// Create instances of different payment methods
-	creditCard := CreditCard{number: "4111111111111111", expiry: "12/25", cvv: "123"}
-	paypal := PayPal{email: "user@example.com"}
-	bankTransfer := BankTransfer{accountNumber: "123456789", routingNumber: "098765432"}
+	graph := NewGraph()
 
-	// Create a slice of Payment to hold different payment methods
-	paymentMethods := []Payment{creditCard, paypal, bankTransfer}
+	// Adding vertices
+	v1 := NewVertex("A")
+	v2 := NewVertex("B")
+	v3 := NewVertex("C")
+	v4 := NewVertex("D")
+	v5 := NewVertex("E")
+	v6 := NewVertex("F")
 
-	// Process payments
-	processPayments(paymentMethods)
+	// Adding edges
+	graph.AddEdge(v1, v2)
+	graph.AddEdge(v1, v3)
+	graph.AddEdge(v2, v4)
+	graph.AddEdge(v2, v5)
+	graph.AddEdge(v3, v6)
+	graph.AddEdge(v4, v6)
+	graph.AddEdge(v5, v6)
+
+	// Performing BFS starting from vertex A
+	order := graph.BFS("A")
+	fmt.Println("BFS Traversal Order:", order)
 }

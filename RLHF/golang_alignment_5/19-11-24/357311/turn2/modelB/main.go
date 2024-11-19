@@ -1,64 +1,61 @@
 package main
 
 import (
+	"container/list"
 	"fmt"
 )
 
-type PaymentMethod interface {
-	ProcessPayment(amount float64) error
+// Graph represents the graph structure
+type Graph struct {
+	NumNodes int
+	AdjList  map[int][]int
 }
 
-type CreditCard struct {
-	Number string
-	CVV    string
-	Expiry string
+// NewGraph initializes a new graph with a specified number of nodes
+func NewGraph(numNodes int) *Graph {
+	return &Graph{
+		NumNodes: numNodes,
+		AdjList:  make(map[int][]int),
+	}
 }
 
-func (cc CreditCard) ProcessPayment(amount float64) error {
-	// Simulate credit card payment processing
-	fmt.Printf("Processing payment of $%.2f using Credit Card %s...\n", amount, cc.Number)
-	return nil
+// AddEdge adds a directed edge between source and destination nodes
+func (g *Graph) AddEdge(source int, destination int) {
+	g.AdjList[source] = append(g.AdjList[source], destination)
 }
 
-type PayPal struct {
-	Email string
-}
+// BFS performs BFS starting from a given source node and prints the visited nodes
+func (g *Graph) BFS(source int) {
+	queue := list.New()
+	visited := make([]bool, g.NumNodes)
 
-func (pp PayPal) ProcessPayment(amount float64) error {
-	// Simulate PayPal payment processing
-	fmt.Printf("Processing payment of $%.2f using PayPal %s...\n", amount, pp.Email)
-	return nil
-}
+	// Mark the source node as visited and enqueue it
+	visited[source] = true
+	queue.PushBack(source)
 
-type BankTransfer struct {
-	AccountNumber string
-	SortCode      string
-}
+	for queue.Len() != 0 {
+		current := queue.Remove(queue.Front()).(int)
+		fmt.Printf("%d ", current)
 
-func (bt BankTransfer) ProcessPayment(amount float64) error {
-	// Simulate bank transfer payment processing
-	fmt.Printf("Processing payment of $%.2f using Bank Transfer %s...\n", amount, bt.AccountNumber)
-	return nil
-}
-
-func processPayment(pm PaymentMethod, amount float64) error {
-	return pm.ProcessPayment(amount)
+		// Explore all neighbors of the current node
+		for _, neighbor := range g.AdjList[current] {
+			if !visited[neighbor] {
+				visited[neighbor] = true
+				queue.PushBack(neighbor)
+			}
+		}
+	}
 }
 
 func main() {
-	// Define payment methods
-	creditCard := CreditCard{Number: "1234-5678-9012-3456", CVV: "123", Expiry: "01/24"}
-	payPal := PayPal{Email: "example@example.com"}
-	bankTransfer := BankTransfer{AccountNumber: "78901234", SortCode: "56-78-90"}
+	g := NewGraph(4)
+	g.AddEdge(0, 1)
+	g.AddEdge(0, 2)
+	g.AddEdge(1, 2)
+	g.AddEdge(2, 0)
+	g.AddEdge(2, 3)
+	g.AddEdge(3, 3)
 
-	// Process payments using different methods
-	if err := processPayment(creditCard, 100.00); err != nil {
-		fmt.Println("Error processing payment:", err)
-	}
-	if err := processPayment(payPal, 50.00); err != nil {
-		fmt.Println("Error processing payment:", err)
-	}
-	if err := processPayment(bankTransfer, 75.00); err != nil {
-		fmt.Println("Error processing payment:", err)
-	}
+	fmt.Println("BFS Traversal:")
+	g.BFS(2)
 }

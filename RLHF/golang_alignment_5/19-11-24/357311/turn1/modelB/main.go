@@ -1,6 +1,6 @@
 
 // Package bidirectsearch provides a bidirectional search algorithm for graph algorithms.
-package main
+package bidirectsearch
 
 import "fmt"
 
