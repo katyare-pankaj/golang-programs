@@ -1,48 +1,23 @@
+// myapp/main.go
+
 package main
 
 import (
 	"fmt"
-	"io/ioutil"
-	"strings"
-	"sync"
+	"go-programs/RLHF/golang_alignment_5/19-11-24/357223/turn2/modelB/logger"
 )
 
-func countWords(filename string, wordCount chan int) {
-	content, err := ioutil.ReadFile(filename)
-	if err != nil {
-		fmt.Println("Error reading file:", err)
-		return
-	}
-	words := strings.Fields(string(content))
-	wordCount <- len(words)
-}
 func main() {
-	filenames := []string{"file1.txt", "file2.txt", "file3.txt"}
-	wordCountChan := make(chan int)
-	var wg sync.WaitGroup
-	// Start a goroutine for each file to count words
-	for _, filename := range filenames {
-		wg.Add(1)
-		go func(f string) {
-			countWords(f, wordCountChan)
-			wg.Done()
-		}(filename)
-	}
+	// Set the log level to INFO (default)
+	logger.Log(logger.INFO, "Application starting")
 
-	// Total word count will be stored here
-	totalWordCount := 0
+	// Log warning message
+	logger.Log(logger.WARN, "Memory usage high: %d MB", 120)
 
-	// Receive word counts from the channel and add them to total
-	go func() {
-		for count := range wordCountChan {
-			totalWordCount += count
-		}
-	}()
+	// Set the log level to WARN to filter out INFO messages
+	logger.SetLevel(logger.WARN)
+	logger.Log(logger.INFO, "Ignored informational message")
 
-	wg.Wait() // Wait for all goroutines to finish
-
-	// Close the wordCount channel to signal the end of data
-	close(wordCountChan)
-
-	fmt.Println("Total words:", totalWordCount)
+	// Log error message
+	logger.Log(logger.ERROR, "Fatal error: %v", fmt.Errorf("something went wrong"))
 }
