@@ -1,84 +1,100 @@
-package main
+package main  
+import (  
+    "encoding/json"
+    "fmt"
+    "log"
+    "net/http"
+    "strconv"
 
-import (
-	"fmt"
-	"math/rand"
-	"net/http"
-	"sync"
-	"time"
+    "github.com/gorilla/mux"
 )
 
-// RateLimiter struct represents the token bucket rate limiter
-type RateLimiter struct {
-	mu     sync.Mutex
-	tokens int
-	cap    int
-	rate   time.Duration
-	last   time.Time
+// ToDoItem represents a single to-do item
+type ToDoItem struct {
+    ID   int    `json:"id"`
+    Task string `json:"task"`
 }
 
-// NewRateLimiter creates a new RateLimiter with the given capacity and rate.
-func NewRateLimiter(cap int, rate time.Duration) *RateLimiter {
-	return &RateLimiter{
-		cap:  cap,
-		rate: rate,
-		last: time.Now(),
-	}
+var toDoItems []ToDoItem
+
+func getAllToDoItems(w http.ResponseWriter, r *http.Request) {
+    json.NewEncoder(w).Encode(toDoItems)
 }
 
-// Allow checks if the request can be allowed based on the rate limit.
-func (l *RateLimiter) Allow() bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+func getToDoItem(w http.ResponseWriter, r *http.Request) {
+    params := mux.Vars(r)
+    id, err := strconv.Atoi(params["id"])
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
 
-	now := time.Now()
-	l.tokens += int(now.Sub(l.last) / l.rate)
-	if l.tokens > l.cap {
-		l.tokens = l.cap
-	}
+    for _, item := range toDoItems {
+        if item.ID == id {
+            json.NewEncoder(w).Encode(item)
+            return
+        }
+    }
 
-	if l.tokens > 0 {
-		l.tokens--
-		l.last = now
-		return true
-	}
-	return false
+    http.Error(w, "To-do item not found", http.StatusNotFound)
+}
+
+func createToDoItem(w http.ResponseWriter, r *http.Request) {
+    var newItem ToDoItem
+    if err := json.NewDecoder(r.Body).Decode(&newItem); err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    newItem.ID = len(toDoItems) + 1
+    toDoItems = append(toDoItems, newItem)
+
+    json.NewEncoder(w).Encode(newItem)
+}
+
+func updateToDoItem(w http.ResponseWriter, r *http.Request) {
+    params := mux.Vars(r)
+    id, err := strconv.Atoi(params["id"])
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    var updatedItem ToDoItem
+    if err := json.NewDecoder(r.Body).Decode(&updatedItem); err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    for i, item := range toDoItems {
+        if item.ID == id {
+            updatedItem.ID = item.ID
+            toDoItems[i] = updatedItem
+            json.NewEncoder(w).Encode(updatedItem)
+            return
+        }
+    }
+
+    http.Error(w, "To-do item not found", http.StatusNotFound)
+}
+
+func deleteToDoItem(w http.ResponseWriter, r *http.Request) {
+    params := mux.Vars(r)
+    id, err := strconv.Atoi(params["id"])
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    for i, item := range toDoItems {
+        if item.ID == id {
+            toDoItems = append(toDoItems[:i], toDoItems[i+1:]...)
+            return
+        }
+    }
+
+    http.Error(w, "To-do item not found", http.StatusNotFound)
 }
 
 func main() {
-	// Create a new rate limiter with a capacity of 10 requests per second
-	rateLimiter := NewRateLimiter(10, time.Second)
-
-	// Simulate data and serve requests
-	http.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
-		if !rateLimiter.Allow() {
-			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
-			return
-		}
-
-		// Simulate data processing time
-		data := simulateData(rand.Intn(100))
-
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "Simulated Data: %s\n", data)
-	})
-
-	fmt.Println("Server listening on port :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		fmt.Println("Error starting server:", err)
-	}
-}
-
-// simulateData function simulates some processing and generates a random data string.
-func simulateData(duration int) string {
-	// Simulate processing time for 'duration' milliseconds
-	time.Sleep(time.Duration(duration) * time.Millisecond)
-
-	// Generate a random string
-	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, 10)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
-}
+    r := mux.NewRouter()

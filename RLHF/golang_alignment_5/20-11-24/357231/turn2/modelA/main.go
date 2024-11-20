@@ -1,95 +1,108 @@
 package main
 
 import (
-	"context"
+	"encoding/json"
 	"log"
-	"sync"
-	"time"
+	"net/http"
+	"strconv"
+
+	"github.com/gorilla/mux"
 )
 
-type tokenBucket struct {
-	cap     int           // Capacity of the bucket
-	tokens  int           // Current number of tokens
-	lastRef time.Time     // Time of the last request
-	refill  time.Duration // Rate at which tokens are refilled
-	m       sync.Mutex    // Mutex for synchronization
+// ToDoItem struct represents a single to-do item
+type ToDoItem struct {
+	ID   int    `json:"id"`
+	Task string `json:"task"`
+	Done bool   `json:"done"`
 }
 
-func newTokenBucket(capacity int, refill time.Duration) *tokenBucket {
-	return &tokenBucket{
-		cap:     capacity,
-		tokens:  capacity,
-		refill:  refill,
-		lastRef: time.Now(),
-	}
+var toDoItems []ToDoItem
+
+// IndexHandler returns a list of all to-do items
+func IndexHandler(w http.ResponseWriter, r *http.Request) {
+	json.NewEncoder(w).Encode(toDoItems)
 }
 
-func (tb *tokenBucket) consumeToken() bool {
-	tb.m.Lock()
-	defer tb.m.Unlock()
-
-	// Calculate how many tokens have been refilled since the last request
-	refillElapsed := time.Now().Sub(tb.lastRef)
-	newTokens := int(refillElapsed.Seconds() / tb.refill.Seconds() * float64(tb.cap))
-
-	// Update the bucket
-	if tb.tokens < newTokens {
-		tb.tokens = newTokens
-	}
-	if tb.tokens > tb.cap {
-		tb.tokens = tb.cap
-	}
-
-	// Decide whether to consume a token
-	if tb.tokens == 0 {
-		log.Println("No tokens available; rate limit exceeded")
-		return false
-	}
-
-	tb.tokens--
-	tb.lastRef = time.Now()
-
-	return true
-}
-
-func simulateApiRequest(ctx context.Context, tb *tokenBucket) {
-	select {
-	case <-ctx.Done():
+// CreateHandler adds a new to-do item
+func CreateHandler(w http.ResponseWriter, r *http.Request) {
+	var item ToDoItem
+	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
+		log.Printf("Error decoding request body: %v\n", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
-	default:
-		if tb.consumeToken() {
-			log.Println("Processing API request...")
-			time.Sleep(time.Duration(10) * time.Millisecond) // Simulate request processing
+	}
+	item.ID = len(toDoItems) + 1
+	toDoItems = append(toDoItems, item)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(item)
+}
+
+// ShowHandler returns a single to-do item by its ID
+func ShowHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil {
+		log.Printf("Error converting ID to integer: %v\n", err)
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+	for _, item := range toDoItems {
+		if item.ID == id {
+			json.NewEncoder(w).Encode(item)
+			return
 		}
 	}
+	http.Error(w, "To-do item not found", http.StatusNotFound)
+}
+
+// UpdateHandler updates an existing to-do item
+func UpdateHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil {
+		log.Printf("Error converting ID to integer: %v\n", err)
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+	var item ToDoItem
+	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
+		log.Printf("Error decoding request body: %v\n", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	for i, storedItem := range toDoItems {
+		if storedItem.ID == id {
+			toDoItems[i] = item
+			json.NewEncoder(w).Encode(item)
+			return
+		}
+	}
+	http.Error(w, "To-do item not found", http.StatusNotFound)
+}
+
+// DeleteHandler deletes a to-do item by its ID
+func DeleteHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil {
+		log.Printf("Error converting ID to integer: %v\n", err)
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+	for i, item := range toDoItems {
+		if item.ID == id {
+			toDoItems = append(toDoItems[:i], toDoItems[i+1:]...)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+	http.Error(w, "To-do item not found", http.StatusNotFound)
 }
 
 func main() {
-	// Initialize token bucket with a capacity of 5 tokens refilled at a rate of 1 token per second
-	tb := newTokenBucket(5, time.Second)
+	r := mux.NewRouter()
+	r.HandleFunc("/todos", IndexHandler).Methods("GET")
+	r.HandleFunc("/todos", CreateHandler).Methods("POST")
+	r.HandleFunc("/todos", ShowHandler).Queries("id", "{id:[0-9]+}").Methods("GET")
+	r.HandleFunc("/todos", UpdateHandler).Queries("id", "{id:[0-9]+}").Methods("PUT")
+	r.HandleFunc("/todos", DeleteHandler).Queries("id", "{id:[0-9]+}").Methods("DELETE")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Generate goroutines to simulate API requests
-	goFunc := func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				simulateApiRequest(ctx, tb)
-			}
-			time.Sleep(100 * time.Millisecond) // Simulate requests coming in rapidly
-		}
-	}
-
-	// Start goroutines
-	for i := 0; i < 10; i++ {
-		go goFunc()
-	}
-
-	// Let the application run for a while to simulate some requests
-	time.Sleep(5 * time.Second)
-	log.Println("Simulation finished")
+	log.Fatal(http.ListenAndServe(":8080", r))
 }
