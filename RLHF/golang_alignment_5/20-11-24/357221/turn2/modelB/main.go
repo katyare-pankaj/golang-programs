@@ -1,81 +1,84 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"sync"
 	"time"
 )
 
-func processItem(ctx context.Context, item string) error {
-	// Simulate work by sleeping for a random duration
-	duration := time.Duration(rand.Intn(1000)) * time.Millisecond
-	select {
-	case <-ctx.Done():
-		// Context is canceled, return early
-		return ctx.Err()
-	case <-time.After(duration):
-		// Perform the actual work on the item
-		fmt.Println("Processed item:", item)
-		return nil
+// RateLimiter struct represents the token bucket rate limiter
+type RateLimiter struct {
+	mu     sync.Mutex
+	tokens int
+	cap    int
+	rate   time.Duration
+	last   time.Time
+}
+
+// NewRateLimiter creates a new RateLimiter with the given capacity and rate.
+func NewRateLimiter(cap int, rate time.Duration) *RateLimiter {
+	return &RateLimiter{
+		cap:  cap,
+		rate: rate,
+		last: time.Now(),
 	}
 }
 
-func worker(ctx context.Context, items <-chan string, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for item := range items {
-		if err := processItem(ctx, item); err != nil {
-			// Handle the error if processing fails
-			fmt.Printf("Error processing item %s: %v\n", item, err)
-		}
-	}
-}
+// Allow checks if the request can be allowed based on the rate limit.
+func (l *RateLimiter) Allow() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-func processRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	// Create a WaitGroup to wait for all workers to finish
-	var wg sync.WaitGroup
-
-	// Number of workers to use
-	numWorkers := 5
-
-	// Channel to send items to workers
-	items := make(chan string, numWorkers)
-
-	// Start workers
-	wg.Add(numWorkers)
-	for i := 0; i < numWorkers; i++ {
-		go worker(ctx, items, &wg)
+	now := time.Now()
+	l.tokens += int(now.Sub(l.last) / l.rate)
+	if l.tokens > l.cap {
+		l.tokens = l.cap
 	}
 
-	// Send items to the worker pool
-	for _, item := range []string{"item1", "item2", "item3", "item4", "item5", "item6", "item7"} {
-		items <- item
+	if l.tokens > 0 {
+		l.tokens--
+		l.last = now
+		return true
 	}
-
-	// Close the channel to signal workers that no more items will be sent
-	close(items)
-
-	// Wait for all workers to finish
-	wg.Wait()
-
-	// Write the response to the client
-	fmt.Fprintln(w, "All items processed successfully")
+	return false
 }
 
 func main() {
-	// Create a handler for the API endpoint
-	http.HandleFunc("/api/process", func(w http.ResponseWriter, r *http.Request) {
-		// Create a context with a timeout
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
+	// Create a new rate limiter with a capacity of 10 requests per second
+	rateLimiter := NewRateLimiter(10, time.Second)
 
-		// Process the request
-		processRequest(ctx, w, r)
+	// Simulate data and serve requests
+	http.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
+		if !rateLimiter.Allow() {
+			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+			return
+		}
+
+		// Simulate data processing time
+		data := simulateData(rand.Intn(100))
+
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Simulated Data: %s\n", data)
 	})
 
-	// Start the HTTP server
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	fmt.Println("Server listening on port :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		fmt.Println("Error starting server:", err)
+	}
+}
+
+// simulateData function simulates some processing and generates a random data string.
+func simulateData(duration int) string {
+	// Simulate processing time for 'duration' milliseconds
+	time.Sleep(time.Duration(duration) * time.Millisecond)
+
+	// Generate a random string
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, 10)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }

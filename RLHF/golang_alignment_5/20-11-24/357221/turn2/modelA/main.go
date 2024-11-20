@@ -7,57 +7,89 @@ import (
 	"time"
 )
 
-func processItem(ctx context.Context, item string, wg *sync.WaitGroup) {
-	defer wg.Done() // Signal that the goroutine has finished
+type tokenBucket struct {
+	cap     int           // Capacity of the bucket
+	tokens  int           // Current number of tokens
+	lastRef time.Time     // Time of the last request
+	refill  time.Duration // Rate at which tokens are refilled
+	m       sync.Mutex    // Mutex for synchronization
+}
 
-	// Simulate some work
-	time.Sleep(time.Second)
-
-	// Check if the context has been canceled
-	select {
-	case <-ctx.Done():
-		log.Printf("Item '%s' processing canceled\n", item)
-		return
-	default:
-		log.Printf("Processed item: %s\n", item)
+func newTokenBucket(capacity int, refill time.Duration) *tokenBucket {
+	return &tokenBucket{
+		cap:     capacity,
+		tokens:  capacity,
+		refill:  refill,
+		lastRef: time.Now(),
 	}
 }
 
-func concurrentProcessor(ctx context.Context, items []string) {
-	var wg sync.WaitGroup
+func (tb *tokenBucket) consumeToken() bool {
+	tb.m.Lock()
+	defer tb.m.Unlock()
 
-	// Limit the number of concurrent goroutines
-	sem := make(chan struct{}, 10)
+	// Calculate how many tokens have been refilled since the last request
+	refillElapsed := time.Now().Sub(tb.lastRef)
+	newTokens := int(refillElapsed.Seconds() / tb.refill.Seconds() * float64(tb.cap))
 
-	for _, item := range items {
-		// Acquire a semaphore to limit concurrency
-		sem <- struct{}{}
-
-		// Start a goroutine to process the item
-		wg.Add(1)
-		go func() {
-			defer func() {
-				// Release the semaphore after the goroutine finishes
-				<-sem
-				wg.Done()
-			}()
-			processItem(ctx, item, &wg)
-		}()
+	// Update the bucket
+	if tb.tokens < newTokens {
+		tb.tokens = newTokens
+	}
+	if tb.tokens > tb.cap {
+		tb.tokens = tb.cap
 	}
 
-	// Wait for all goroutines to finish
-	wg.Wait()
+	// Decide whether to consume a token
+	if tb.tokens == 0 {
+		log.Println("No tokens available; rate limit exceeded")
+		return false
+	}
+
+	tb.tokens--
+	tb.lastRef = time.Now()
+
+	return true
+}
+
+func simulateApiRequest(ctx context.Context, tb *tokenBucket) {
+	select {
+	case <-ctx.Done():
+		return
+	default:
+		if tb.consumeToken() {
+			log.Println("Processing API request...")
+			time.Sleep(time.Duration(10) * time.Millisecond) // Simulate request processing
+		}
+	}
 }
 
 func main() {
-	items := []string{"item1", "item2", "item3", "item4", "item5"}
+	// Initialize token bucket with a capacity of 5 tokens refilled at a rate of 1 token per second
+	tb := newTokenBucket(5, time.Second)
 
-	// Create a context with a timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start concurrent processing
-	log.Println("Starting concurrent processing...")
-	concurrentProcessor(ctx, items)
-	log.Println("Concurrent processing completed.")
+	// Generate goroutines to simulate API requests
+	goFunc := func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				simulateApiRequest(ctx, tb)
+			}
+			time.Sleep(100 * time.Millisecond) // Simulate requests coming in rapidly
+		}
+	}
+
+	// Start goroutines
+	for i := 0; i < 10; i++ {
+		go goFunc()
+	}
+
+	// Let the application run for a while to simulate some requests
+	time.Sleep(5 * time.Second)
+	log.Println("Simulation finished")
 }
