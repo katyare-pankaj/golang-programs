@@ -231,6 +231,7 @@ require (
 	github.com/google/wire v0.6.0
 	github.com/goplus/gop v1.2.6
 	github.com/gorilla/mux v1.8.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/consul/api v1.30.0
 	github.com/ikawaha/kagome v1.11.2
 	github.com/inconshreveable/log15 v2.16.0+incompatible
