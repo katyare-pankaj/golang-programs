@@ -1,108 +1,48 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
-	"net/http"
-	"strconv"
-
-	"github.com/gorilla/mux"
+	"fmt"
+	"time"
 )
 
-// ToDoItem struct represents a single to-do item
-type ToDoItem struct {
-	ID   int    `json:"id"`
-	Task string `json:"task"`
-	Done bool   `json:"done"`
+// FactorialRecursive calculates the factorial of a non-negative integer n using recursion.
+func FactorialRecursive(n int) int {
+	if n < 0 {
+		panic("Factorial is not defined for negative numbers")
+	}
+	if n == 0 || n == 1 {
+		return 1
+	}
+	return n * FactorialRecursive(n-1)
 }
 
-var toDoItems []ToDoItem
-
-// IndexHandler returns a list of all to-do items
-func IndexHandler(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(toDoItems)
-}
-
-// CreateHandler adds a new to-do item
-func CreateHandler(w http.ResponseWriter, r *http.Request) {
-	var item ToDoItem
-	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
-		log.Printf("Error decoding request body: %v\n", err)
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
+// FactorialIterative calculates the factorial of a non-negative integer n using iteration.
+func FactorialIterative(n int) int {
+	if n < 0 {
+		panic("Factorial is not defined for negative numbers")
 	}
-	item.ID = len(toDoItems) + 1
-	toDoItems = append(toDoItems, item)
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(item)
-}
-
-// ShowHandler returns a single to-do item by its ID
-func ShowHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.URL.Query().Get("id"))
-	if err != nil {
-		log.Printf("Error converting ID to integer: %v\n", err)
-		http.Error(w, "Invalid ID", http.StatusBadRequest)
-		return
+	result := 1
+	for i := 2; i <= n; i++ {
+		result *= i
 	}
-	for _, item := range toDoItems {
-		if item.ID == id {
-			json.NewEncoder(w).Encode(item)
-			return
-		}
-	}
-	http.Error(w, "To-do item not found", http.StatusNotFound)
-}
-
-// UpdateHandler updates an existing to-do item
-func UpdateHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.URL.Query().Get("id"))
-	if err != nil {
-		log.Printf("Error converting ID to integer: %v\n", err)
-		http.Error(w, "Invalid ID", http.StatusBadRequest)
-		return
-	}
-	var item ToDoItem
-	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
-		log.Printf("Error decoding request body: %v\n", err)
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	for i, storedItem := range toDoItems {
-		if storedItem.ID == id {
-			toDoItems[i] = item
-			json.NewEncoder(w).Encode(item)
-			return
-		}
-	}
-	http.Error(w, "To-do item not found", http.StatusNotFound)
-}
-
-// DeleteHandler deletes a to-do item by its ID
-func DeleteHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.URL.Query().Get("id"))
-	if err != nil {
-		log.Printf("Error converting ID to integer: %v\n", err)
-		http.Error(w, "Invalid ID", http.StatusBadRequest)
-		return
-	}
-	for i, item := range toDoItems {
-		if item.ID == id {
-			toDoItems = append(toDoItems[:i], toDoItems[i+1:]...)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-	}
-	http.Error(w, "To-do item not found", http.StatusNotFound)
+	return result
 }
 
 func main() {
-	r := mux.NewRouter()
-	r.HandleFunc("/todos", IndexHandler).Methods("GET")
-	r.HandleFunc("/todos", CreateHandler).Methods("POST")
-	r.HandleFunc("/todos", ShowHandler).Queries("id", "{id:[0-9]+}").Methods("GET")
-	r.HandleFunc("/todos", UpdateHandler).Queries("id", "{id:[0-9]+}").Methods("PUT")
-	r.HandleFunc("/todos", DeleteHandler).Queries("id", "{id:[0-9]+}").Methods("DELETE")
+	// Set a number to calculate the factorial of
+	n := 10
 
-	log.Fatal(http.ListenAndServe(":8080", r))
+	// Measure the execution time of the recursive function
+	startTime := time.Now()
+	resultRecursive := FactorialRecursive(n)
+	endTime := time.Now()
+	elapsedTimeRecursive := endTime.Sub(startTime)
+	fmt.Printf("Recursive Factorial of %d: %d, Time: %s\n", n, resultRecursive, elapsedTimeRecursive)
+
+	// Measure the execution time of the iterative function
+	startTime = time.Now()
+	resultIterative := FactorialIterative(n)
+	endTime = time.Now()
+	elapsedTimeIterative := endTime.Sub(startTime)
+	fmt.Printf("Iterative Factorial of %d: %d, Time: %s\n", n, resultIterative, elapsedTimeIterative)
 }
