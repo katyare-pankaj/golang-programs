@@ -1,48 +1,57 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"math/rand"
 	"time"
 )
 
-// FactorialRecursive calculates the factorial of a non-negative integer n using recursion.
-func FactorialRecursive(n int) int {
-	if n < 0 {
-		panic("Factorial is not defined for negative numbers")
+const (
+	maxRetries    = 3
+	initialDelay  = 100 * time.Millisecond
+	backoffFactor = 2.0
+)
+
+func retry(ctx context.Context, f func(context.Context) error) error {
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := f(ctx)
+		if err == nil {
+			return nil
+		}
+
+		// Calculate the delay for the next attempt
+		delay := initialDelay * time.Duration(rand.Float64()*backoffFactor)
+		fmt.Println("Attempt", attempt+1, "failed, retrying in", delay)
+
+		// Check if the context is canceled
+		select {
+		case <-ctx.Done():
+			fmt.Println("Context canceled, stopping retry")
+			return ctx.Err()
+		case <-time.After(delay):
+		}
 	}
-	if n == 0 || n == 1 {
-		return 1
-	}
-	return n * FactorialRecursive(n-1)
+	return fmt.Errorf("all retries failed")
 }
 
-// FactorialIterative calculates the factorial of a non-negative integer n using iteration.
-func FactorialIterative(n int) int {
-	if n < 0 {
-		panic("Factorial is not defined for negative numbers")
+func externalService(ctx context.Context) error {
+	// Simulate a transient error with a certain probability
+	if rand.Intn(10) < 4 {
+		return fmt.Errorf("external service failed transiently")
 	}
-	result := 1
-	for i := 2; i <= n; i++ {
-		result *= i
-	}
-	return result
+	fmt.Println("External service successful")
+	return nil
 }
 
 func main() {
-	// Set a number to calculate the factorial of
-	n := 10
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	// Measure the execution time of the recursive function
-	startTime := time.Now()
-	resultRecursive := FactorialRecursive(n)
-	endTime := time.Now()
-	elapsedTimeRecursive := endTime.Sub(startTime)
-	fmt.Printf("Recursive Factorial of %d: %d, Time: %s\n", n, resultRecursive, elapsedTimeRecursive)
-
-	// Measure the execution time of the iterative function
-	startTime = time.Now()
-	resultIterative := FactorialIterative(n)
-	endTime = time.Now()
-	elapsedTimeIterative := endTime.Sub(startTime)
-	fmt.Printf("Iterative Factorial of %d: %d, Time: %s\n", n, resultIterative, elapsedTimeIterative)
+	err := retry(ctx, externalService)
+	if err != nil {
+		fmt.Println("Final error:", err)
+	} else {
+		fmt.Println("Operation successful")
+	}
 }
