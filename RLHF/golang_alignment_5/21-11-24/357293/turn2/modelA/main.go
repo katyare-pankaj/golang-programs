@@ -2,44 +2,63 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"sync"
-	"time"
+	"testing"
 )
 
+// memoizedFibonacci uses a map to store the computed Fibonacci numbers for memoization.
+var memoizedFibonacci = make(map[int]int)
+
+func fibonacci(n int) int {
+	if result, ok := memoizedFibonacci[n]; ok {
+		return result // If the result is already computed, return it from the map
+	}
+
+	// Base cases
+	var result int
+	if n < 2 {
+		result = n
+	} else {
+		result = fibonacci(n-1) + fibonacci(n-2)
+	}
+
+	// Store the result in the map before returning
+	memoizedFibonacci[n] = result
+	return result
+}
+
+func TestFibonacci(t *testing.T) {
+	tests := []struct {
+		n    int
+		want int
+	}{
+		{0, 0},
+		{1, 1},
+		{2, 1},
+		{3, 2},
+		{4, 3},
+		{5, 5},
+		{6, 8},
+		{7, 13},
+		{8, 21},
+		{9, 34},
+		{10, 55},
+		{19, 4181}, // Large input to test the memoization
+	}
+
+	for _, test := range tests {
+		got := fibonacci(test.n)
+		if got != test.want {
+			t.Errorf("fibonacci(%d) = %d, want %d", test.n, got, test.want)
+		}
+	}
+}
+
+// Main function to demonstrate the memoized Fibonacci function.
 func main() {
-	var wg sync.WaitGroup
-	const numTasks = 100
+	// Example usage
+	n := 19
+	fmt.Println("Fibonacci(", n, ") =", fibonacci(n))
 
-	// Create a channel to communicate errors
-	errorChannel := make(chan error, numTasks)
-
-	// Function to simulate a task that might panic
-	func task(id int, errorChannel chan error) {
-		defer wg.Done()
-
-		// Simulate some work
-		time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
-
-		// Introduce a potential panic
-		if rand.Intn(2) == 0 {
-			panic(fmt.Sprintf("Task %d failed", id))
-		}
-	}
-
-	// Start tasks concurrently
-	for i := 0; i < numTasks; i++ {
-		wg.Add(1)
-		go task(i, errorChannel)
-	}
-
-	// Wait for all tasks to finish
-	wg.Wait()
-
-	// Collect and process errors from the error channel
-	for err := range errorChannel {
-		if err != nil {
-			log.Println("Recovered error:", err)
-		}
-	}
+	// Run tests
+	testing.Run("fibonacciTest", TestFibonacci)
 }

@@ -1,52 +1,39 @@
 package main
 
-import (
-	"fmt"
-	"log"
-	"sync"
-	"time"
-)
+import "fmt"
+
+// A dictionary (map) that stores previously calculated Fibonacci numbers
+var memo map[int]int = map[int]int{}
+
+// A memoized recursive Fibonacci function
+func fib(n int) int {
+	// Base case: The first two Fibonacci numbers are 0 and 1.
+	if n < 2 {
+		return n
+	}
+
+	// Check if the answer is already stored in the memo
+	if answer, ok := memo[n]; ok {
+		return answer
+	}
+
+	// Recursive case: Calculate the Fibonacci number by calling the function with (n-1) and (n-2)
+	result := fib(n-1) + fib(n-2)
+
+	// Store the result in the memo for future reference
+	memo[n] = result
+
+	return result
+}
 
 func main() {
-	numTasks := 10
-	taskChan := make(chan int, numTasks)
-	wg := sync.WaitGroup{}
+	// Driver Code
+	n := 20
+	fmt.Println("Nth Fibonacci Number: ", fib(n))
 
-	// Create worker goroutines
-	wg.Add(numTasks)
-	for i := 0; i < numTasks; i++ {
-		go worker(i, taskChan, &wg)
-	}
-
-	// Add tasks to the channel
-	for i := 0; i < numTasks; i++ {
-		taskChan <- i
-	}
-	close(taskChan)
-
-	wg.Wait()
-	fmt.Println("All tasks completed.")
-}
-
-func worker(workerID int, taskChan <-chan int, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	for task := range taskChan {
-		processTask(workerID, task)
-	}
-}
-
-func processTask(workerID int, task int) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("Worker %d recovered from panic: %v", workerID, r)
-		}
-	}()
-
-	// Simulate a task that can panic
-	time.Sleep(time.Duration(task%3) * time.Second)
-	if task%2 == 0 {
-		panic("Task failed!")
-	}
-	fmt.Printf("Worker %d processed task %d\n", workerID, task)
+	// Test cases
+	fmt.Println("fib(0) =", fib(0))   // Output: fib(0) = 0
+	fmt.Println("fib(1) =", fib(1))   // Output: fib(1) = 1
+	fmt.Println("fib(9) =", fib(9))   // Output: fib(9) = 34
+	fmt.Println("fib(30) =", fib(30)) // Output: fib(30) = 832040
 }
