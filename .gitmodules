@@ -1,0 +1,6 @@
+[submodule "RLHF/golang_alignment_5/21-11-24/357268/turn1/modelA/dependencies/example"]
+	path = RLHF/golang_alignment_5/21-11-24/357268/turn1/modelA/dependencies/example
+	url = https://github.com/golang/example.git
+[submodule "RLHF/golang_alignment_5/21-11-24/357268/dependencies/example"]
+	path = RLHF/golang_alignment_5/21-11-24/357268/dependencies/example
+	url = https://github.com/golang/example.git
