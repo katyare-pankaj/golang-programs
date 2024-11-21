@@ -1,45 +1,79 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
-	"sync"
-	"time"
+	"net/smtp"
+	"text/template"
 )
 
+// EmailConfig holds SMTP configuration.
+type EmailConfig struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
+}
+
+// Email holds email details.
+type Email struct {
+	From     string
+	To       []string
+	Subject  string
+	Template string // Template file name
+	Data     interface{}
+}
+
+// SendEmail sends an email using SMTP after rendering the template.
+func SendEmail(config EmailConfig, email Email) error {
+	// Render the template with the provided data
+	tpl, err := template.ParseFiles(email.Template)
+	if err != nil {
+		return fmt.Errorf("failed to parse template: %w", err)
+	}
+	var renderedBody bytes.Buffer
+	if err := tpl.Execute(&renderedBody, email.Data); err != nil {
+		return fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	// Create the email message
+	auth := smtp.PlainAuth("", config.Username, config.Password, config.Host)
+	to := email.To
+	msg := []byte("To: " + email.To[0] + "\r\n" +
+		"Subject: " + email.Subject + "\r\n" +
+		"\r\n" +
+		renderedBody.String())
+
+	// Send the email
+	err = smtp.SendMail(fmt.Sprintf("%s:%d", config.Host, config.Port), auth, email.From, to, msg)
+	if err != nil {
+		return fmt.Errorf("failed to send email: %w", err)
+	}
+	return nil
+}
+
 func main() {
-	var wg sync.WaitGroup
-	const numTasks = 100
-
-	// Create a channel to communicate errors
-	errorChannel := make(chan error, numTasks)
-
-	// Function to simulate a task that might panic
-	func task(id int, errorChannel chan error) {
-		defer wg.Done()
-
-		// Simulate some work
-		time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
-
-		// Introduce a potential panic
-		if rand.Intn(2) == 0 {
-			panic(fmt.Sprintf("Task %d failed", id))
-		}
+	// Example SMTP configuration
+	config := EmailConfig{
+		Host:     "smtp.example.com",
+		Port:     587,
+		Username: "your-username@example.com",
+		Password: "your-password",
 	}
 
-	// Start tasks concurrently
-	for i := 0; i < numTasks; i++ {
-		wg.Add(1)
-		go task(i, errorChannel)
+	// Example email with template
+	email := Email{
+		From:     "sender@example.com",
+		To:       []string{"recipient@example.com"},
+		Subject:  "Welcome Email",
+		Template: "welcome.tmpl",
+		Data:     map[string]string{"Name": "John Doe"},
 	}
 
-	// Wait for all tasks to finish
-	wg.Wait()
-
-	// Collect and process errors from the error channel
-	for err := range errorChannel {
-		if err != nil {
-			log.Println("Recovered error:", err)
-		}
+	// Send the email
+	if err := SendEmail(config, email); err != nil {
+		log.Fatal(err)
 	}
+	fmt.Println("Email sent successfully!")
 }
