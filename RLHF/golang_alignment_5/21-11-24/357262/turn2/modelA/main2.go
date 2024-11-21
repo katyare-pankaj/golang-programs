@@ -6,19 +6,25 @@ import (
 )
 
 func main() {
-	// Unbuffered channel
-	ch := make(chan int)
+	// Buffered channel with size 3
+	ch := make(chan int, 3)
 
 	go func() {
 		fmt.Println("Goroutine 1 starting...")
-		ch <- 1 // Sender blocks until receiver is ready
+		for i := 1; i <= 5; i++ {
+			ch <- i // Sends 5 messages, buffered if receiver is not ready
+			fmt.Println("Goroutine 1 sent:", i)
+			time.Sleep(time.Millisecond * 50)
+		}
 		fmt.Println("Goroutine 1 finished sending.")
 	}()
 
 	go func() {
 		fmt.Println("Goroutine 2 starting...")
-		msg := <-ch // Receiver blocks until sender sends a message
-		fmt.Println("Goroutine 2 received:", msg)
+		for msg := range ch {
+			fmt.Println("Goroutine 2 received:", msg)
+			time.Sleep(time.Millisecond * 100)
+		}
 		fmt.Println("Goroutine 2 finished.")
 	}()
 
