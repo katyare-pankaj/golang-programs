@@ -1,41 +1,45 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"os"
-	"runtime/pprof"
+	"log"
+	"sync"
 	"time"
 )
 
-var profile *os.File
-
 func main() {
-	// Command-line flag to specify the profile file
-	profileFile := flag.String("profile", "mem.prof", "write the profile to this file")
-	flag.Parse()
+	var wg sync.WaitGroup
+	const numTasks = 100
 
-	// Start memory profiling
-	if profileFile != nil && *profileFile != "" {
-		var err error
-		profile, err = os.Create(*profileFile)
-		if err != nil {
-			fmt.Printf("error opening profile file: %v\n", err)
-			os.Exit(1)
+	// Create a channel to communicate errors
+	errorChannel := make(chan error, numTasks)
+
+	// Function to simulate a task that might panic
+	func task(id int, errorChannel chan error) {
+		defer wg.Done()
+
+		// Simulate some work
+		time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
+
+		// Introduce a potential panic
+		if rand.Intn(2) == 0 {
+			panic(fmt.Sprintf("Task %d failed", id))
 		}
-		defer profile.Close()
-		pprof.StartHeapProfile(pprof.ProfileAllocs|pprof.ProfileInuseSpace, 1024)
-		defer pprof.StopHeapProfile()
 	}
 
-	// Simulate memory allocation
-	for i := 0; i < 1000000; i++ {
-		make([]byte, i)
-		time.Sleep(time.Microsecond)
+	// Start tasks concurrently
+	for i := 0; i < numTasks; i++ {
+		wg.Add(1)
+		go task(i, errorChannel)
 	}
 
-	// Dump the profile
-	if profile != nil {
-		pprof.WriteHeapProfile(profile)
+	// Wait for all tasks to finish
+	wg.Wait()
+
+	// Collect and process errors from the error channel
+	for err := range errorChannel {
+		if err != nil {
+			log.Println("Recovered error:", err)
+		}
 	}
 }
