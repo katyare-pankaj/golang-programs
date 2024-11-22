@@ -2,47 +2,47 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"math/rand"
 	"sync"
 	"time"
 )
 
-func worker(ctx context.Context, wg *sync.WaitGroup, id int) {
-	defer wg.Done()
-	for {
-		select {
-		case <-ctx.Done():
-			fmt.Println("worker", id, "cancelled")
-			return
-		default:
-			time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
-			fmt.Println("worker", id, "working")
-		}
-	}
-}
-
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+	// Create a group to wait for all goroutines
 	var wg sync.WaitGroup
 
-	// Start some workers
-	for i := 0; i < 5; i++ {
-		wg.Add(1) // Increment the wait group counter
-		go worker(ctx, &wg, i)
+	// Create a context with a 5-second timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Start three goroutines
+	for i := 1; i <= 3; i++ {
+		wg.Add(1)
+		go worker(ctx, i, &wg)
 	}
 
-	// Simulate some work that might take a long time in the main thread
-	time.Sleep(2 * time.Second)
-
-	// Cancel the context after 2 seconds
-	cancel()
-
-	// Wait for all workers to finish their current iteration
+	// Wait for all goroutines to finish or timeout
 	wg.Wait()
 
-	// Proceed to the next stage of execution
-	fmt.Println("All workers have finished. Proceeding to next stage.")
+	log.Println("Main function exiting")
+}
+
+func worker(ctx context.Context, id int, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	// Simulate work with a randomized sleep duration
+	sleepDuration := time.Duration(rand.Intn(5)) * time.Second
+
+	log.Printf("Worker %d: Starting work (will sleep for %v)\n", id, sleepDuration)
+
+	select {
+	case <-ctx.Done():
+		// Context was canceled or timed out
+		log.Printf("Worker %d: Cancelled\n", id)
+		return
+	case <-time.After(sleepDuration):
+		// Work completed normally
+		log.Printf("Worker %d: Work completed\n", id)
+	}
 }
