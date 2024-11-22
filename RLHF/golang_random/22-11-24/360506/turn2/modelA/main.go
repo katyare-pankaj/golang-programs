@@ -1,79 +1,48 @@
 package main
 
 import (
-	"bytes"
+	"context"
 	"fmt"
-	"log"
-	"net/smtp"
-	"text/template"
+	"math/rand"
+	"sync"
+	"time"
 )
 
-// EmailConfig holds SMTP configuration.
-type EmailConfig struct {
-	Host     string
-	Port     int
-	Username string
-	Password string
-}
-
-// Email holds email details.
-type Email struct {
-	From     string
-	To       []string
-	Subject  string
-	Template string // Template file name
-	Data     interface{}
-}
-
-// SendEmail sends an email using SMTP after rendering the template.
-func SendEmail(config EmailConfig, email Email) error {
-	// Render the template with the provided data
-	tpl, err := template.ParseFiles(email.Template)
-	if err != nil {
-		return fmt.Errorf("failed to parse template: %w", err)
+func worker(ctx context.Context, wg *sync.WaitGroup, id int) {
+	defer wg.Done()
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println("worker", id, "cancelled")
+			return
+		default:
+			time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+			fmt.Println("worker", id, "working")
+		}
 	}
-	var renderedBody bytes.Buffer
-	if err := tpl.Execute(&renderedBody, email.Data); err != nil {
-		return fmt.Errorf("failed to execute template: %w", err)
-	}
-
-	// Create the email message
-	auth := smtp.PlainAuth("", config.Username, config.Password, config.Host)
-	to := email.To
-	msg := []byte("To: " + email.To[0] + "\r\n" +
-		"Subject: " + email.Subject + "\r\n" +
-		"\r\n" +
-		renderedBody.String())
-
-	// Send the email
-	err = smtp.SendMail(fmt.Sprintf("%s:%d", config.Host, config.Port), auth, email.From, to, msg)
-	if err != nil {
-		return fmt.Errorf("failed to send email: %w", err)
-	}
-	return nil
 }
 
 func main() {
-	// Example SMTP configuration
-	config := EmailConfig{
-		Host:     "smtp.example.com",
-		Port:     587,
-		Username: "your-username@example.com",
-		Password: "your-password",
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+
+	// Start some workers
+	for i := 0; i < 5; i++ {
+		wg.Add(1) // Increment the wait group counter
+		go worker(ctx, &wg, i)
 	}
 
-	// Example email with template
-	email := Email{
-		From:     "sender@example.com",
-		To:       []string{"recipient@example.com"},
-		Subject:  "Welcome Email",
-		Template: "welcome.tmpl",
-		Data:     map[string]string{"Name": "John Doe"},
-	}
+	// Simulate some work that might take a long time in the main thread
+	time.Sleep(2 * time.Second)
 
-	// Send the email
-	if err := SendEmail(config, email); err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("Email sent successfully!")
+	// Cancel the context after 2 seconds
+	cancel()
+
+	// Wait for all workers to finish their current iteration
+	wg.Wait()
+
+	// Proceed to the next stage of execution
+	fmt.Println("All workers have finished. Proceeding to next stage.")
 }
