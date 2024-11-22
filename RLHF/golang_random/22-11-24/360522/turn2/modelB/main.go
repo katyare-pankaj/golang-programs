@@ -1,85 +1,58 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"sync"
 	"time"
 )
 
-// goroutineFunction represents the function to be executed in a goroutine.
-type goroutineFunction func(ctx context.Context) error
+// numGenerator represents a function that generates a random number.
+type numGenerator func() int
 
-func main() {
-	// Define the number of goroutines
-	numGoroutines := 3
-
-	// Create a WaitGroup to track the number of running goroutines
-	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
-
-	// Create a background context
-	ctx := context.Background()
-
-	// Define a slice of functions to run in goroutines
-	functions := []goroutineFunction{
-		func(ctx context.Context) error {
-			defer wg.Done()
-			return work(ctx, "goroutine 1")
-		},
-		func(ctx context.Context) error {
-			defer wg.Done()
-			return work(ctx, "goroutine 2")
-		},
-		func(ctx context.Context) error {
-			defer wg.Done()
-			return work(ctx, "goroutine 3")
-		},
+// producer generates random numbers and sends them to the given channel.
+func producer(id int, numGen numGenerator, out chan<- int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for i := 0; i < 10; i++ {
+		num := numGen()
+		out <- num // Send the generated number to the channel
+		fmt.Printf("Producer %d: Generated number %d\n", id, num)
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond) // Add some random delay
 	}
-
-	// Launch the goroutines with a timeout of 2 seconds
-	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	for _, f := range functions {
-		go func(f goroutineFunction) {
-			err := f(timeoutCtx)
-			if err != nil {
-				// Handle the error (if any)
-				fmt.Printf("Error: %v\n", err)
-			}
-		}(f)
-	}
-
-	// Wait for all goroutines to finish
-	wg.Wait()
-
-	fmt.Println("All goroutines completed.")
 }
 
-func work(ctx context.Context, name string) error {
-	// Simulate work with a random duration
-	duration := time.Duration(rand.Intn(5)) * time.Second
-
-	fmt.Printf("%s starting with duration %s...\n", name, duration)
-
-	// Use the context for timeout handling
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			// Check if the context is canceled
-			return ctx.Err()
-		case <-ticker.C:
-			// Perform work
-			time.Sleep(1 * time.Second)
-			duration -= time.Second
-			if duration <= 0 {
-				fmt.Printf("%s completed.\n", name)
-				return nil
-			}
-		}
+// consumer consumes numbers from the channel and prints them.
+func consumer(in <-chan int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for num := range in {
+		fmt.Printf("Consumer: Consumed number %d\n", num)
 	}
+}
+
+func main() {
+	// Create a buffered channel with a capacity of 10
+	out := make(chan int, 10)
+
+	// Create a wait group to wait for all goroutines to finish
+	var wg sync.WaitGroup
+
+	// Define a function that generates a random number between 1 and 100
+	numGen := func() int {
+		return rand.Intn(100) + 1
+	}
+
+	// Start 3 producer goroutines
+	wg.Add(3)
+	for i := 1; i <= 3; i++ {
+		go producer(i, numGen, out, &wg)
+	}
+
+	// Start a consumer goroutine
+	wg.Add(1)
+	go consumer(out, &wg)
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	close(out) // Close the channel to signal the consumer that no more numbers will be sent
 }
