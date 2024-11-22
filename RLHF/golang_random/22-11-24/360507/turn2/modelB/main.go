@@ -7,22 +7,41 @@ import (
 	"time"
 )
 
-func worker(id int, wg *sync.WaitGroup) {
+func producer(id int, ch chan<- int, wg *sync.WaitGroup) {
 	defer wg.Done()
-	// Simulate some work
-	time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
-	fmt.Println("worker", id, "finished")
-}
-func main() {
-	var wg sync.WaitGroup
-	numWorkers := 5
-	// Add the number of workers to the wait group
-	wg.Add(numWorkers)
-	for i := 0; i < numWorkers; i++ {
-		go worker(i, &wg)
+	for i := 0; i < 5; i++ {
+		data := rand.Intn(100)
+		ch <- data // Send data to the channel
+		fmt.Printf("Producer %d sent: %d\n", id, data)
+		time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
 	}
-	// Wait for all workers to finish
+}
+
+func consumer(ch <-chan int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for data := range ch {
+		fmt.Printf("Consumer processed: %d\n", data)
+		time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
+	}
+}
+
+func main() {
+	rand.Seed(time.Now().UnixNano())
+
+	var wg sync.WaitGroup
+	// Create a buffered channel with capacity 10
+	ch := make(chan int, 10)
+
+	// Start 3 producers
+	for i := 1; i <= 3; i++ {
+		wg.Add(1)
+		go producer(i, ch, &wg)
+	}
+
+	// Start 1 consumer
+	wg.Add(1)
+	go consumer(ch, &wg)
+
 	wg.Wait()
-	fmt.Println("all workers finished, proceeding to the next stage...")
-	// Proceed to the next stage of execution
+	fmt.Println("All done!")
 }

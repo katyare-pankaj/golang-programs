@@ -1,48 +1,56 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
+
+	"golang.org/x/exp/rand"
 )
 
-func worker(ctx context.Context, wg *sync.WaitGroup, id int) {
-	defer wg.Done()
-	for {
-		select {
-		case <-ctx.Done():
-			fmt.Println("worker", id, "cancelled")
-			return
-		default:
-			time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
-			fmt.Println("worker", id, "working")
-		}
-	}
+// define a Simple Data structure
+type Task struct {
+	id   int
+	data string
 }
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+	// Create a buffered channel with a buffer size of 3
+	taskCh := make(chan Task, 3)
 	var wg sync.WaitGroup
 
-	// Start some workers
-	for i := 0; i < 5; i++ {
-		wg.Add(1) // Increment the wait group counter
-		go worker(ctx, &wg, i)
+	// Launch three producer goroutines
+	for i := 1; i <= 3; i++ {
+		wg.Add(1)
+		go producer(taskCh, i, &wg)
 	}
 
-	// Simulate some work that might take a long time in the main thread
-	time.Sleep(2 * time.Second)
+	// Launch a single consumer goroutine
+	wg.Add(1)
+	go consumer(taskCh, &wg)
 
-	// Cancel the context after 2 seconds
-	cancel()
-
-	// Wait for all workers to finish their current iteration
+	// Wait for all goroutines to finish
 	wg.Wait()
+	fmt.Println("All tasks completed!")
+}
 
-	// Proceed to the next stage of execution
-	fmt.Println("All workers have finished. Proceeding to next stage.")
+// Producer function generates data and sends it to the channel
+func producer(ch chan<- Task, id int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for j := 1; j <= 5; j++ {
+		time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
+		task := Task{id: id, data: fmt.Sprintf("Task %d.%d", id, j)}
+		ch <- task // Send data to the channel
+		fmt.Println("Producer", id, "produced:", task.data)
+	}
+	close(ch) // Close the channel when done producing
+}
+
+// Consumer function receives data from the channel and processes it
+func consumer(ch <-chan Task, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for task := range ch {
+		fmt.Println("Consumer processed:", task.data)
+		time.Sleep(time.Duration(rand.Intn(200)) * time.Millisecond)
+	}
 }
