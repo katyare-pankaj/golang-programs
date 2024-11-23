@@ -2,71 +2,35 @@ package main
 
 import (
 	"fmt"
-	"sync"
 	"time"
 )
 
-type Task struct {
-	ID       int
-	Priority int // 1 (high), 2 (medium), 3 (low)
-	Function func()
-}
-
 func main() {
-	// Create channels for each priority level
-	highPriority := make(chan Task)
-	mediumPriority := make(chan Task)
-	lowPriority := make(chan Task)
-
-	// Number of worker goroutines for each priority level
-	const highWorkers = 2
-	const mediumWorkers = 2
-	const lowWorkers = 1
-
-	// Start worker goroutines for each priority
-	for i := 0; i < highWorkers; i++ {
-		go processTasks(highPriority, "high", &sync.WaitGroup{})
+	// Load the desired time zone location
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		panic(err)
 	}
 
-	for i := 0; i < mediumWorkers; i++ {
-		go processTasks(mediumPriority, "medium", &sync.WaitGroup{})
+	// Get the current time in the specified time zone
+	now := time.Now().In(loc)
+
+	// Define the desired time for the task to run (e.g., 10 AM in New York)
+	taskHour, taskMinute := 10, 0
+	taskTime := time.Date(now.Year(), now.Month(), now.Day(), taskHour, taskMinute, 0, 0, loc)
+
+	// If the task time has already passed, schedule it for the next day
+	if taskTime.Before(now) {
+		taskTime = taskTime.AddDate(0, 0, 1) // Add one day
 	}
 
-	for i := 0; i < lowWorkers; i++ {
-		go processTasks(lowPriority, "low", &sync.WaitGroup{})
-	}
+	// Calculate the time duration until the task should run
+	duration := taskTime.Sub(now)
 
-	// Simulate creating and sending tasks with different priorities
-	time.Sleep(1 * time.Second)
-	sendTask(highPriority, 1, 1, func() { fmt.Println("High priority task 1") })
-	sendTask(mediumPriority, 2, 2, func() { fmt.Println("Medium priority task 2") })
-	sendTask(lowPriority, 3, 3, func() { fmt.Println("Low priority task 3") })
+	// Schedule the task to run at the calculated time
+	time.AfterFunc(duration, func() {
+		fmt.Println("Running task in New York time:", time.Now().In(loc))
+	})
 
-	time.Sleep(2 * time.Second)
-	sendTask(highPriority, 4, 1, func() { fmt.Println("High priority task 4") })
-	sendTask(mediumPriority, 5, 2, func() { fmt.Println("Medium priority task 5") })
-
-	time.Sleep(3 * time.Second)
-	sendTask(lowPriority, 6, 3, func() { fmt.Println("Low priority task 6") })
-
-	// Wait for all worker goroutines to finish
-	close(highPriority)
-	close(mediumPriority)
-	close(lowPriority)
-}
-
-func sendTask(channel chan Task, id int, priority int, function func()) {
-	channel <- Task{ID: id, Priority: priority, Function: function}
-}
-
-func processTasks(channel <-chan Task, priorityLevel string, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	for task := range channel {
-		fmt.Printf("Processing %s priority task %d\n", priorityLevel, task.ID)
-		time.Sleep(time.Duration(task.Priority) * time.Second) // Simulate work with time proportional to priority
-		task.Function()
-	}
-
-	fmt.Println(fmt.Sprintf("%s priority worker finished\n", priorityLevel))
+	select {} // Infinite loop to keep the program running
 }
