@@ -2,98 +2,71 @@ package main
 
 import (
 	"fmt"
+	"sync"
+	"time"
 )
 
-// Node interface defines the methods a graph node must implement.
-type Node interface {
-	GetValue() interface{}
-	SetValue(interface{})
-	AddEdge(Node)
-	GetEdges() []Node
-}
-
-// Graph interface defines the methods a graph must implement.
-type Graph interface {
-	AddNode(Node)
-	GetNodes() []Node
-}
-
-// SimpleNode implements the Node interface.
-type SimpleNode struct {
-	value interface{}
-	edges []Node
-}
-
-func NewSimpleNode(value interface{}) *SimpleNode {
-	return &SimpleNode{
-		value: value,
-		edges: nil,
-	}
-}
-
-func (n *SimpleNode) GetValue() interface{} {
-	return n.value
-}
-
-func (n *SimpleNode) SetValue(value interface{}) {
-	n.value = value
-}
-
-func (n *SimpleNode) AddEdge(edge Node) {
-	n.edges = append(n.edges, edge)
-}
-
-func (n *SimpleNode) GetEdges() []Node {
-	return n.edges
-}
-
-// SimpleGraph implements the Graph interface.
-type SimpleGraph struct {
-	nodes []Node
-}
-
-func NewSimpleGraph() *SimpleGraph {
-	return &SimpleGraph{
-		nodes: nil,
-	}
-}
-
-func (g *SimpleGraph) AddNode(node Node) {
-	g.nodes = append(g.nodes, node)
-}
-
-func (g *SimpleGraph) GetNodes() []Node {
-	return g.nodes
+type Task struct {
+	ID       int
+	Priority int // 1 (high), 2 (medium), 3 (low)
+	Function func()
 }
 
 func main() {
-	graph := NewSimpleGraph()
+	// Create channels for each priority level
+	highPriority := make(chan Task)
+	mediumPriority := make(chan Task)
+	lowPriority := make(chan Task)
 
-	// Create nodes
-	node1 := NewSimpleNode("A")
-	node2 := NewSimpleNode("B")
-	node3 := NewSimpleNode("C")
+	// Number of worker goroutines for each priority level
+	const highWorkers = 2
+	const mediumWorkers = 2
+	const lowWorkers = 1
 
-	// Add nodes to the graph
-	graph.AddNode(node1)
-	graph.AddNode(node2)
-	graph.AddNode(node3)
+	// Start worker goroutines for each priority
+	for i := 0; i < highWorkers; i++ {
+		go processTasks(highPriority, "high", &sync.WaitGroup{})
+	}
 
-	// Add edges
-	node1.AddEdge(node2)
-	node1.AddEdge(node3)
-	node2.AddEdge(node3)
+	for i := 0; i < mediumWorkers; i++ {
+		go processTasks(mediumPriority, "medium", &sync.WaitGroup{})
+	}
 
-	// Traverse the graph
-	fmt.Println("Graph Traversal:")
-	traverseGraph(graph)
+	for i := 0; i < lowWorkers; i++ {
+		go processTasks(lowPriority, "low", &sync.WaitGroup{})
+	}
+
+	// Simulate creating and sending tasks with different priorities
+	time.Sleep(1 * time.Second)
+	sendTask(highPriority, 1, 1, func() { fmt.Println("High priority task 1") })
+	sendTask(mediumPriority, 2, 2, func() { fmt.Println("Medium priority task 2") })
+	sendTask(lowPriority, 3, 3, func() { fmt.Println("Low priority task 3") })
+
+	time.Sleep(2 * time.Second)
+	sendTask(highPriority, 4, 1, func() { fmt.Println("High priority task 4") })
+	sendTask(mediumPriority, 5, 2, func() { fmt.Println("Medium priority task 5") })
+
+	time.Sleep(3 * time.Second)
+	sendTask(lowPriority, 6, 3, func() { fmt.Println("Low priority task 6") })
+
+	// Wait for all worker goroutines to finish
+	close(highPriority)
+	close(mediumPriority)
+	close(lowPriority)
 }
 
-func traverseGraph(graph Graph) {
-	for _, node := range graph.GetNodes() {
-		fmt.Println(node.GetValue())
-		for _, edge := range node.GetEdges() {
-			fmt.Println("  ->", edge.GetValue())
-		}
+func sendTask(channel chan Task, id int, priority int, function func()) {
+	channel <- Task{ID: id, Priority: priority, Function: function}
+}
+
+func processTasks(channel <-chan Task, priorityLevel string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for task := range channel {
+		fmt.Printf("Processing %s priority task %d\n", priorityLevel, task.ID)
+		time.Sleep(time.Duration(task.Priority) * time.Second) // Simulate work with time proportional to priority
+		task.Function()
 	}
+
+	fmt.Println(fmt.Sprintf("%s priority worker finished\n", priorityLevel))
 }

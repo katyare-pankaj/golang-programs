@@ -2,113 +2,67 @@ package main
 
 import (
 	"fmt"
+	"time"
 )
 
-type Vertex interface {
-	GetId() int
-	SetId(int)
-	AddEdge(Edge)
-	GetEdges() []Edge
-}
-type Edge interface {
-	GetSource() Vertex
-	GetDestination() Vertex
-	SetWeight(int)
-	GetWeight() int
-}
-type Graph struct {
-	vertices map[int]Vertex
+type Task struct {
+	ID       int
+	Data     string
+	Priority int
 }
 
-func NewGraph() *Graph {
-	return &Graph{
-		vertices: make(map[int]Vertex),
-	}
-}
-func (g *Graph) AddVertex(vertex Vertex) {
-	g.vertices[vertex.GetId()] = vertex
-}
-func (g *Graph) GetVertex(id int) Vertex {
-	return g.vertices[id]
-}
-func (g *Graph) RemoveVertex(id int) {
-	delete(g.vertices, id)
+// Define a priority queue using a buffered channel
+type PriorityQueue chan Task
+
+func (pq PriorityQueue) enqueue(task Task) {
+	pq <- task
 }
 
-// Simple Vertex implementation with basic properties
-type BasicVertex struct {
-	id    int
-	edges []Edge
+func (pq PriorityQueue) dequeue() Task {
+	return <-pq
 }
 
-func NewBasicVertex(id int) *BasicVertex {
-	return &BasicVertex{
-		id:    id,
-		edges: nil,
-	}
-}
-func (v *BasicVertex) GetId() int {
-	return v.id
-}
-func (v *BasicVertex) SetId(id int) {
-	v.id = id
-}
-func (v *BasicVertex) AddEdge(edge Edge) {
-	v.edges = append(v.edges, edge)
-}
-func (v *BasicVertex) GetEdges() []Edge {
-	return v.edges
-}
-
-// Simple Edge implementation with basic properties
-type BasicEdge struct {
-	source      Vertex
-	destination Vertex
-	weight      int
-}
-
-func NewBasicEdge(source Vertex, destination Vertex, weight int) *BasicEdge {
-	return &BasicEdge{
-		source:      source,
-		destination: destination,
-		weight:      weight,
-	}
-}
-func (e *BasicEdge) GetSource() Vertex {
-	return e.source
-}
-func (e *BasicEdge) GetDestination() Vertex {
-	return e.destination
-}
-func (e *BasicEdge) SetWeight(weight int) {
-	e.weight = weight
-}
-func (e *BasicEdge) GetWeight() int {
-	return e.weight
-}
 func main() {
-	graph := NewGraph()
-	vertex1 := NewBasicVertex(1)
-	vertex2 := NewBasicVertex(2)
-	vertex3 := NewBasicVertex(3)
-	edge12 := NewBasicEdge(vertex1, vertex2, 5)
-	edge13 := NewBasicEdge(vertex1, vertex3, 3)
-	edge23 := NewBasicEdge(vertex2, vertex3, 4)
-	graph.AddVertex(vertex1)
-	graph.AddVertex(vertex2)
-	graph.AddVertex(vertex3)
-	vertex1.AddEdge(edge12)
-	vertex1.AddEdge(edge13)
-	vertex2.AddEdge(edge23)
-	// Traverse the graph
-	fmt.Println("Graph Traversal:")
-	traverseGraph(graph)
-}
-func traverseGraph(graph *Graph) {
-	for _, vertex := range graph.vertices {
-		fmt.Printf("Vertex %d:\n", vertex.GetId())
-		for _, edge := range vertex.GetEdges() {
-			fmt.Printf("  -> Vertex %d (Weight: %d)\n", edge.GetDestination().GetId(), edge.GetWeight())
+	// Create three priority queues, each with a buffer size of 10
+	highPriorityQueue := make(PriorityQueue, 10)
+	mediumPriorityQueue := make(PriorityQueue, 10)
+	lowPriorityQueue := make(PriorityQueue, 10)
+
+	// Start three worker goroutines for each priority level
+	go worker(highPriorityQueue)
+	go worker(mediumPriorityQueue)
+	go worker(lowPriorityQueue)
+
+	// Generate some sample tasks with different priority levels
+	tasks := []Task{
+		{ID: 1, Data: "High priority task 1", Priority: 2},
+		{ID: 2, Data: "Medium priority task 1", Priority: 1},
+		{ID: 3, Data: "Low priority task 1", Priority: 0},
+		{ID: 4, Data: "High priority task 2", Priority: 2},
+		{ID: 5, Data: "Medium priority task 2", Priority: 1},
+		{ID: 6, Data: "Low priority task 2", Priority: 0},
+	}
+
+	// Distribute tasks to the appropriate priority queues
+	for _, task := range tasks {
+		switch task.Priority {
+		case 2:
+			highPriorityQueue.enqueue(task)
+		case 1:
+			mediumPriorityQueue.enqueue(task)
+		case 0:
+			lowPriorityQueue.enqueue(task)
 		}
+	}
+
+	// Wait for all tasks to be completed
+	time.Sleep(5 * time.Second)
+}
+
+func worker(queue PriorityQueue) {
+	for {
+		task := queue.dequeue()
+		fmt.Printf("Processing Task %d: %s (Priority: %d)\n", task.ID, task.Data, task.Priority)
+		time.Sleep(1 * time.Second) // Simulate task processing time
 	}
 }
