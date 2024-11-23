@@ -1,48 +1,99 @@
 package main
 
 import (
-	"context"
-	"log"
-	"math/rand"
-	"sync"
-	"time"
+	"fmt"
 )
 
-func main() {
-	// Create a group to wait for all goroutines
-	var wg sync.WaitGroup
-
-	// Create a context with a 5-second timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Start three goroutines
-	for i := 1; i <= 3; i++ {
-		wg.Add(1)
-		go worker(ctx, i, &wg)
-	}
-
-	// Wait for all goroutines to finish or timeout
-	wg.Wait()
-
-	log.Println("Main function exiting")
+// Node interface defines the methods a graph node must implement.
+type Node interface {
+	GetValue() interface{}
+	SetValue(interface{})
+	AddEdge(Node)
+	GetEdges() []Node
 }
 
-func worker(ctx context.Context, id int, wg *sync.WaitGroup) {
-	defer wg.Done()
+// Graph interface defines the methods a graph must implement.
+type Graph interface {
+	AddNode(Node)
+	GetNodes() []Node
+}
 
-	// Simulate work with a randomized sleep duration
-	sleepDuration := time.Duration(rand.Intn(5)) * time.Second
+// SimpleNode implements the Node interface.
+type SimpleNode struct {
+	value interface{}
+	edges []Node
+}
 
-	log.Printf("Worker %d: Starting work (will sleep for %v)\n", id, sleepDuration)
+func NewSimpleNode(value interface{}) *SimpleNode {
+	return &SimpleNode{
+		value: value,
+		edges: nil,
+	}
+}
 
-	select {
-	case <-ctx.Done():
-		// Context was canceled or timed out
-		log.Printf("Worker %d: Cancelled\n", id)
-		return
-	case <-time.After(sleepDuration):
-		// Work completed normally
-		log.Printf("Worker %d: Work completed\n", id)
+func (n *SimpleNode) GetValue() interface{} {
+	return n.value
+}
+
+func (n *SimpleNode) SetValue(value interface{}) {
+	n.value = value
+}
+
+func (n *SimpleNode) AddEdge(edge Node) {
+	n.edges = append(n.edges, edge)
+}
+
+func (n *SimpleNode) GetEdges() []Node {
+	return n.edges
+}
+
+// SimpleGraph implements the Graph interface.
+type SimpleGraph struct {
+	nodes []Node
+}
+
+func NewSimpleGraph() *SimpleGraph {
+	return &SimpleGraph{
+		nodes: nil,
+	}
+}
+
+func (g *SimpleGraph) AddNode(node Node) {
+	g.nodes = append(g.nodes, node)
+}
+
+func (g *SimpleGraph) GetNodes() []Node {
+	return g.nodes
+}
+
+func main() {
+	graph := NewSimpleGraph()
+
+	// Create nodes
+	node1 := NewSimpleNode("A")
+	node2 := NewSimpleNode("B")
+	node3 := NewSimpleNode("C")
+
+	// Add nodes to the graph
+	graph.AddNode(node1)
+	graph.AddNode(node2)
+	graph.AddNode(node3)
+
+	// Add edges
+	node1.AddEdge(node2)
+	node1.AddEdge(node3)
+	node2.AddEdge(node3)
+
+	// Traverse the graph
+	fmt.Println("Graph Traversal:")
+	traverseGraph(graph)
+}
+
+func traverseGraph(graph Graph) {
+	for _, node := range graph.GetNodes() {
+		fmt.Println(node.GetValue())
+		for _, edge := range node.GetEdges() {
+			fmt.Println("  ->", edge.GetValue())
+		}
 	}
 }

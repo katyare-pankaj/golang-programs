@@ -1,85 +1,114 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
 )
 
-// goroutineFunction represents the function to be executed in a goroutine.
-type goroutineFunction func(ctx context.Context) error
-
-func main() {
-	// Define the number of goroutines
-	numGoroutines := 3
-
-	// Create a WaitGroup to track the number of running goroutines
-	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
-
-	// Create a background context
-	ctx := context.Background()
-
-	// Define a slice of functions to run in goroutines
-	functions := []goroutineFunction{
-		func(ctx context.Context) error {
-			defer wg.Done()
-			return work(ctx, "goroutine 1")
-		},
-		func(ctx context.Context) error {
-			defer wg.Done()
-			return work(ctx, "goroutine 2")
-		},
-		func(ctx context.Context) error {
-			defer wg.Done()
-			return work(ctx, "goroutine 3")
-		},
-	}
-
-	// Launch the goroutines with a timeout of 2 seconds
-	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	for _, f := range functions {
-		go func(f goroutineFunction) {
-			err := f(timeoutCtx)
-			if err != nil {
-				// Handle the error (if any)
-				fmt.Printf("Error: %v\n", err)
-			}
-		}(f)
-	}
-
-	// Wait for all goroutines to finish
-	wg.Wait()
-
-	fmt.Println("All goroutines completed.")
+type Vertex interface {
+	GetId() int
+	SetId(int)
+	AddEdge(Edge)
+	GetEdges() []Edge
+}
+type Edge interface {
+	GetSource() Vertex
+	GetDestination() Vertex
+	SetWeight(int)
+	GetWeight() int
+}
+type Graph struct {
+	vertices map[int]Vertex
 }
 
-func work(ctx context.Context, name string) error {
-	// Simulate work with a random duration
-	duration := time.Duration(rand.Intn(5)) * time.Second
+func NewGraph() *Graph {
+	return &Graph{
+		vertices: make(map[int]Vertex),
+	}
+}
+func (g *Graph) AddVertex(vertex Vertex) {
+	g.vertices[vertex.GetId()] = vertex
+}
+func (g *Graph) GetVertex(id int) Vertex {
+	return g.vertices[id]
+}
+func (g *Graph) RemoveVertex(id int) {
+	delete(g.vertices, id)
+}
 
-	fmt.Printf("%s starting with duration %s...\n", name, duration)
+// Simple Vertex implementation with basic properties
+type BasicVertex struct {
+	id    int
+	edges []Edge
+}
 
-	// Use the context for timeout handling
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+func NewBasicVertex(id int) *BasicVertex {
+	return &BasicVertex{
+		id:    id,
+		edges: nil,
+	}
+}
+func (v *BasicVertex) GetId() int {
+	return v.id
+}
+func (v *BasicVertex) SetId(id int) {
+	v.id = id
+}
+func (v *BasicVertex) AddEdge(edge Edge) {
+	v.edges = append(v.edges, edge)
+}
+func (v *BasicVertex) GetEdges() []Edge {
+	return v.edges
+}
 
-	for {
-		select {
-		case <-ctx.Done():
-			// Check if the context is canceled
-			return ctx.Err()
-		case <-ticker.C:
-			// Perform work
-			time.Sleep(1 * time.Second)
-			duration -= time.Second
-			if duration <= 0 {
-				fmt.Printf("%s completed.\n", name)
-				return nil
-			}
+// Simple Edge implementation with basic properties
+type BasicEdge struct {
+	source      Vertex
+	destination Vertex
+	weight      int
+}
+
+func NewBasicEdge(source Vertex, destination Vertex, weight int) *BasicEdge {
+	return &BasicEdge{
+		source:      source,
+		destination: destination,
+		weight:      weight,
+	}
+}
+func (e *BasicEdge) GetSource() Vertex {
+	return e.source
+}
+func (e *BasicEdge) GetDestination() Vertex {
+	return e.destination
+}
+func (e *BasicEdge) SetWeight(weight int) {
+	e.weight = weight
+}
+func (e *BasicEdge) GetWeight() int {
+	return e.weight
+}
+func main() {
+	graph := NewGraph()
+	vertex1 := NewBasicVertex(1)
+	vertex2 := NewBasicVertex(2)
+	vertex3 := NewBasicVertex(3)
+	edge12 := NewBasicEdge(vertex1, vertex2, 5)
+	edge13 := NewBasicEdge(vertex1, vertex3, 3)
+	edge23 := NewBasicEdge(vertex2, vertex3, 4)
+	graph.AddVertex(vertex1)
+	graph.AddVertex(vertex2)
+	graph.AddVertex(vertex3)
+	vertex1.AddEdge(edge12)
+	vertex1.AddEdge(edge13)
+	vertex2.AddEdge(edge23)
+	// Traverse the graph
+	fmt.Println("Graph Traversal:")
+	traverseGraph(graph)
+}
+func traverseGraph(graph *Graph) {
+	for _, vertex := range graph.vertices {
+		fmt.Printf("Vertex %d:\n", vertex.GetId())
+		for _, edge := range vertex.GetEdges() {
+			fmt.Printf("  -> Vertex %d (Weight: %d)\n", edge.GetDestination().GetId(), edge.GetWeight())
 		}
 	}
 }
