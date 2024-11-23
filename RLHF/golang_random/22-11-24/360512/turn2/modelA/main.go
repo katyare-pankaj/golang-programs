@@ -1,48 +1,73 @@
 package main
 
 import (
-	"context"
-	"log"
-	"math/rand"
+	"fmt"
+	"reflect"
 	"sync"
-	"time"
 )
 
-func main() {
-	// Create a group to wait for all goroutines
+// ProcessStructs function uses reflection to process all string fields in a struct concurrently
+func processStructs(data interface{}) {
 	var wg sync.WaitGroup
-
-	// Create a context with a 5-second timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Start three goroutines
-	for i := 1; i <= 3; i++ {
-		wg.Add(1)
-		go worker(ctx, i, &wg)
+	v := reflect.ValueOf(data)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
 	}
 
-	// Wait for all goroutines to finish or timeout
-	wg.Wait()
+	for i := 0; i < v.NumField(); i++ {
+		f := v.Field(i)
 
-	log.Println("Main function exiting")
+		if !f.CanSet() {
+			continue
+		}
+
+		if f.Type().Kind() != reflect.String {
+			continue
+		}
+
+		wg.Add(1)
+		go func(field reflect.Value) {
+			defer wg.Done()
+			// Alter the string field
+			modifiedValue := fmt.Sprintf("Processed: %s", field.String())
+			field.SetString(modifiedValue)
+		}(f)
+	}
+
+	wg.Wait()
 }
 
-func worker(ctx context.Context, id int, wg *sync.WaitGroup) {
-	defer wg.Done()
+// Define the types of data we want to process
+type Person struct {
+	Name  string `json:"name"`
+	Hobby string `json:"hobby"`
+}
 
-	// Simulate work with a randomized sleep duration
-	sleepDuration := time.Duration(rand.Intn(5)) * time.Second
+type Car struct {
+	Make  string `json:"make"`
+	Model string `json:"model"`
+}
 
-	log.Printf("Worker %d: Starting work (will sleep for %v)\n", id, sleepDuration)
+func main() {
+	var wg sync.WaitGroup
 
-	select {
-	case <-ctx.Done():
-		// Context was canceled or timed out
-		log.Printf("Worker %d: Cancelled\n", id)
-		return
-	case <-time.After(sleepDuration):
-		// Work completed normally
-		log.Printf("Worker %d: Work completed\n", id)
+	dataStructures := []interface{}{
+		Person{"Alice", "hiking"},
+		Person{"Bob", "reading"},
+		Car{"Toyota", "Camry"},
+		Car{"Honda", "Civic"},
 	}
+
+	// Process each struct concurrently
+	for _, data := range dataStructures {
+		wg.Add(1)
+		go func(d interface{}) {
+			defer wg.Done()
+			processStructs(d)
+			fmt.Println(d)
+		}(data)
+	}
+
+	wg.Wait()
+	fmt.Println("All data structures processed.")
 }

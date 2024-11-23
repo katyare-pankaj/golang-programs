@@ -1,85 +1,70 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"math/rand"
+	"reflect"
+	"runtime"
 	"sync"
-	"time"
 )
 
-// goroutineFunction represents the function to be executed in a goroutine.
-type goroutineFunction func(ctx context.Context) error
-
-func main() {
-	// Define the number of goroutines
-	numGoroutines := 3
-
-	// Create a WaitGroup to track the number of running goroutines
-	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
-
-	// Create a background context
-	ctx := context.Background()
-
-	// Define a slice of functions to run in goroutines
-	functions := []goroutineFunction{
-		func(ctx context.Context) error {
-			defer wg.Done()
-			return work(ctx, "goroutine 1")
-		},
-		func(ctx context.Context) error {
-			defer wg.Done()
-			return work(ctx, "goroutine 2")
-		},
-		func(ctx context.Context) error {
-			defer wg.Done()
-			return work(ctx, "goroutine 3")
-		},
+// Process func uses reflection to process string fields concurrently
+func processDataConcurrently(data interface{}) {
+	v := reflect.ValueOf(data)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
 	}
-
-	// Launch the goroutines with a timeout of 2 seconds
-	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	for _, f := range functions {
-		go func(f goroutineFunction) {
-			err := f(timeoutCtx)
-			if err != nil {
-				// Handle the error (if any)
-				fmt.Printf("Error: %v\n", err)
+	// Get number of struct fields
+	numFields := v.NumField()
+	// Create a wait group to synchronize concurrent goroutines
+	var wg sync.WaitGroup
+	// Ensure we have at least one goroutine running
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	// Start a goroutine for each field
+	for i := 0; i < numFields; i++ {
+		f := v.Field(i)
+		wg.Add(1)
+		go func(f reflect.Value) {
+			defer wg.Done()
+			// Check if the field is of type string
+			if f.Type().Kind() == reflect.String {
+				// Process the string field concurrently
+				modifiedValue := fmt.Sprintf("Processed: %s", f.String())
+				f.SetString(modifiedValue)
 			}
 		}(f)
 	}
-
 	// Wait for all goroutines to finish
 	wg.Wait()
-
-	fmt.Println("All goroutines completed.")
 }
 
-func work(ctx context.Context, name string) error {
-	// Simulate work with a random duration
-	duration := time.Duration(rand.Intn(5)) * time.Second
+// Define some structs with string fields
+type Person struct {
+	Name  string `json:"name"`
+	Hobby string `json:"hobby"`
+	Age   int    `json:"age"`
+}
 
-	fmt.Printf("%s starting with duration %s...\n", name, duration)
+type Car struct {
+	Make  string `json:"make"`
+	Model string `json:"model"`
+	Year  int    `json:"year"`
+}
 
-	// Use the context for timeout handling
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+func main() {
+	// Create instances of the structs
+	person := Person{"Alice", "hiking", 25}
+	car := Car{"Toyota", "Camry", 2021}
 
-	for {
-		select {
-		case <-ctx.Done():
-			// Check if the context is canceled
-			return ctx.Err()
-		case <-ticker.C:
-			// Perform work
-			time.Sleep(1 * time.Second)
-			duration -= time.Second
-			if duration <= 0 {
-				fmt.Printf("%s completed.\n", name)
-				return nil
-			}
-		}
+	dataStructures := []interface{}{
+		person,
+		car,
 	}
+
+	// Process each data structure concurrently
+	for _, data := range dataStructures {
+		processDataConcurrently(&data)
+		fmt.Println(data)
+	}
+
+	fmt.Println("All data structures processed.")
 }
