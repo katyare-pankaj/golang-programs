@@ -1,85 +1,47 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
+	"io/ioutil"
+	"log"
+
+	"github.com/xeipuuv/gojsonschema"
 )
 
-// goroutineFunction represents the function to be executed in a goroutine.
-type goroutineFunction func(ctx context.Context) error
-
 func main() {
-	// Define the number of goroutines
-	numGoroutines := 3
-
-	// Create a WaitGroup to track the number of running goroutines
-	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
-
-	// Create a background context
-	ctx := context.Background()
-
-	// Define a slice of functions to run in goroutines
-	functions := []goroutineFunction{
-		func(ctx context.Context) error {
-			defer wg.Done()
-			return work(ctx, "goroutine 1")
-		},
-		func(ctx context.Context) error {
-			defer wg.Done()
-			return work(ctx, "goroutine 2")
-		},
-		func(ctx context.Context) error {
-			defer wg.Done()
-			return work(ctx, "goroutine 3")
-		},
+	// Read JSON data from a file
+	dataFile := "data.json"
+	data, err := ioutil.ReadFile(dataFile)
+	if err != nil {
+		log.Fatalf("Error reading data file: %v", err)
 	}
 
-	// Launch the goroutines with a timeout of 2 seconds
-	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	for _, f := range functions {
-		go func(f goroutineFunction) {
-			err := f(timeoutCtx)
-			if err != nil {
-				// Handle the error (if any)
-				fmt.Printf("Error: %v\n", err)
-			}
-		}(f)
+	// Read JSON schema from a file
+	schemaFile := "schema.json"
+	schema, err := ioutil.ReadFile(schemaFile)
+	if err != nil {
+		log.Fatalf("Error reading schema file: %v", err)
 	}
 
-	// Wait for all goroutines to finish
-	wg.Wait()
+	// Create a JSON schema loader
+	schemaLoader := gojsonschema.NewStringLoader(string(schema))
 
-	fmt.Println("All goroutines completed.")
-}
+	// Create a JSON data loader
+	dataLoader := gojsonschema.NewStringLoader(string(data))
 
-func work(ctx context.Context, name string) error {
-	// Simulate work with a random duration
-	duration := time.Duration(rand.Intn(5)) * time.Second
+	// Validate the data against the schema
+	result, err := gojsonschema.Validate(schemaLoader, dataLoader)
+	if err != nil {
+		log.Fatalf("Error validating data: %v", err)
+	}
 
-	fmt.Printf("%s starting with duration %s...\n", name, duration)
-
-	// Use the context for timeout handling
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			// Check if the context is canceled
-			return ctx.Err()
-		case <-ticker.C:
-			// Perform work
-			time.Sleep(1 * time.Second)
-			duration -= time.Second
-			if duration <= 0 {
-				fmt.Printf("%s completed.\n", name)
-				return nil
-			}
+	// Check if the validation was successful
+	if !result.Valid() {
+		fmt.Printf("Validation failed:\n")
+		for _, err := range result.Errors() {
+			fmt.Printf("- %s\n", err)
 		}
+	} else {
+		fmt.Println("Validation successful!")
 	}
 }

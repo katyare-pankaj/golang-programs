@@ -1,48 +1,79 @@
 package main
 
 import (
-	"context"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"log"
-	"math/rand"
-	"sync"
-	"time"
+
+	"github.com/bmatsuo/go-jsonschema"
 )
 
-func main() {
-	// Create a group to wait for all goroutines
-	var wg sync.WaitGroup
-
-	// Create a context with a 5-second timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Start three goroutines
-	for i := 1; i <= 3; i++ {
-		wg.Add(1)
-		go worker(ctx, i, &wg)
-	}
-
-	// Wait for all goroutines to finish or timeout
-	wg.Wait()
-
-	log.Println("Main function exiting")
+// Define your JSON data structure
+type User struct {
+	Name  string `json:"name"`
+	Age   int    `json:"age"`
+	Email string `json:"email"`
 }
 
-func worker(ctx context.Context, id int, wg *sync.WaitGroup) {
-	defer wg.Done()
+func main() {
+	// Define the JSON schema as a string
+	schemaJSON := `
+	{
+		"$schema": "http://json-schema.org/draft-07/schema#",
+		"type": "object",
+		"properties": {
+			"name": {
+				"type": "string",
+				"minLength": 1
+			},
+			"age": {
+				"type": "integer",
+				"minimum": 0
+			},
+			"email": {
+				"type": "string",
+				"format": "email"
+			}
+		},
+		"required": ["name", "age", "email"]
+	}
+	`
 
-	// Simulate work with a randomized sleep duration
-	sleepDuration := time.Duration(rand.Intn(5)) * time.Second
+	// Load the JSON data from a file
+	dataFile := "data.json"
+	data, err := ioutil.ReadFile(dataFile)
+	if err != nil {
+		log.Fatalf("Error reading data file: %v", err)
+	}
 
-	log.Printf("Worker %d: Starting work (will sleep for %v)\n", id, sleepDuration)
+	// Parse the JSON data into a User struct
+	var user User
+	err = json.Unmarshal(data, &user)
+	if err != nil {
+		log.Fatalf("Error parsing JSON data: %v", err)
+	}
 
-	select {
-	case <-ctx.Done():
-		// Context was canceled or timed out
-		log.Printf("Worker %d: Cancelled\n", id)
-		return
-	case <-time.After(sleepDuration):
-		// Work completed normally
-		log.Printf("Worker %d: Work completed\n", id)
+	// Parse the JSON schema
+	schemaLoader := jsonschema.NewLoader(jsonschema.URLFromString(""))
+	schema, err := schemaLoader.Load("data:, " + schemaJSON)
+	if err != nil {
+		log.Fatalf("Error parsing JSON schema: %v", err)
+	}
+
+	// Validate the JSON data against the schema
+	validator := jsonschema.NewValidator(schema)
+	result, err := validator.ValidateBytes(data)
+	if err != nil {
+		log.Fatalf("Error validating JSON data: %v", err)
+	}
+
+	// Log any validation errors
+	if !result.Valid() {
+		for _, err := range result.Errors() {
+			fmt.Printf("Validation error: %v\n", err)
+		}
+	} else {
+		fmt.Println("JSON data is valid against the schema.")
 	}
 }
