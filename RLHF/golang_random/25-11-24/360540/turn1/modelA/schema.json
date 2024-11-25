@@ -1,0 +1,16 @@
+{
+  "fields": {
+    "age": {
+      "type": "float64",
+      "default": 25
+    },
+    "city": {
+      "type": "string",
+      "default": "New York"
+    },
+    "name": {
+      "type": "string",
+      "default": "Bob"
+    }
+  }
+}
