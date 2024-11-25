@@ -2,58 +2,62 @@ package main
 
 import (
 	"fmt"
-	"log"
-
-	"github.com/perforce/p4go"
+	"math/rand"
+	"runtime"
+	"sync"
+	"time"
 )
 
+type Task struct {
+	ID   int
+	Data string
+}
+
+func worker(id int, tasks <-chan Task, results chan<- string) {
+	for task := range tasks {
+		fmt.Printf("Worker %d started processing task %d: %s\n", id, task.ID, task.Data)
+		// Simulate processing time by sleeping for a random duration
+		time.Sleep(time.Duration(rand.Intn(5)+1) * time.Second)
+		result := fmt.Sprintf("Task %d processed by Worker %d", task.ID, id)
+		results <- result
+	}
+}
+
 func main() {
-	// Create a new Perforce client
-	client, err := p4go.New()
-	if err != nil {
-		log.Fatal(err)
+	// Number of worker goroutines
+	numWorkers := runtime.NumCPU()
+	tasks := make(chan Task, 100) // Buffered channel to hold tasks
+	results := make(chan string)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(numWorkers)
+
+	// Start workers
+	for i := 1; i <= numWorkers; i++ {
+		go func(workerID int) {
+			defer wg.Done()
+			worker(workerID, tasks, results)
+		}(i)
 	}
 
-	// Connect to the Perforce server
-	if err := client.Connect("p4.example.com:1666"); err != nil {
-		log.Fatal(err)
-	}
+	// Generate tasks and send them to the worker channel
+	go func() {
+		defer close(tasks)
+		for i := 1; i <= 20; i++ {
+			task := Task{ID: i, Data: fmt.Sprintf("Task data %d", i)}
+			tasks <- task
+			fmt.Printf("Sent task %d to the queue\n", task.ID)
+		}
+	}()
 
-	// Login to the Perforce server
-	if err := client.Login("your_username", "your_password"); err != nil {
-		log.Fatal(err)
-	}
+	// Receive results from the result channel
+	go func() {
+		for result := range results {
+			fmt.Println(result)
+		}
+	}()
 
-	// Create a new branch
-	branchName := "new_branch"
-	if err := client.Branch(branchName, "mainline", p4go.BranchOptions{}); err != nil {
-		log.Fatal(err)
-	}
-
-	// Edit a file in the branch
-	filePath := "//depot/mainline/some_file.go"
-	if err := client.Edit(filePath); err != nil {
-		log.Fatal(err)
-	}
-
-	// Add changes to the change list
-	changelist, err := client.NewChangelist("Description of changes")
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := changelist.Add(filePath); err != nil {
-		log.Fatal(err)
-	}
-
-	// Submit the change list
-	if err := changelist.Submit(); err != nil {
-		log.Fatal(err)
-	}
-
-	// Delete the branch (optional)
-	if err := client.DeleteBranch(branchName); err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println("Changes submitted successfully!")
+	wg.Wait()
+	close(results)
+	fmt.Println("All tasks processed. Exiting...")
 }
