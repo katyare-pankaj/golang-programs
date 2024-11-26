@@ -224,6 +224,7 @@ require (
 	github.com/dghubble/go-twitter v0.0.0-20221104224141-912508c3888b
 	github.com/dgraph-io/dgo v1.0.0
 	github.com/dgraph-io/dgo/v2 v2.2.0
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/dustin/go-humanize v1.0.1
 	github.com/garyburd/redigo v1.6.4
 	github.com/gin-gonic/gin v1.10.0

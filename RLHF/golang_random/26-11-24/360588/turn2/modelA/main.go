@@ -1,61 +1,74 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"sync"
+	"net/http"
 	"time"
+
+	"github.com/dgrijalva/jwt-go"
 )
 
-type Data struct {
-	Value int
+type Claims struct {
+	Username  string    `json:"username"`
+	ExpiresAt time.Time `json:"expires_at"`
+	jwt.StandardClaims
+}
+
+const jwtSecret = "your_secret_key" // Use a secure secret key in production
+
+func authHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Decode the request body
+	var payload struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Simulate password verification (replace this with your authentication logic)
+	if payload.Username == "example_user" && payload.Password == "example_password" {
+		// Create claims
+		claims := &Claims{
+			Username:  payload.Username,
+			ExpiresAt: time.Now().Add(15 * time.Minute), // Token expires after 15 minutes
+			StandardClaims: jwt.StandardClaims{
+				Issuer:    "example.com",
+				IssuedAt:  time.Now().Unix(),
+				Audience:  "your_application",
+				NotBefore: time.Now().Unix(),
+			},
+		}
+
+		// Create token
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		tokenString, err := token.SignedString([]byte(jwtSecret))
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		// Respond with the token
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"access_token": tokenString})
+	} else {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	}
 }
 
 func main() {
-	var wg sync.WaitGroup
-	dataChan := make(chan Data, 10)
-	transformedChan := make(chan Data, 10)
-	aggregatedChan := make(chan Data, 10)
-
-	// Producer goroutines to generate Data and send it to dataChan
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 10; j++ {
-				data := Data{Value: i*10 + j}
-				dataChan <- data
-				time.Sleep(time.Millisecond * 100) // Simulate some work
-			}
-		}()
+	http.HandleFunc("/auth/token", authHandler)
+	fmt.Println("Server running on http://localhost:8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		fmt.Println("Server error:", err)
 	}
-
-	// Transformer goroutines to receive Data from dataChan, transform it, and send it to transformedChan
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for data := range dataChan {
-				data.Value += 100 // Transform the data by incrementing
-				transformedChan <- data
-			}
-		}()
-	}
-
-	// Aggregator goroutine to receive transformed data from transformedChan, aggregate it, and print the results
-	go func() {
-		var sum int
-		var count int
-
-		for data := range transformedChan {
-			sum += data.Value
-			count++
-		}
-
-		fmt.Printf("Aggregated Results: Sum = %d, Count = %d\n", sum, count)
-		wg.Done()
-	}()
-
-	// Wait for all goroutines to finish
-	wg.Wait()
-	close(aggregatedChan)
 }

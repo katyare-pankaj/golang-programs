@@ -1,54 +1,48 @@
 package main
 
 import (
-	"fmt"
-	"sync"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
-func generateData(dataCh chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for i := 1; i <= 100; i++ {
-		dataCh <- i
-	}
-	close(dataCh)
+type user struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
-func transformData(dataCh <-chan int, transformedCh chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for data := range dataCh {
-		transformedCh <- data + 1
+var (
+	// Replace this with your actual database or a secure storage mechanism
+	authorizedUsers = map[string]string{
+		"user1": "password1",
+		"user2": "password2",
 	}
-	close(transformedCh)
-}
-
-func aggregateResults(transformedCh <-chan int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	var total int
-	for transformed := range transformedCh {
-		total += transformed
-	}
-	fmt.Println("Final Sum:", total)
-}
+)
 
 func main() {
-	var wg sync.WaitGroup
-	dataCh := make(chan int)
-	transformedCh := make(chan int)
+	r := gin.Default()
 
-	// Launch the data generators
-	wg.Add(1)
-	go generateData(dataCh, &wg)
+	r.POST("/auth/token", basicAuth)
 
-	// Launch the data transformers
-	const numTransformers = 4
-	wg.Add(numTransformers)
-	for i := 0; i < numTransformers; i++ {
-		go transformData(dataCh, transformedCh, &wg)
+	r.Run(":8080") // Listen and serve on 0.0.0.0:8080
+}
+
+func basicAuth(c *gin.Context) {
+	var u user
+	if err := c.ShouldBindJSON(&u); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
 	}
 
-	// Launch the aggregator
-	wg.Add(1)
-	go aggregateResults(transformedCh, &wg)
+	// Validate the user credentials
+	if storedPassword, ok := authorizedUsers[u.Username]; ok {
+		if storedPassword == u.Password {
+			// Generate a JWT token (simplified example for demonstration purposes)
+			token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ"
+			c.JSON(http.StatusOK, gin.H{"access_token": token})
+			return
+		}
+	}
 
-	wg.Wait()
+	c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 }
