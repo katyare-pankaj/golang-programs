@@ -1,61 +1,72 @@
 package main
 
 import (
-	"fmt"
-	"sync"
-	"time"
+	"flag"
+	"log"
+	"os"
 )
 
-type Data struct {
-	Value int
+// Define logging levels
+const (
+	DebugLevel = iota
+	InfoLevel
+	WarningLevel
+	ErrorLevel
+	CriticalLevel
+)
+
+var (
+	logLevel   = flag.Int("log-level", InfoLevel, "Logging level: debug, info, warning, error, critical")
+	debugMode  = flag.Bool("debug", false, "Enable debugging mode")
+	logger     = log.New(os.Stdout, "", log.LstdFlags)
+	levelNames = []string{"debug", "info", "warning", "error", "critical"}
+)
+
+func init() {
+	flag.Parse()
+
+	// Validate log level
+	if *logLevel < DebugLevel || *logLevel > CriticalLevel {
+		log.Fatalf("Invalid log level %d. Must be between %d and %d.", *logLevel, DebugLevel, CriticalLevel)
+	}
+
+	// Set logger prefix based on debug mode
+	if *debugMode {
+		logger.SetFlags(log.LstdFlags | log.Lshortfile)
+	}
+}
+
+func logMessage(level int, format string, args ...interface{}) {
+	if level >= *logLevel {
+		logger.Printf("[%s] %s %s", levelNames[level], format, args...)
+	}
+}
+
+func debug(format string, args ...interface{}) {
+	logMessage(DebugLevel, format, args...)
+}
+
+func info(format string, args ...interface{}) {
+	logMessage(InfoLevel, format, args...)
+}
+
+func warning(format string, args ...interface{}) {
+	logMessage(WarningLevel, format, args...)
+}
+
+func error(format string, args ...interface{}) {
+	logMessage(ErrorLevel, format, args...)
+}
+
+func critical(format string, args ...interface{}) {
+	logMessage(CriticalLevel, format, args...)
 }
 
 func main() {
-	var wg sync.WaitGroup
-	dataChan := make(chan Data, 10)
-	transformedChan := make(chan Data, 10)
-	aggregatedChan := make(chan Data, 10)
-
-	// Producer goroutines to generate Data and send it to dataChan
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 10; j++ {
-				data := Data{Value: i*10 + j}
-				dataChan <- data
-				time.Sleep(time.Millisecond * 100) // Simulate some work
-			}
-		}()
-	}
-
-	// Transformer goroutines to receive Data from dataChan, transform it, and send it to transformedChan
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for data := range dataChan {
-				data.Value += 100 // Transform the data by incrementing
-				transformedChan <- data
-			}
-		}()
-	}
-
-	// Aggregator goroutine to receive transformed data from transformedChan, aggregate it, and print the results
-	go func() {
-		var sum int
-		var count int
-
-		for data := range transformedChan {
-			sum += data.Value
-			count++
-		}
-
-		fmt.Printf("Aggregated Results: Sum = %d, Count = %d\n", sum, count)
-		wg.Done()
-	}()
-
-	// Wait for all goroutines to finish
-	wg.Wait()
-	close(aggregatedChan)
+	// Example usage of log functions
+	debug("Debug information")
+	info("Application started")
+	warning("A warning occurred")
+	error("An error occurred")
+	critical("Critical error: shutting down")
 }
