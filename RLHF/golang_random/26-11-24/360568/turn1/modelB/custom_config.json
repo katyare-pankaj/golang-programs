@@ -1,0 +1,17 @@
+{
+    "database": {
+      "host": "localhost",
+      "port": 5432,
+      "username": "user",
+      "password": "password"
+    },
+    "api": {
+      "base_url": "https://api.example.com",
+      "api_key": "your-api-key"
+    },
+    "logging": {
+      "level": "info",
+      "file": "app.log"
+    }
+  }
+  
