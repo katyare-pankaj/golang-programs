@@ -1,0 +1,55 @@
+openapi: 3.0.0
+info:
+  title: API Authentication
+  version: 1.0.0
+  description: Documentation for the API authentication process
+paths:
+  /login:
+    post:
+      summary: Log in to the API
+      description: Log in a user using their username and password to obtain an access token.
+      requestBody:
+        description: Login credentials
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  description: The user's username
+                password:
+                  type: string
+                  description: The user's password
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: The access token for the authenticated user
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message

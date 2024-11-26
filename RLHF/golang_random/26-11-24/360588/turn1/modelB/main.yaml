@@ -1,0 +1,45 @@
+openapi: 3.0.0
+info:
+  title: Example API
+  version: 1.0.0
+  description: This is an example API with authentication support.
+
+paths:
+  /auth/token:
+    post:
+      summary: Obtain an access token.
+      description: This endpoint allows users to obtain an access token by providing their username and password.
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - username
+              - password
+              properties:
+                username:
+                  type: string
+                  example: example_user
+                password:
+                  type: string
+                  format: password
+                  example: example_password
+        required: true
+      responses:
+        '200':
+          description: Access token obtained successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ
+        '400':
+          description: Invalid request body.
+        '401':
+          description: Unauthorized.
