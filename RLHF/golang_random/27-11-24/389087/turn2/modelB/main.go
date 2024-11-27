@@ -2,42 +2,48 @@ package main
 
 import (
 	"fmt"
+	"sync"
+	"time"
 )
 
-// Define the interface Shape which requires all shapes to have an Area() float64 method
-type Shape interface {
-	Area() float64
+// Define the message type
+type Message struct {
+	Data string
 }
 
-// struct for Circle
-type Circle struct {
-	Radius float64
+// Publisher function - sends updates to subscribers
+func Publisher(ch chan<- Message) {
+	for i := 1; i <= 5; i++ {
+		msg := Message{Data: fmt.Sprintf("Update %d", i)}
+		ch <- msg
+		time.Sleep(time.Second)
+	}
+	close(ch)
 }
 
-// Implement the Shape interface for Circle
-func (c Circle) Area() float64 {
-	return 3.14 * c.Radius * c.Radius
-}
-
-// struct for Square
-type Square struct {
-	Side float64
-}
-
-// Implement the Shape interface for Square
-func (s Square) Area() float64 {
-	return s.Side * s.Side
-}
-
-// function to calculate the area of a given shape using the interface method
-func calculateArea(shape Shape) float64 {
-	return shape.Area()
+// Subscriber function - reads updates from the channel
+func Subscriber(name string, ch <-chan Message, wg *sync.WaitGroup) {
+	for msg := range ch {
+		fmt.Printf("Subscriber %s received: %s\n", name, msg.Data)
+	}
+	wg.Done()
 }
 
 func main() {
-	circle := Circle{Radius: 5.5}
-	square := Square{Side: 10.0}
+	// Create a buffered channel with a capacity of 100
+	ch := make(chan Message, 100)
+	var wg sync.WaitGroup
 
-	fmt.Println("Area of circle:", calculateArea(circle))
-	fmt.Println("Area of square:", calculateArea(square))
+	// Start the publisher
+	go Publisher(ch)
+
+	// Start multiple subscribers
+	numSubscribers := 3
+	wg.Add(numSubscribers)
+	for i := 0; i < numSubscribers; i++ {
+		go Subscriber(fmt.Sprintf("Subscriber%d", i), ch, &wg)
+	}
+
+	// Wait for all subscribers to finish
+	wg.Wait()
 }

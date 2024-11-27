@@ -1,52 +1,87 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+	"time"
+)
 
-// Shape is an interface that defines the behavior of shapes.
-type Shape interface {
-	Area() float64
+// Define the type of messages to be published
+type Message struct {
+	Content   string
+	Timestamp time.Time
 }
 
-// Circle is a struct that implements the Shape interface.
-type Circle struct {
-	Radius float64
+// Create a publish-subscribe interface
+type PublisherSubscriber interface {
+	Publish(msg Message)
+	Subscribe() <-chan Message
+	Close()
 }
 
-// Area calculates the area of the circle.
-func (c Circle) Area() float64 {
-	return 3.14 * c.Radius * c.Radius
+// Implement the publisher-subscriber interface
+type psImpl struct {
+	messages    chan Message
+	subscribers sync.WaitGroup
+	cancel      chan struct{}
 }
 
-// Rectangle is a struct that implements the Shape interface.
-type Rectangle struct {
-	Length float64
-	Width  float64
+func (ps *psImpl) Publish(msg Message) {
+	ps.messages <- msg
 }
 
-// Area calculates the area of the rectangle.
-func (r Rectangle) Area() float64 {
-	return r.Length * r.Width
+func (ps *psImpl) Subscribe() <-chan Message {
+	ps.subscribers.Add(1)
+	defer ps.subscribers.Done()
+
+	return ps.messages
 }
 
-// Triangle is a struct that implements the Shape interface.
-type Triangle struct {
-	Base   float64
-	Height float64
-}
-
-// Area calculates the area of the triangle.
-func (t Triangle) Area() float64 {
-	return 0.5 * t.Base * t.Height
+func (ps *psImpl) Close() {
+	close(ps.messages)
+	ps.subscribers.Wait()
+	close(ps.cancel)
 }
 
 func main() {
-	shapes := []Shape{
-		Circle{Radius: 5.0},
-		Rectangle{Length: 10.0, Width: 20.0},
-		Triangle{Base: 6.0, Height: 7.0},
+	// Create a new publisher-subscriber instance
+	ps := &psImpl{
+		messages:    make(chan Message, 100), // Buffered channel to avoid blocking
+		subscribers: sync.WaitGroup{},
+		cancel:      make(chan struct{}),
 	}
 
-	for _, shape := range shapes {
-		fmt.Printf("Area of %T is %.2f\n", shape, shape.Area())
+	// Start a publisher goroutine
+	go func() {
+		defer close(ps.cancel)
+		for {
+			select {
+			case <-ps.cancel:
+				return
+			default:
+				msg := Message{
+					Content:   fmt.Sprintf("Message %d", time.Now().UnixNano()),
+					Timestamp: time.Now(),
+				}
+				ps.Publish(msg)
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}()
+
+	// Start multiple subscriber goroutines
+	numSubscribers := 3
+	for i := 0; i < numSubscribers; i++ {
+		go func(id int) {
+			subscription := ps.Subscribe()
+			for msg := range subscription {
+				fmt.Printf("Subscriber %d received: %s at %s\n", id, msg.Content, msg.Timestamp)
+			}
+			fmt.Printf("Subscriber %d is done.\n", id)
+		}(i)
 	}
+
+	// Simulate a graceful shutdown
+	time.Sleep(5 * time.Second)
+	ps.Close()
 }
