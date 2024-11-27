@@ -1,54 +1,69 @@
 package main
 
 import (
-	"fmt"
-	"sync"
+	"log"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
-func generateData(dataCh chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for i := 1; i <= 100; i++ {
-		dataCh <- i
-	}
-	close(dataCh)
-}
-
-func transformData(dataCh <-chan int, transformedCh chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for data := range dataCh {
-		transformedCh <- data + 1
-	}
-	close(transformedCh)
-}
-
-func aggregateResults(transformedCh <-chan int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	var total int
-	for transformed := range transformedCh {
-		total += transformed
-	}
-	fmt.Println("Final Sum:", total)
-}
-
 func main() {
-	var wg sync.WaitGroup
-	dataCh := make(chan int)
-	transformedCh := make(chan int)
+	router := gin.Default()
 
-	// Launch the data generators
-	wg.Add(1)
-	go generateData(dataCh, &wg)
+	// Middleware for basic authentication
+	router.Use(BasicAuth())
 
-	// Launch the data transformers
-	const numTransformers = 4
-	wg.Add(numTransformers)
-	for i := 0; i < numTransformers; i++ {
-		go transformData(dataCh, transformedCh, &wg)
+	// Define routes
+	router.GET("/api/v1/users", GetUsers)
+	router.POST("/api/v1/users", CreateUser)
+
+	// Start the server on port 8000
+	err := router.Run(":8000")
+	if err != nil {
+		log.Fatalf("Error starting server: %v", err)
 	}
+}
 
-	// Launch the aggregator
-	wg.Add(1)
-	go aggregateResults(transformedCh, &wg)
+// BasicAuth Middleware
+func BasicAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get the Basic Authentication credentials
+		username, password, ok := c.Request.BasicAuth()
+		if !ok || username != "your_username" || password != "your_password" {
+			// Request Basic Authentication if credentials are not provided
+			c.Header("WWW-Authenticate", "Basic realm=\"Restricted\"")
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		// Valid credentials, allow the request to proceed
+		c.Next()
+	}
+}
 
-	wg.Wait()
+// User struct for demonstration purposes
+type User struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+var users = []User{
+	{ID: 1, Name: "John Doe"},
+	{ID: 2, Name: "Jane Doe"},
+}
+
+// GetUsers Handler
+func GetUsers(c *gin.Context) {
+	c.JSON(http.StatusOK, users)
+}
+
+// CreateUser Handler
+func CreateUser(c *gin.Context) {
+	var newUser User
+	if err := c.ShouldBindJSON(&newUser); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	// Add the new user to the users slice
+	users = append(users, newUser)
+	c.JSON(http.StatusCreated, newUser)
 }
