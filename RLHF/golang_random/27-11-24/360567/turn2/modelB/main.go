@@ -2,53 +2,42 @@ package main
 
 import (
 	"fmt"
-	"sync"
 )
 
-func generateData(dataCh chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for i := 1; i <= 100; i++ {
-		dataCh <- i
-	}
-	close(dataCh)
+// Define the interface Shape which requires all shapes to have an Area() float64 method
+type Shape interface {
+	Area() float64
 }
 
-func transformData(dataCh <-chan int, transformedCh chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for data := range dataCh {
-		transformedCh <- data + 1
-	}
-	close(transformedCh)
+// struct for Circle
+type Circle struct {
+	Radius float64
 }
 
-func aggregateResults(transformedCh <-chan int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	var total int
-	for transformed := range transformedCh {
-		total += transformed
-	}
-	fmt.Println("Final Sum:", total)
+// Implement the Shape interface for Circle
+func (c Circle) Area() float64 {
+	return 3.14 * c.Radius * c.Radius
+}
+
+// struct for Square
+type Square struct {
+	Side float64
+}
+
+// Implement the Shape interface for Square
+func (s Square) Area() float64 {
+	return s.Side * s.Side
+}
+
+// function to calculate the area of a given shape using the interface method
+func calculateArea(shape Shape) float64 {
+	return shape.Area()
 }
 
 func main() {
-	var wg sync.WaitGroup
-	dataCh := make(chan int)
-	transformedCh := make(chan int)
+	circle := Circle{Radius: 5.5}
+	square := Square{Side: 10.0}
 
-	// Launch the data generators
-	wg.Add(1)
-	go generateData(dataCh, &wg)
-
-	// Launch the data transformers
-	const numTransformers = 4
-	wg.Add(numTransformers)
-	for i := 0; i < numTransformers; i++ {
-		go transformData(dataCh, transformedCh, &wg)
-	}
-
-	// Launch the aggregator
-	wg.Add(1)
-	go aggregateResults(transformedCh, &wg)
-
-	wg.Wait()
+	fmt.Println("Area of circle:", calculateArea(circle))
+	fmt.Println("Area of square:", calculateArea(square))
 }

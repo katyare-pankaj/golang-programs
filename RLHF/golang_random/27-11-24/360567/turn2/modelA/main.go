@@ -1,61 +1,52 @@
 package main
 
-import (
-	"fmt"
-	"sync"
-	"time"
-)
+import "fmt"
 
-type Data struct {
-	Value int
+// Shape is an interface that defines the behavior of shapes.
+type Shape interface {
+	Area() float64
+}
+
+// Circle is a struct that implements the Shape interface.
+type Circle struct {
+	Radius float64
+}
+
+// Area calculates the area of the circle.
+func (c Circle) Area() float64 {
+	return 3.14 * c.Radius * c.Radius
+}
+
+// Rectangle is a struct that implements the Shape interface.
+type Rectangle struct {
+	Length float64
+	Width  float64
+}
+
+// Area calculates the area of the rectangle.
+func (r Rectangle) Area() float64 {
+	return r.Length * r.Width
+}
+
+// Triangle is a struct that implements the Shape interface.
+type Triangle struct {
+	Base   float64
+	Height float64
+}
+
+// Area calculates the area of the triangle.
+func (t Triangle) Area() float64 {
+	return 0.5 * t.Base * t.Height
 }
 
 func main() {
-	var wg sync.WaitGroup
-	dataChan := make(chan Data, 10)
-	transformedChan := make(chan Data, 10)
-	aggregatedChan := make(chan Data, 10)
-
-	// Producer goroutines to generate Data and send it to dataChan
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 10; j++ {
-				data := Data{Value: i*10 + j}
-				dataChan <- data
-				time.Sleep(time.Millisecond * 100) // Simulate some work
-			}
-		}()
+	shapes := []Shape{
+		Circle{Radius: 5.0},
+		Rectangle{Length: 10.0, Width: 20.0},
+		Triangle{Base: 6.0, Height: 7.0},
 	}
 
-	// Transformer goroutines to receive Data from dataChan, transform it, and send it to transformedChan
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for data := range dataChan {
-				data.Value += 100 // Transform the data by incrementing
-				transformedChan <- data
-			}
-		}()
+	for _, shape := range shapes {
+		fmt.Printf("Area of %T is %.2f\n", shape, shape.Area())
 	}
-
-	// Aggregator goroutine to receive transformed data from transformedChan, aggregate it, and print the results
-	go func() {
-		var sum int
-		var count int
-
-		for data := range transformedChan {
-			sum += data.Value
-			count++
-		}
-
-		fmt.Printf("Aggregated Results: Sum = %d, Count = %d\n", sum, count)
-		wg.Done()
-	}()
-
-	// Wait for all goroutines to finish
-	wg.Wait()
-	close(aggregatedChan)
 }
