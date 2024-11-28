@@ -56,7 +56,7 @@ func SendEmail(config EmailConfig, email Email) error {
 func main() {
 	// Example SMTP configuration
 	config := EmailConfig{
-		Host:     "smtp.example.com",
+		Host:     "smtp.gmail.com",
 		Port:     587,
 		Username: "your-username@example.com",
 		Password: "your-password",

@@ -1,78 +1,39 @@
-package email
+package main
 
-import "fmt"
+import (
+	"fmt"
+	"go-programs/RLHF/golang_alignment_5/21-11-24/357250/turn1/modelA/email"
+)
 
-// Email represents an email message.
-type Email struct {
-	From    string
-	To      []string
-	Subject string
-	Body    string
-	IsHTML  bool
-}
-
-// Sender interface defines the contract for sending an email.
-type Sender interface {
-	Send(email *Email) error
-}
-
-// Config contains the email configuration.
-type Config struct {
-	SMTPHost     string
-	SMTPPort     int
-	SMTPUsername string
-	SMTPPassword string
-	TLS          bool
-}
-
-// Transport is a struct to handle SMTP transport.
-type Transport struct {
-	config *Config
-}
-
-// NewTransport creates a new Transport instance.
-func NewTransport(config *Config) *Transport {
-	return &Transport{config: config}
-}
-
-// SendEmail sends an email using the configured SMTP transport.
-func (t *Transport) SendEmail(email *Email) error {
-	// Simplified logic for demonstration purposes.
-	// In practice, you would use the net/smtp package here.
-	return nil
-}
-
-// NewSender creates a new Sender instance.
-func NewSender(transport Sender) *SenderImpl {
-	return &SenderImpl{transport: transport}
-}
-
-// SenderImpl implements the Sender interface.
-type SenderImpl struct {
-	transport Sender
-}
-
-// Send sends an email using the configured transport.
-func (s *SenderImpl) Send(email *Email) error {
-	// Optionally, validate the email before sending
-	if email == nil || email.From == "" || email.To == nil || len(email.To) == 0 {
-		return fmt.Errorf("invalid email message")
+// Main function to run the code
+func main() {
+	// Load the email configuration
+	config, err := email.LoadConfig()
+	if err != nil {
+		fmt.Println("Error loading config:", err)
+		return
 	}
 
-	// Send the email using the transport
-	return s.transport.SendEmail(email)
-}
+	// Create a Transport with the loaded configuration
+	transport := email.NewTransport(config)
 
-// LoadConfig loads email configuration from a file or environment variables.
-func LoadConfig() (*Config, error) {
-	// Placeholder for actual configuration loading logic.
-	// This could include parsing a yaml file, reading env vars, etc.
-	config := &Config{
-		SMTPHost:     "smtp.example.com",
-		SMTPPort:     587,
-		SMTPUsername: "user@example.com",
-		SMTPPassword: "password",
-		TLS:          true,
+	// Create a Sender using the Transport
+	sender := email.NewSender(transport)
+
+	// Create an Email to send
+	email := &email.Email{
+		From:    "sender@example.com",
+		To:      []string{"recipient@example.com"},
+		Subject: "Test Email",
+		Body:    "This is a test email.",
+		IsHTML:  false,
 	}
-	return config, nil
+
+	// Send the email
+	err = sender.Send(email)
+	if err != nil {
+		fmt.Println("Error sending email:", err)
+	} else {
+		fmt.Println("Email sent successfully!")
+	}
 }
