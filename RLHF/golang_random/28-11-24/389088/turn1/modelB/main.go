@@ -1,7 +1,10 @@
-package mylibrary
+package main
 
 import (
+	"fmt"
 	"net/http"
+
+	"github.com/gorilla/mux"
 )
 
 type ErrUnauthorized struct {
@@ -55,4 +58,14 @@ func MyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Handle success
+	w.Write([]byte("success"))
+}
+func main() {
+	route := mux.NewRouter()
+
+	route.HandleFunc("/api", MyHandler)
+
+	fmt.Print("server listening code 8080")
+
+	http.ListenAndServe(":8080", route)
 }
