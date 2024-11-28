@@ -1,91 +1,72 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
-	"reflect"
+	"time"
 )
 
-type TCPFrame struct {
-	SourcePort           uint16
-	DestinationPort      uint16
-	SequenceNumber       uint32
-	AcknowledgmentNumber uint32
-	DataOffset           uint8
-	Reserved             uint8
-	Flags                uint8
-	WindowSize           uint16
-	Checksum             uint16
-	UrgentPointer        uint16
-	Options              []byte
-	Data                 []byte
+type ErrInvalidInput struct {
+	message string
 }
 
-func serializeTCPFrame(frame interface{}) []byte {
-	v := reflect.ValueOf(frame)
-	t := reflect.TypeOf(frame)
-	numFields := t.NumField()
-	var data []byte
+func (e *ErrInvalidInput) Error() string {
+	return e.message
+}
 
-	for i := 0; i < numFields; i++ {
-		field := v.Field(i)
-		fieldType := t.Field(i)
+func NewErrInvalidInput(message string) error {
+	return &ErrInvalidInput{message: message}
+}
 
-		switch fieldType.Kind {
-		case reflect.Uint8:
-			data = append(data, byte(field.Uint()))
-		case reflect.Uint16:
-			data = append(data, binary.LittleEndian.Uint16([]byte(field.Uint())))
-		case reflect.Uint32:
-			data = append(data, binary.LittleEndian.Uint32([]byte(field.Uint())))
-		case reflect.Slice:
-			switch fieldType.Elem.Kind {
-			case reflect.Uint8:
-				data = append(data, field.Bytes()...)
-			default:
-				panic(fmt.Sprintf("Unsupported slice element type: %v", fieldType.Elem.Kind))
-			}
-		default:
-			panic(fmt.Sprintf("Unsupported field type: %v", fieldType.Kind))
-		}
+type ErrInternalError struct {
+	message string
+}
+
+func (e *ErrInternalError) Error() string {
+	return e.message
+}
+
+func NewErrInternalError(message string) error {
+	return &ErrInternalError{message: message}
+}
+
+func validateInput(input string) error {
+	if len(input) == 0 {
+		return NewErrInvalidInput("Input cannot be empty")
 	}
-
-	return data
+	return nil
 }
-func inspectTCPFrame(frame interface{}) {
-	v := reflect.ValueOf(frame)
-	t := reflect.TypeOf(frame)
-	numFields := t.NumField()
 
-	fmt.Printf("TCP Frame Content:\n")
-	for i := 0; i < numFields; i++ {
-		field := v.Field(i)
-		fieldType := t.Field(i)
-		fmt.Printf("  %s: %v (%v)\n", fieldType.Name, field.Interface(), field.Kind())
-	}
+func processInput(input string) error {
+	// Simulate some processing
+	time.Sleep(100 * time.Millisecond)
+	return nil
 }
+
 func main() {
-	frame := TCPFrame{
-		SourcePort:           1234,
-		DestinationPort:      5678,
-		SequenceNumber:       1000,
-		AcknowledgmentNumber: 2000,
-		DataOffset:           5,
-		Reserved:             0,
-		Flags:                0x02, // SYN flag
-		WindowSize:           8192,
-		Checksum:             0, // Initialize with 0 for calculation
-		UrgentPointer:        0,
-		Options:              []byte{0x01, 0x03, 0x03, 0x07}, // MSS option
-		Data:                 []byte("Hello, World!"),
+	userInput := "hello" // Example user input
+
+	err := validateInput(userInput)
+	if err != nil {
+		switch err.(type) {
+		case *ErrInvalidInput:
+			fmt.Println("Error:", err.Error()) // User-friendly message for user
+		default:
+			fmt.Println("An unexpected error occurred while validating input:", err) // Internal logging for developer
+		}
+		return
 	}
 
-	// Inspect the frame
-	inspectTCPFrame(frame)
+	err = processInput(userInput)
+	if err != nil {
+		switch err.(type) {
+		case *ErrInternalError:
+			fmt.Println("An internal error occurred:", err) // Informative message for user
+		default:
+			fmt.Println("A critical error occurred:", err) // General error message for user
+			fmt.Println("Details:", err)                   // Internal logging for developer
+		}
+		return
+	}
 
-	// Serialize the frame into a byte slice
-	serializedData := serializeTCPFrame(frame)
-	fmt.Printf("Serialized TCP Frame (bytes): %v\n", serializedData)
-
-	// You can now transmit the serializedData over the network
+	fmt.Println("Input processed successfully.")
 }
