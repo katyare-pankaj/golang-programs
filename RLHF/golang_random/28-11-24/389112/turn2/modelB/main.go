@@ -2,32 +2,51 @@ package main
 
 import (
 	"fmt"
-	"go-programs/RLHF/golang_random/28-11-24/389103/turn2/modelB/bankaccount"
+	"math/rand"
+	"sync"
+	"time"
 )
 
+// Define the task type
+type task struct {
+	id   int
+	data string
+}
+
+// Buffered channel to hold tasks
+var taskQueue = make(chan task, 100)
+
+// Worker function to process tasks from the queue
+func worker(id int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for task := range taskQueue {
+		fmt.Printf("Worker %d: Processing task %d: %s\n", id, task.id, task.data)
+		// Simulate work with a random delay
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+	}
+}
+
 func main() {
-	// Create a new bank account with an initial balance of $100.
-	account, err := bankaccount.NewBankAccount("Alice", 100.0)
-	if err != nil {
-		panic(err)
+	const numWorkers = 10
+	var wg sync.WaitGroup
+
+	// Start worker goroutines
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go worker(i+1, &wg)
 	}
 
-	fmt.Printf("Account Holder: %s\n", account.Name())
-	fmt.Printf("Initial Balance: $%.2f\n", account.Balance())
-
-	// Deposit $50 into the account.
-	err = account.Deposit(50.0)
-	if err != nil {
-		panic(err)
+	// Generate some sample tasks and send them to the channel
+	for i := 0; i < 100; i++ {
+		task := task{id: i + 1, data: fmt.Sprintf("Task %d", i+1)}
+		taskQueue <- task
 	}
 
-	fmt.Printf("Balance after Deposit: $%.2f\n", account.Balance())
+	// Close the task channel to signal workers that no more tasks will be added
+	close(taskQueue)
 
-	// Withdraw $30 from the account.
-	err = account.Withdraw(30.0)
-	if err != nil {
-		panic(err)
-	}
+	// Wait for all worker goroutines to finish
+	wg.Wait()
 
-	fmt.Printf("Balance after Withdrawal: $%.2f\n", account.Balance())
+	fmt.Println("All tasks completed.")
 }

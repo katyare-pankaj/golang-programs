@@ -2,31 +2,57 @@ package main
 
 import (
 	"fmt"
-	"go-programs/RLHF/golang_random/28-11-24/389103/turn2/modelA/bank"
+	"math/rand"
+	"sync"
+	"time"
 )
 
+// Define the task type
+type task struct {
+	id   int
+	data string
+}
+
+// Worker function that processes tasks from the queue
+func worker(id int, tasks <-chan task, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for task := range tasks {
+		fmt.Printf("Worker %d: Processing task %d: %s\n", id, task.id, task.data)
+		// Simulate work with a random delay
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+	}
+}
+
 func main() {
-	// Create two bank accounts
-	account1 := bank.NewAccount(1000) // Initialize with a balance of 1000
-	account2 := bank.NewAccount(500)  // Initialize with a balance of 500
+	// Initialize the random number generator
+	rand.Seed(time.Now().UnixNano())
 
-	fmt.Printf("Initial Balance of Account 1: %.2f\n", account1.Balance())
-	fmt.Printf("Initial Balance of Account 2: %.2f\n", account2.Balance())
+	// Create a buffered channel to hold tasks
+	tasks := make(chan task, 100)
 
-	// Deposit money into account1
-	account1.Deposit(200)
-	fmt.Printf("Balance of Account 1 after deposit: %.2f\n", account1.Balance())
+	// Start a wait group to manage goroutines
+	var wg sync.WaitGroup
 
-	// Withdraw money from account2
-	account2.Withdraw(100)
-	fmt.Printf("Balance of Account 2 after withdrawal: %.2f\n", account2.Balance())
+	// Define the number of worker goroutines
+	numWorkers := 5
 
-	// Transfer money from account1 to account2
-	account1.Transfer(300, account2)
-	fmt.Printf("Balance of Account 1 after transfer: %.2f\n", account1.Balance())
-	fmt.Printf("Balance of Account 2 after transfer: %.2f\n", account2.Balance())
+	// Start worker goroutines
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go worker(i+1, tasks, &wg)
+	}
 
-	// Attempt to withdraw an amount greater than the available balance in account1
-	account1.Withdraw(1500)
-	fmt.Printf("Balance of Account 1 after failed withdrawal attempt: %.2f\n", account1.Balance())
+	// Generate some sample tasks and send them to the channel
+	for i := 0; i < 100; i++ {
+		task := task{id: i + 1, data: fmt.Sprintf("Task %d", i+1)}
+		tasks <- task
+	}
+
+	// Close the task channel to signal workers that no more tasks will be added
+	close(tasks)
+
+	// Wait for all worker goroutines to finish
+	wg.Wait()
+
+	fmt.Println("All tasks completed.")
 }
