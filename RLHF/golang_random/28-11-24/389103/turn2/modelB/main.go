@@ -2,53 +2,32 @@ package main
 
 import (
 	"fmt"
-	"sync"
+	"go-programs/RLHF/golang_random/28-11-24/389103/turn2/modelB/bankaccount"
 )
 
-func generateData(dataCh chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for i := 1; i <= 100; i++ {
-		dataCh <- i
-	}
-	close(dataCh)
-}
-
-func transformData(dataCh <-chan int, transformedCh chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for data := range dataCh {
-		transformedCh <- data + 1
-	}
-	close(transformedCh)
-}
-
-func aggregateResults(transformedCh <-chan int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	var total int
-	for transformed := range transformedCh {
-		total += transformed
-	}
-	fmt.Println("Final Sum:", total)
-}
-
 func main() {
-	var wg sync.WaitGroup
-	dataCh := make(chan int)
-	transformedCh := make(chan int)
-
-	// Launch the data generators
-	wg.Add(1)
-	go generateData(dataCh, &wg)
-
-	// Launch the data transformers
-	const numTransformers = 4
-	wg.Add(numTransformers)
-	for i := 0; i < numTransformers; i++ {
-		go transformData(dataCh, transformedCh, &wg)
+	// Create a new bank account with an initial balance of $100.
+	account, err := bankaccount.NewBankAccount("Alice", 100.0)
+	if err != nil {
+		panic(err)
 	}
 
-	// Launch the aggregator
-	wg.Add(1)
-	go aggregateResults(transformedCh, &wg)
+	fmt.Printf("Account Holder: %s\n", account.Name())
+	fmt.Printf("Initial Balance: $%.2f\n", account.Balance())
 
-	wg.Wait()
+	// Deposit $50 into the account.
+	err = account.Deposit(50.0)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Balance after Deposit: $%.2f\n", account.Balance())
+
+	// Withdraw $30 from the account.
+	err = account.Withdraw(30.0)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Balance after Withdrawal: $%.2f\n", account.Balance())
 }

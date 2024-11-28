@@ -2,60 +2,31 @@ package main
 
 import (
 	"fmt"
-	"sync"
-	"time"
+	"go-programs/RLHF/golang_random/28-11-24/389103/turn2/modelA/bank"
 )
 
-type Data struct {
-	Value int
-}
-
 func main() {
-	var wg sync.WaitGroup
-	dataChan := make(chan Data, 10)
-	transformedChan := make(chan Data, 10)
-	aggregatedChan := make(chan Data, 10)
+	// Create two bank accounts
+	account1 := bank.NewAccount(1000) // Initialize with a balance of 1000
+	account2 := bank.NewAccount(500)  // Initialize with a balance of 500
 
-	// Producer goroutines to generate Data and send it to dataChan
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 10; j++ {
-				data := Data{Value: i*10 + j}
-				dataChan <- data
-				time.Sleep(time.Millisecond * 100) // Simulate some work
-			}
-		}()
-	}
+	fmt.Printf("Initial Balance of Account 1: %.2f\n", account1.Balance())
+	fmt.Printf("Initial Balance of Account 2: %.2f\n", account2.Balance())
 
-	// Transformer goroutines to receive Data from dataChan, transform it, and send it to transformedChan
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for data := range dataChan {
-				data.Value += 100 // Transform the data by incrementing
-				transformedChan <- data
-			}
-		}()
-	}
+	// Deposit money into account1
+	account1.Deposit(200)
+	fmt.Printf("Balance of Account 1 after deposit: %.2f\n", account1.Balance())
 
-	// Aggregator goroutine to receive transformed data from transformedChan, aggregate it, and print the results
-	go func() {
-		var sum int
-		var count int
+	// Withdraw money from account2
+	account2.Withdraw(100)
+	fmt.Printf("Balance of Account 2 after withdrawal: %.2f\n", account2.Balance())
 
-		for data := range transformedChan {
-			sum += data.Value
-			count++
-		}
+	// Transfer money from account1 to account2
+	account1.Transfer(300, account2)
+	fmt.Printf("Balance of Account 1 after transfer: %.2f\n", account1.Balance())
+	fmt.Printf("Balance of Account 2 after transfer: %.2f\n", account2.Balance())
 
-		fmt.Printf("Aggregated Results: Sum = %d, Count = %d\n", sum, count)
-		wg.Done()
-	}()
-
-	// Wait for all goroutines to finish
-	wg.Wait()
-	close(aggregatedChan)
+	// Attempt to withdraw an amount greater than the available balance in account1
+	account1.Withdraw(1500)
+	fmt.Printf("Balance of Account 1 after failed withdrawal attempt: %.2f\n", account1.Balance())
 }
