@@ -1,33 +1,43 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"go-programs/RLHF/golang_random/28-11-24/389103/turn2/modelB/bankaccount"
 )
 
+// Custom error type with context
+type MyError struct {
+	Message string
+	Context map[string]string
+}
+
+func (e MyError) Error() string {
+	return e.Message
+}
+
+func doSomething() error {
+	// Simulate an error
+	if err := someOperation(); err != nil {
+		return fmt.Errorf("something failed: %w", err)
+	}
+	return nil
+}
+
+func someOperation() error {
+	return errors.New("operation failed due to network error")
+}
+
 func main() {
-	// Create a new bank account with an initial balance of $100.
-	account, err := bankaccount.NewBankAccount("Alice", 100.0)
+	err := doSomething()
 	if err != nil {
-		panic(err)
+		// Handle the error
+		if varErr, ok := err.(*MyError); ok {
+			fmt.Printf("Error: %s\n", varErr.Message)
+			for key, value := range varErr.Context {
+				fmt.Printf("Context: %s = %s\n", key, value)
+			}
+		} else {
+			fmt.Printf("Error: %s\n", err)
+		}
 	}
-
-	fmt.Printf("Account Holder: %s\n", account.Name())
-	fmt.Printf("Initial Balance: $%.2f\n", account.Balance())
-
-	// Deposit $50 into the account.
-	err = account.Deposit(50.0)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("Balance after Deposit: $%.2f\n", account.Balance())
-
-	// Withdraw $30 from the account.
-	err = account.Withdraw(30.0)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("Balance after Withdrawal: $%.2f\n", account.Balance())
 }
