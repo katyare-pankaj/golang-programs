@@ -2,70 +2,56 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 )
 
-// workerPool represents a pool of goroutines that process work items.
-type workerPool struct {
-	// jobs is a channel where work items are queued.
-	jobs chan func()
-	// wg is used to wait for all workers to finish.
-	wg sync.WaitGroup
-	// numWorkers is the number of workers in the pool.
-	numWorkers int
+const (
+	numWorkers    = 10  // Number of worker goroutines
+	taskQueueSize = 100 // Size of the task queue channel
+)
+
+// Define the task type
+type task struct {
+	id   int
+	data string
 }
 
-// newWorkerPool creates a new worker pool with the specified number of workers.
-func newWorkerPool(numWorkers int) *workerPool {
-	wp := &workerPool{
-		jobs:       make(chan func(), 100), // Buffered channel to limit blocking
-		numWorkers: numWorkers,
-	}
-	// Start the workers.
-	wp.startWorkers()
-	return wp
-}
-
-// startWorkers starts the specified number of workers.
-func (wp *workerPool) startWorkers() {
-	for i := 0; i < wp.numWorkers; i++ {
-		wp.wg.Add(1)
-		go wp.worker()
+// Worker function that processes tasks from the queue
+func worker(id int, tasks <-chan task, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for task := range tasks {
+		fmt.Printf("Worker %d: Processing task %d: %s\n", id, task.id, task.data)
+		// Simulate work with a random delay
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
 	}
 }
 
-// worker runs as a goroutine and processes work items from the jobs channel.
-func (wp *workerPool) worker() {
-	defer wp.wg.Done()
-	for job := range wp.jobs {
-		job()
-	}
-}
-
-// Submit submits a work item to the worker pool.
-func (wp *workerPool) Submit(job func()) {
-	wp.jobs <- job
-}
-
-// Stop stops the worker pool and waits for all workers to finish.
-func (wp *workerPool) Stop() {
-	close(wp.jobs)
-	wp.wg.Wait()
-}
-
-// Example usage:
 func main() {
-	// Create a worker pool with 10 workers.
-	wp := newWorkerPool(10)
-	// Simulate work items being submitted to the worker pool.
-	for i := 0; i < 1000; i++ {
-		wp.Submit(func() {
-			time.Sleep(time.Millisecond * 100)
-			fmt.Println("Work item completed")
-		})
+	// Create a buffered channel to hold tasks
+	tasks := make(chan task, taskQueueSize)
+
+	// Start a wait group to manage goroutines
+	var wg sync.WaitGroup
+
+	// Start worker goroutines
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go worker(i+1, tasks, &wg)
 	}
-	// Wait for all work items to be processed.
-	wp.Stop()
-	fmt.Println("All work items completed")
+
+	// Generate some sample tasks and send them to the channel
+	for i := 0; i < 100; i++ {
+		task := task{id: i + 1, data: fmt.Sprintf("Task %d", i+1)}
+		tasks <- task
+	}
+
+	// Close the task channel to signal workers that no more tasks will be added
+	close(tasks)
+
+	// Wait for all worker goroutines to finish
+	wg.Wait()
+
+	fmt.Println("All tasks completed.")
 }

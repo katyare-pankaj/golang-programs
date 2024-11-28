@@ -2,81 +2,66 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 )
 
-const workerPoolSize = 10
+const (
+	numWorkers = 10
+	taskCount  = 1000
+)
 
-type workerPool struct {
-	workers  chan chan<- int
-	tasks    chan int
-	shutdown chan struct{}
-	wg       *sync.WaitGroup
+var wg sync.WaitGroup
+
+// Worker represents a worker goroutine
+type Worker struct {
+	workCh chan int
 }
 
-func newWorkerPool() *workerPool {
-	wp := &workerPool{
-		workers:  make(chan chan<- int, workerPoolSize),
-		tasks:    make(chan int),
-		shutdown: make(chan struct{}),
-		wg:       &sync.WaitGroup{},
+// NewWorker creates a new Worker with a given buffer size
+func NewWorker(bufferSize int) *Worker {
+	return &Worker{
+		workCh: make(chan int, bufferSize),
 	}
-
-	// Start worker goroutines
-	for i := 0; i < workerPoolSize; i++ {
-		workerChan := make(chan int)
-		wp.workers <- workerChan
-
-		wp.wg.Add(1)
-		go wp.worker(workerChan)
-	}
-
-	return wp
 }
 
-func (wp *workerPool) worker(workerChan chan<- int) {
-	defer wp.wg.Done()
-
-	for {
-		select {
-		case task, ok := <-workerChan:
-			if !ok {
-				return
-			}
-			fmt.Printf("Worker %d processing task %d\n", workerChan, task)
-			time.Sleep(time.Duration(task) * time.Millisecond)
-
-		case <-wp.shutdown:
-			return
+// Start starts the worker goroutine
+func (w *Worker) Start() {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for task := range w.workCh {
+			time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond) // Simulate work
+			fmt.Println("Worker", w.workCh, "completed task", task)
 		}
-	}
+	}()
 }
 
-func (wp *workerPool) submitTask(task int) {
-	select {
-	case workerChan := <-wp.workers:
-		workerChan <- task
-	case <-wp.shutdown:
-		// Ignore task if the pool is shutting down
-	}
-}
-
-func (wp *workerPool) shutdownPool() {
-	close(wp.workers)
-	close(wp.tasks)
-	wp.wg.Wait()
-	close(wp.shutdown)
+// Stop stops the worker goroutine by closing the work channel
+func (w *Worker) Stop() {
+	close(w.workCh)
 }
 
 func main() {
-	wp := newWorkerPool()
-
-	// Submit tasks
-	for i := 1; i <= 100; i++ {
-		wp.submitTask(i)
+	// Create and start worker goroutines
+	workers := make([]*Worker, numWorkers)
+	for i := range workers {
+		workers[i] = NewWorker(100) // Buffer size
+		workers[i].Start()
 	}
 
-	// Shut down the pool
-	wp.shutdownPool()
+	// Generate and send tasks
+	for i := 1; i <= taskCount; i++ {
+		workerIndex := rand.Intn(numWorkers)
+		workers[workerIndex].workCh <- i
+	}
+
+	// Wait for all workers to complete
+	wg.Wait()
+
+	// Stop all workers
+	for _, worker := range workers {
+		worker.Stop()
+	}
 }
