@@ -1,90 +1,65 @@
-package main  
-import (  
-    "fmt"
-    "math/rand"
-    "sync"
-    "time"
+package main
+
+import (
+	"fmt"
+	"math/rand"
+	"sync"
 )
 
-const (
-    minWorkers        = 2           // Minimum number of workers in the pool
-    maxWorkers        = 10          // Maximum number of workers in the pool
-    maxRetryAttempts  = 3          // Maximum number of retry attempts for failed jobs
-    workerIdleTimeout = 1 * time.Second // Timeout for worker idle
-)
-
-// Job represents a work item to be processed by a worker.
-type Job struct {
-    ID    int
-    Data string
-    RetryCount int  // To track retry attempts
+// SharedData represents our shared resource
+type SharedData struct {
+	data    map[int]int
+	rwMutex sync.RWMutex
 }
 
-// Worker represents a worker that processes jobs from the queue.
-type Worker struct {
-    id           int
-    jobQueue     chan Job
-    retryQueue   chan Job
-    shutdownChan chan struct{}
-    wg           *sync.WaitGroup
+func newSharedData() *SharedData {
+	return &SharedData{
+		data: make(map[int]int),
+	}
 }
 
-// NewWorker creates a new worker with the given id and shared job and retry queues.
-func NewWorker(id int, jobQueue, retryQueue chan Job, shutdownChan chan struct{}, wg *sync.WaitGroup) *Worker {
-    return &Worker{
-        id:           id,
-        jobQueue:     jobQueue,
-        retryQueue:   retryQueue,
-        shutdownChan: shutdownChan,
-        wg:           wg,
-    }
+// Read access, multiple readers allowed
+func (sd *SharedData) Read(key int) int {
+	sd.rwMutex.RLock()
+	defer sd.rwMutex.RUnlock()
+	return sd.data[key]
 }
 
-// Start starts the worker's goroutine and begins processing jobs from the queue.
-func (w *Worker) Start() {
-    go w.processJobs()
+// Write access, only one writer allowed
+func (sd *SharedData) Write(key, value int) {
+	sd.rwMutex.Lock()
+	defer sd.rwMutex.Unlock()
+	sd.data[key] = value
 }
 
-// processJobs continuously listens for jobs on the job queue and processes them.
-// If a job fails, it is retried after an exponential backoff period.
-func (w *Worker) processJobs() {
-    defer w.wg.Done()
+func main() {
+	var wg sync.WaitGroup
+	const numThreads = 10
+	const numIterations = 10000
+	sharedData := newSharedData()
 
-    for {
-        select {
-        case job := <-w.jobQueue:
-            fmt.Printf("Worker %d: Processing job %d: %s\n", w.id, job.ID, job.Data)
+	wg.Add(numThreads)
 
-            // Simulate job processing with a random delay
-            time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+	// launching several readers
+	for i := 0; i < numThreads; i++ {
+		go func() {
+			for j := 0; j < numIterations; j++ {
+				key := rand.Intn(100)
+				value := sharedData.Read(key)
+				if value == 0 {
+					sharedData.Write(key, j) //writing new value
+				}
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 
-            // Simulate job failure with a random probability
-            if rand.Intn(10) == 0 {
-                fmt.Printf("Worker %d: Job %d failed\n", w.id, job.ID)
-                // Retry the job if it hasn't exceeded the maximum retry attempts
-                if job.RetryCount < maxRetryAttempts {
-                    job.RetryCount++
-                    w.retryQueue <- job
-                } else {
-                    fmt.Printf("Worker %d: Job %d failed after %d retries. Giving up.\n", w.id, job.ID, job.RetryCount)
-                }
-                break
-            }
-
-            // If the job succeeds, no need to retry it
-
-        case <-w.shutdownChan:
-            fmt.Printf("Worker %d: Received shutdown signal. Shutting down.\n", w.id)
-            return
-        }
-    }
+	// Display the contents of the shared data
+	fmt.Println("Final Shared Data:")
+	sharedData.rwMutex.RLock()
+	for k, v := range sharedData.data {
+		fmt.Printf("%d: %d\n", k, v)
+	}
+	sharedData.rwMutex.RUnlock()
 }
-
-// WorkerPool represents the dynamic worker pool manager.
-type WorkerPool struct {
-    jobQueue          chan Job
-    retryQueue        chan Job
-    workers           []*Worker
-    workerShutdownChans []chan struct{}
-    numWorkers        int
-    wg                *sync.WaitGroup
