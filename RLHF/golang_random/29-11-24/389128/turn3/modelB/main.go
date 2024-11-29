@@ -2,73 +2,40 @@ package main
 
 import (
 	"fmt"
-	"sync"
-	"time"
+
+	"github.com/spf13/viper"
 )
 
-// SharedCounter struct using RWMutex
-type SharedCounter struct {
-	count int
-	rwmu  sync.RWMutex
+// LoadConfig loads the configuration from a file
+func LoadConfig(configPath string) {
+	viper.SetConfigFile(configPath)
+	viper.AddConfigPath(".")
+	err := viper.ReadInConfig()
+	if err != nil {
+		panic(fmt.Errorf("Fatal error config file: %s \n", err))
+	}
 }
 
-// Increment method for incrementing the counter (writer operation)
-func (sc *SharedCounter) Increment() {
-	sc.rwmu.Lock()
-	sc.count++
-	sc.rwmu.Unlock()
-}
-
-// Decrement method for decrementing the counter (writer operation)
-func (sc *SharedCounter) Decrement() {
-	sc.rwmu.Lock()
-	sc.count--
-	sc.rwmu.Unlock()
-}
-
-// ReadCounter method for reading the counter (reader operation)
-func (sc *SharedCounter) ReadCounter() int {
-	sc.rwmu.RLock()
-	defer sc.rwmu.RUnlock()
-	return sc.count
+// IsFeatureEnabled checks if a feature is enabled based on the configuration
+func IsFeatureEnabled(feature string) bool {
+	return viper.GetBool("features." + feature)
 }
 
 func main() {
-	var sc SharedCounter
+	// Load configuration from config.yaml file
+	LoadConfig("config.yaml")
 
-	// Number of concurrent reader goroutines
-	const numReaders = 100
-
-	// Number of concurrent writer goroutines
-	const numWriters = 5
-
-	wg := &sync.WaitGroup{}
-	wg.Add(numReaders + numWriters)
-
-	//启动读取器
-	for i := 0; i < numReaders; i++ {
-		go func() {
-			for j := 0; j < 100000; j++ { // Each reader thread reads 100000 times
-				currentCount := sc.ReadCounter()
-				time.Sleep(time.Microsecond * 50) //introduce some sleep to simulate various read speeds
-			}
-			wg.Done()
-		}()
+	if IsFeatureEnabled("newFeature") {
+		fmt.Println("New feature is enabled.")
+		// Perform operations for the new feature
+	} else {
+		fmt.Println("New feature is disabled.")
 	}
 
-	//启动写入器
-	for i := 0; i < numWriters; i++ {
-		go func() {
-			for j := 0; j < 1000; j++ { // Each writer thread writes 1000 times
-				sc.Increment()
-				time.Sleep(time.Microsecond * 100) // introduce some sleep to simulate various write speeds
-				sc.Decrement()
-			}
-			wg.Done()
-		}()
+	if IsFeatureEnabled("experimentalFeature") {
+		fmt.Println("Experimental feature is enabled.")
+		// Perform operations for the experimental feature
+	} else {
+		fmt.Println("Experimental feature is disabled.")
 	}
-
-	wg.Wait()
-	// Final result
-	fmt.Println("Final Counter Value:", sc.ReadCounter())
 }

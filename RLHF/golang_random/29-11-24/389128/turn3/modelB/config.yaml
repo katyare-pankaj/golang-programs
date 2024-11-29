@@ -1,0 +1,4 @@
+# config.yaml
+features:
+  newFeature: false
+  experimentalFeature: true

@@ -2,67 +2,35 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
+	"log"
+
+	"go-programs/RLHF/golang_random/29-11-24/389128/turn3/modelA/config"
 )
 
-type SharedCounter struct {
-	counter int
-	rwmu    sync.RWMutex
-}
-
-func (s *SharedCounter) Read() int {
-	s.rwmu.RLock()
-	defer s.rwmu.RUnlock()
-	return s.counter
-}
-
-func (s *SharedCounter) Update(amount int) {
-	s.rwmu.Lock()
-	defer s.rwmu.Unlock()
-	s.counter += amount
-}
-
 func main() {
-	rand.Seed(time.Now().UnixNano())
-	counter := &SharedCounter{counter: 0}
-	numGoroutines := 100
-	const numReads = 100000
-
-	// Helper function for read operations
-	read := func(s *SharedCounter, id int) {
-		for i := 0; i < numReads; i++ {
-			value := s.Read()
-			if i%1000 == 0 {
-				go fmt.Printf("Goroutine %d: Read %d at iteration %d\n", id, value, i)
-			}
-		}
+	// Load configuration file
+	configFile := "config.json"
+	config, err := config.LoadConfig(configFile)
+	if err != nil {
+		log.Fatalf("Error loading configuration: %v", err)
 	}
 
-	// Helper function for update operations
-	update := func(s *SharedCounter) {
-		for i := 0; i < numReads; i++ {
-			amount := rand.Intn(10) - 5 // Random update amount between -5 and 5
-			s.Update(amount)
-			if i%1000 == 0 {
-				go fmt.Printf("Goroutine %d: Updated counter to %d at iteration %d\n", rand.Intn(numGoroutines), s.Read(), i)
-			}
-		}
+	// Check feature flags
+	if config.Features.NewFeature {
+		fmt.Println("New feature is enabled.")
+		newFeatureDemo()
+	} else {
+		fmt.Println("New feature is disabled.")
 	}
 
-	// Start reader goroutines
-	for i := 0; i < numGoroutines; i++ {
-		go read(counter, i)
+	if config.Features.DebugMode {
+		fmt.Println("Debug mode is enabled.")
+	} else {
+		fmt.Println("Debug mode is disabled.")
 	}
+}
 
-	// Start update goroutines
-	for i := 0; i < numGoroutines/2; i++ {
-		go update(counter)
-	}
-
-	// Allow goroutines to complete
-	time.Sleep(3 * time.Second)
-
-	fmt.Println("Final counter value:", counter.Read())
+// newFeatureDemo performs operations specific to the new feature.
+func newFeatureDemo() {
+	fmt.Println("Running the new feature functionality.")
 }
