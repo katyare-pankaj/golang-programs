@@ -1,93 +1,83 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"os"
+	"log"
+	"math/rand"
+	"net/http"
+	"sync"
+	"time"
 )
 
-type Logger interface {
-	Info(message string)
-	Error(message string)
-	Debug(message string)
-}
-
-type FileLogger struct {
-	file *os.File
-}
-
-func NewFileLogger(filename string) (*FileLogger, error) {
-	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil, err
+// Simulate a long-running task that can be canceled.
+func longRunningTask(ctx context.Context, taskID int) {
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Printf("Task %d: Canceled\n", taskID)
+			return
+		default:
+			// Simulate work with a random sleep.
+			time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
+		}
 	}
-	return &FileLogger{file: file}, nil
 }
 
-func (fl *FileLogger) Info(message string) {
-	fl.file.WriteString(fmt.Sprintf("INFO: %s\n", message))
+// Process HTTP requests with a timeout.
+func handleRequest(w http.ResponseWriter, r *http.Request) {
+	// Create a context with a 5-second timeout.
+	_, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	// Simulate a long-running operation that can be timed out.
+	fmt.Fprintln(w, "Processing request...")
+	time.Sleep(3 * time.Second)
+	fmt.Fprintln(w, "Request processed successfully.")
 }
 
-func (fl *FileLogger) Error(message string) {
-	fl.file.WriteString(fmt.Sprintf("ERROR: %s\n", message))
-}
-
-func (fl *FileLogger) Debug(message string) {
-	fl.file.WriteString(fmt.Sprintf("DEBUG: %s\n", message))
-}
-
-type ConsoleLogger struct{}
-
-func NewConsoleLogger() *ConsoleLogger {
-	return &ConsoleLogger{}
-}
-
-func (cl *ConsoleLogger) Info(message string) {
-	fmt.Println("INFO:", message)
-}
-
-func (cl *ConsoleLogger) Error(message string) {
-	fmt.Println("ERROR:", message)
-}
-
-func (cl *ConsoleLogger) Debug(message string) {
-	fmt.Println("DEBUG:", message)
-}
-
-type LoggerManager struct {
-	currentLogger Logger
-}
-
-func NewLoggerManager(logger Logger) *LoggerManager {
-	return &LoggerManager{currentLogger: logger}
-}
-
-func (lm *LoggerManager) SetLogger(logger Logger) {
-	lm.currentLogger = logger
-}
-
-func (lm *LoggerManager) Info(message string) {
-	lm.currentLogger.Info(message)
-}
-
-func (lm *LoggerManager) Error(message string) {
-	lm.currentLogger.Error(message)
-}
-
-func (lm *LoggerManager) Debug(message string) {
-	lm.currentLogger.Debug(message)
-}
 func main() {
-	fileLogger, err := NewFileLogger("app.log")
-	if err != nil {
-		panic(err)
+	// 1. Use context for cancellation:
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start multiple long-running tasks.
+	numTasks := 5
+	wg := sync.WaitGroup{}
+	wg.Add(numTasks)
+	for i := 0; i < numTasks; i++ {
+		go func(taskID int) {
+			defer wg.Done()
+			longRunningTask(ctx, taskID)
+		}(i)
 	}
 
-	loggerManager := NewLoggerManager(fileLogger) // Default to file logging
+	// After 2 seconds, cancel all tasks.
+	time.AfterFunc(2*time.Second, cancel)
 
-	loggerManager.Info("Application started")
-	loggerManager.Debug("Initializing configuration...")
+	// Wait for all tasks to finish.
+	wg.Wait()
 
-	// Later, you can swap to console logging at runtime
-	loggerManager.SetLogger(NewConsoleLogger())
-	loggerManager.Error("Something went wrong!")
+	// 2. Use timeouts for bound operations:
+	server := http.Server{Addr: ":8080"}
+	go func() {
+		if err := server.ListenAndServe(); err != nil {
+			log.Fatalf("HTTP server error: %v", err)
+		}
+	}()
+
+	// Close the server after 10 seconds.
+	time.AfterFunc(10*time.Second, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			log.Fatalf("HTTP server shutdown error: %v", err)
+		}
+		fmt.Println("HTTP server gracefully stopped")
+	})
+
+	// Handle HTTP requests.
+	http.HandleFunc("/", handleRequest)
+	log.Println("HTTP server listening on :8080")
+
 }

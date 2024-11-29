@@ -1,80 +1,69 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"os"
+	"log"
+	"time"
 )
 
-type Logger interface {
-	Info(message string)
-	Warn(message string)
-	Error(message string)
-}
-type FileLogger struct {
-	file *os.File
-}
-
-func NewFileLogger(filename string) (*FileLogger, error) {
-	file, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil, err
+// Simulate a network request that can be canceled
+func fetchData(ctx context.Context) (string, error) {
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case <-time.After(3 * time.Second):
 	}
-	return &FileLogger{file: file}, nil
+	return "Data fetched", nil
 }
 
-func (fl *FileLogger) Info(message string) {
-	fmt.Fprintln(fl.file, "INFO:", message)
-}
-
-func (fl *FileLogger) Warn(message string) {
-	fmt.Fprintln(fl.file, "WARN:", message)
-}
-
-func (fl *FileLogger) Error(message string) {
-	fmt.Fprintln(fl.file, "ERROR:", message)
-}
-
-func (fl *FileLogger) Close() {
-	if err := fl.file.Close(); err != nil {
-		fmt.Println("Error closing file logger:", err)
+// Simulate a processing task that can be canceled
+func processData(ctx context.Context, data string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(2 * time.Second):
 	}
+	fmt.Println("Data processed:", data)
+	return nil
 }
 
-type ConsoleLogger struct{}
-
-func NewConsoleLogger() *ConsoleLogger {
-	return &ConsoleLogger{}
-}
-
-func (cl *ConsoleLogger) Info(message string) {
-	fmt.Println("INFO:", message)
-}
-
-func (cl *ConsoleLogger) Warn(message string) {
-	fmt.Println("WARN:", message)
-}
-
-func (cl *ConsoleLogger) Error(message string) {
-	fmt.Println("ERROR:", message)
-}
 func main() {
-	// Example: Using a FileLogger
-	fileLogger, err := NewFileLogger("application.log")
-	if err != nil {
-		fmt.Println("Error creating file logger:", err)
-		return
-	}
-	defer fileLogger.Close()
+	// Create a background context
+	ctx := context.Background()
 
-	// Example: Using a ConsoleLogger
-	consoleLogger := NewConsoleLogger()
+	// Create a child context with a deadline for fetching data
+	fetchCtx, cancelFetch := context.WithTimeout(ctx, 1*time.Second)
+	defer cancelFetch()
 
-	// Use the loggers interchangeably
-	loggers := []Logger{fileLogger, consoleLogger}
+	// Start fetching data in a goroutine
+	go func() {
+		data, err := fetchData(fetchCtx)
+		if err != nil {
+			log.Printf("Fetch data failed: %v\n", err)
+			return
+		}
+		log.Println("Data fetched:", data)
 
-	for _, logger := range loggers {
-		logger.Info("This is an informational message.")
-		logger.Warn("This is a warning message.")
-		logger.Error("This is an error message.")
+		// Create a child context for processing data
+		processCtx, cancelProcess := context.WithTimeout(ctx, 2*time.Second)
+		defer cancelProcess()
+
+		// Start processing data in a goroutine
+		go func() {
+			err := processData(processCtx, data)
+			if err != nil {
+				log.Printf("Process data failed: %v\n", err)
+			}
+		}()
+	}()
+
+	// Simulate a user canceling the operation
+	select {
+	case <-time.After(1.5 * time.Second):
+		log.Println("Canceling operation...")
+		cancelFetch() // Cancel the fetch operation
+	case <-time.After(5 * time.Second):
+		log.Println("Operation timed out.")
 	}
 }
