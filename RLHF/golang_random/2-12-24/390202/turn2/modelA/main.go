@@ -1,79 +1,103 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"reflect"
-	"strconv"
+	"sync"
+	"time"
 )
 
-type Person struct {
-	Name    string `json:"name"`
-	Age     int    `json:"age,omitempty"`
-	Profile string `json:"profile,omitempty"`
+type Account struct {
+	balance int
+	mu      *sync.Mutex
 }
 
-// Custom MarshalJSON method to control the serialization logic
-func (p Person) MarshalJSON() ([]byte, error) {
-	// Use reflection to create a map of fields
-	out := make(map[string]interface{})
+// Transaction contains the details of a transfer
+type Transaction struct {
+	from   *Account
+	to     *Account
+	amount int
+}
 
-	// Iterate over each field in the Person struct
-	v := reflect.ValueOf(p)
-	t := v.Type()
+type TransactionManager struct {
+	txnChan chan Transaction
+}
 
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
+// NewAccount initializes a new account with a balance
+func NewAccount(balance int) *Account {
+	return &Account{balance: balance, mu: &sync.Mutex{}}
+}
 
-		// If the field's type is a reflect.Int, we will handle it specially
-		if field.Type == reflect.TypeOf(1) {
-			switch field.Name {
-			case "Age":
-				if v.Field(i).Int() > 18 {
-					// Convert the age to a string
-					out[field.Name] = strconv.Itoa(int(v.Field(i).Int()))
-				}
-			default:
-				// For other int fields, just encode the value
-				out[field.Name] = v.Field(i).Int()
-			}
-		} else {
-			// For other field types, we directly add them to the map
-			out[field.Name] = v.Field(i).Interface()
-		}
+// NewTransactionManager creates a new transaction manager
+func NewTransactionManager(numTxnWorkers int) *TransactionManager {
+	txnChan := make(chan Transaction)
+	for i := 0; i < numTxnWorkers; i++ {
+		go txnWorker(txnChan)
 	}
+	return &TransactionManager{txnChan: txnChan}
+}
 
-	// Use the json package to encode the map to JSON
-	return json.Marshal(out)
+// Transfer executes the transaction, ensuring it's atomic
+func (manager *TransactionManager) Transfer(txn Transaction) {
+	manager.txnChan <- txn
+}
+
+// txnWorker is a goroutine that processes transactions
+func txnWorker(txnChan <-chan Transaction) {
+	for txn := range txnChan {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("Transaction error: %v\n", r)
+			}
+		}()
+
+		txn.from.mu.Lock()
+		txn.to.mu.Lock()
+		defer func() {
+			txn.from.mu.Unlock()
+			txn.to.mu.Unlock()
+		}()
+
+		if txn.from.balance < txn.amount {
+			panic("insufficient funds")
+		}
+
+		txn.from.balance -= txn.amount
+		txn.to.balance += txn.amount
+	}
 }
 
 func main() {
-	person1 := Person{
-		Name:    "Alice",
-		Age:     19,
-		Profile: "A user over 18",
-	}
+	// Create user accounts
+	user1Account := NewAccount(100)
+	user2Account := NewAccount(50)
+	user3Account := NewAccount(75)
 
-	person2 := Person{
-		Name:    "Bob",
-		Age:     16,
-		Profile: "A user under 18",
-	}
+	// Set up the transaction manager
+	txnManager := NewTransactionManager(3) // Use three worker goroutines
 
-	// Serialize each person to JSON
-	json1, err := json.Marshal(person1)
-	if err != nil {
-		fmt.Println("Error serializing person1:", err)
-		return
-	}
+	// Simultaneously initiate transfers
+	fmt.Println("Simulating concurrent transfers...")
 
-	json2, err := json.Marshal(person2)
-	if err != nil {
-		fmt.Println("Error serializing person2:", err)
-		return
-	}
+	// Transfer 50 from user1 to user2
+	go func() {
+		txnManager.Transfer(Transaction{from: user1Account, to: user2Account, amount: 50})
+	}()
 
-	// Print the serialized JSON
-	fmt.Println(string(json1))
-	fmt.Println(string(json2))
+	// Transfer 30 from user2 to user3
+	go func() {
+		txnManager.Transfer(Transaction{from: user2Account, to: user3Account, amount: 30})
+	}()
+
+	// Transfer 100 from user3 to user1
+	go func() {
+		txnManager.Transfer(Transaction{from: user3Account, to: user1Account, amount: 100})
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Print the final account balances
+	fmt.Println("Final account balances:")
+	fmt.Printf("User 1: %d\n", user1Account.balance)
+	fmt.Printf("User 2: %d\n", user2Account.balance)
+	fmt.Printf("User 3: %d\n", user3Account.balance)
 }
