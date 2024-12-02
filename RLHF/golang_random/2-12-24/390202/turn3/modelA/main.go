@@ -1,75 +1,104 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"reflect"
+	"sync"
 )
 
-type Person struct {
-	Name    string `json:"name"`
-	Age     int    `json:"age,omitempty"`
-	Profile string `json:"profile,omitempty"`
+type Library struct {
+	books     []string
+	lock      sync.Mutex
+	condition sync.Cond
 }
 
-// Custom MarshalJSON method to control the serialization logic
-func (p Person) MarshalJSON() ([]byte, error) {
-	// Create a map to hold the fields we want to serialize
-	out := make(map[string]interface{})
+func NewLibrary(books []string) *Library {
+	return &Library{books: books, condition: sync.NewCond(&sync.Mutex{})}
+}
 
-	// Iterate over each field in the Person struct
-	v := reflect.ValueOf(p)
-	t := v.Type()
+// Borrow borrows a book from the library
+func (lib *Library) Borrow(user string) (string, error) {
+	lib.condition.L.Lock()
+	defer lib.condition.L.Unlock()
 
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-
-		// Get the field's value
-		fieldValue := v.Field(i)
-
-		// Check if the field should be included in the JSON output
-		if field.Name != "Age" || fieldValue.Int() != 0 {
-			// Use the JSON tag if available, otherwise use the field name
-			jsonTag := field.Tag.Get("json")
-			if jsonTag != "" {
-				out[jsonTag] = fieldValue.Interface()
-			} else {
-				out[field.Name] = fieldValue.Interface()
-			}
+	for i, book := range lib.books {
+		if lib.books[i] != "" {
+			lib.books[i] = "" // Mark book as borrowed
+			lib.condition.Signal()
+			return book, nil
 		}
 	}
 
-	// Use the json package to encode the map to JSON
-	return json.Marshal(out)
+	return "", fmt.Errorf("%s: No books available for borrowing", user)
+}
+
+// Return returns a book to the library
+func (lib *Library) Return(user string, book string) error {
+	lib.condition.L.Lock()
+	defer lib.condition.L.Unlock()
+
+	for i, libBook := range lib.books {
+		if libBook == "" {
+			lib.books[i] = book
+			lib.condition.Signal()
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%s: Cannot return book, library is full", user)
 }
 
 func main() {
-	person1 := Person{
-		Name:    "Alice",
-		Age:     19,
-		Profile: "A user over 18",
+	library := NewLibrary([]string{"Book A", "Book B", "Book C", "Book D"})
+	numUsers := 5
+	numActions := 5
+
+	wg := sync.WaitGroup{}
+
+	for user := 1; user <= numUsers; user++ {
+		wg.Add(1)
+		go func(user int) {
+			defer wg.Done()
+			for action := 1; action <= numActions; action++ {
+				doAction(library, fmt.Sprintf("User %d", user))
+			}
+		}(user)
 	}
 
-	person2 := Person{
-		Name:    "Bob",
-		Age:     0,
-		Profile: "A user with no age",
+	wg.Wait()
+}
+
+func doAction(lib *Library, user string) {
+	fmt.Printf("%s: Waiting for action...\n", user)
+	lib.condition.L.Lock()
+	defer lib.condition.L.Unlock()
+
+	for {
+		if len(lib.books) > 0 {
+			break
+		}
+		lib.condition.Wait()
 	}
 
-	// Serialize each person to JSON
-	json1, err := json.Marshal(person1)
-	if err != nil {
-		fmt.Println("Error serializing person1:", err)
-		return
+	action := "Borrow"
+	if rand()%2 == 1 {
+		action = "Return"
 	}
 
-	json2, err := json.Marshal(person2)
-	if err != nil {
-		fmt.Println("Error serializing person2:", err)
-		return
+	fmt.Printf("%s: %s a book...\n", user, action)
+	if action == "Borrow" {
+		book, err := lib.Borrow(user)
+		if err != nil {
+			fmt.Printf("%s: Failed to borrow book: %v\n", user, err)
+		} else {
+			fmt.Printf("%s: Borrowed book: %s\n", user, book)
+		}
+	} else {
+		book := "Book A" // Choose a book to return
+		err := lib.Return(user, book)
+		if err != nil {
+			fmt.Printf("%s: Failed to return book: %v\n", user, err)
+		} else {
+			fmt.Printf("%s: Returned book: %s\n", user, book)
+		}
 	}
-
-	// Print the serialized JSON
-	fmt.Println(string(json1))
-	fmt.Println(string(json2))
 }
