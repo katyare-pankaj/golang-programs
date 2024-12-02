@@ -1,33 +1,36 @@
 package main
 
 import (
-	"fmt"
-	"go-programs/RLHF/golang_random/28-11-24/389103/turn2/modelB/bankaccount"
+	"log"
+	"time"
 )
 
+type logEntry struct {
+	Time     time.Time              `json:"time"`
+	Severity string                 `json:"severity"`
+	Message  string                 `json:"message"`
+	Context  map[string]interface{} `json:"context"`
+}
+
+func logStructured(severity, message string, context map[string]interface{}) {
+	entry := logEntry{
+		Time:     time.Now(),
+		Severity: severity,
+		Message:  message,
+		Context:  context,
+	}
+	log.Println(entry)
+}
+
 func main() {
-	// Create a new bank account with an initial balance of $100.
-	account, err := bankaccount.NewBankAccount("Alice", 100.0)
-	if err != nil {
-		panic(err)
-	}
+	// Usage example
+	logStructured("INFO", "Application started", map[string]interface{}{
+		"version":  "1.0.0",
+		"env":      "development",
+		"hostname": "example.com",
+	})
 
-	fmt.Printf("Account Holder: %s\n", account.Name())
-	fmt.Printf("Initial Balance: $%.2f\n", account.Balance())
-
-	// Deposit $50 into the account.
-	err = account.Deposit(50.0)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("Balance after Deposit: $%.2f\n", account.Balance())
-
-	// Withdraw $30 from the account.
-	err = account.Withdraw(30.0)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("Balance after Withdrawal: $%.2f\n", account.Balance())
+	logStructured("ERROR", "Database connection failed", map[string]interface{}{
+		"error": "connection refused",
+	})
 }

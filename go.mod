@@ -289,6 +289,7 @@ require (
 	github.com/roasbeef/go-go-gadget-paillier v0.0.0-20181009074315-14f1f86b6000
 	github.com/robfig/cron v1.2.0
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/rs/zerolog v1.33.0
 	github.com/sajari/word2vec v1.0.1
 	github.com/second-state/WasmEdge-go v0.13.4
 	github.com/segmentio/kafka-go v0.4.47
