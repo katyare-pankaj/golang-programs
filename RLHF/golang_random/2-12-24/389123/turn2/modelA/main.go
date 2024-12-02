@@ -1,32 +1,79 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"go-programs/RLHF/golang_random/28-11-24/389103/turn2/modelA/bank"
+	"reflect"
+	"strconv"
 )
 
+type Person struct {
+	Name    string `json:"name"`
+	Age     int    `json:"age,omitempty"`
+	Profile string `json:"profile,omitempty"`
+}
+
+// Custom MarshalJSON method to control the serialization logic
+func (p Person) MarshalJSON() ([]byte, error) {
+	// Use reflection to create a map of fields
+	out := make(map[string]interface{})
+
+	// Iterate over each field in the Person struct
+	v := reflect.ValueOf(p)
+	t := v.Type()
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+
+		// If the field's type is a reflect.Int, we will handle it specially
+		if field.Type == reflect.TypeOf(1) {
+			switch field.Name {
+			case "Age":
+				if v.Field(i).Int() > 18 {
+					// Convert the age to a string
+					out[field.Name] = strconv.Itoa(int(v.Field(i).Int()))
+				}
+			default:
+				// For other int fields, just encode the value
+				out[field.Name] = v.Field(i).Int()
+			}
+		} else {
+			// For other field types, we directly add them to the map
+			out[field.Name] = v.Field(i).Interface()
+		}
+	}
+
+	// Use the json package to encode the map to JSON
+	return json.Marshal(out)
+}
+
 func main() {
-	// Create two bank accounts
-	account1 := bank.NewAccount(1000) // Initialize with a balance of 1000
-	account2 := bank.NewAccount(500)  // Initialize with a balance of 500
+	person1 := Person{
+		Name:    "Alice",
+		Age:     19,
+		Profile: "A user over 18",
+	}
 
-	fmt.Printf("Initial Balance of Account 1: %.2f\n", account1.Balance())
-	fmt.Printf("Initial Balance of Account 2: %.2f\n", account2.Balance())
+	person2 := Person{
+		Name:    "Bob",
+		Age:     16,
+		Profile: "A user under 18",
+	}
 
-	// Deposit money into account1
-	account1.Deposit(200)
-	fmt.Printf("Balance of Account 1 after deposit: %.2f\n", account1.Balance())
+	// Serialize each person to JSON
+	json1, err := json.Marshal(person1)
+	if err != nil {
+		fmt.Println("Error serializing person1:", err)
+		return
+	}
 
-	// Withdraw money from account2
-	account2.Withdraw(100)
-	fmt.Printf("Balance of Account 2 after withdrawal: %.2f\n", account2.Balance())
+	json2, err := json.Marshal(person2)
+	if err != nil {
+		fmt.Println("Error serializing person2:", err)
+		return
+	}
 
-	// Transfer money from account1 to account2
-	account1.Transfer(300, account2)
-	fmt.Printf("Balance of Account 1 after transfer: %.2f\n", account1.Balance())
-	fmt.Printf("Balance of Account 2 after transfer: %.2f\n", account2.Balance())
-
-	// Attempt to withdraw an amount greater than the available balance in account1
-	account1.Withdraw(1500)
-	fmt.Printf("Balance of Account 1 after failed withdrawal attempt: %.2f\n", account1.Balance())
+	// Print the serialized JSON
+	fmt.Println(string(json1))
+	fmt.Println(string(json2))
 }
