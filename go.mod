@@ -252,6 +252,7 @@ require (
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang/dep v0.5.4
 	github.com/golang/geo v0.0.0-20230421003525-6adc56603217
+	github.com/golang/mock v1.6.0
 	github.com/gonum/floats v0.0.0-20181209220543-c233463c7e82
 	github.com/gonum/graph v0.0.0-20190426092945-678096d81a4b
 	github.com/gonum/stat v0.0.0-20181125101827-41a0da705a5b
