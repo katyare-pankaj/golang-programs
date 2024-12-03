@@ -2,50 +2,46 @@ package main
 
 import (
 	"fmt"
-	"sync"
+	"math"
+	"math/rand"
 	"time"
 )
 
-// Worker function that processes tasks
-func worker(id int, jobs <-chan int, results chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for job := range jobs {
-		fmt.Printf("Worker %d processing job %d\n", id, job)
-		time.Sleep(time.Second) // Simulate work
-		results <- job * 2      // Send result back
+// LaplaceNoise adds Laplace noise to a value with a given sensitivity and epsilon
+func LaplaceNoise(value float64, sensitivity float64, epsilon float64) float64 {
+	// Calculate the scale of the Laplace distribution
+	b := sensitivity / epsilon
+
+	// Generate two uniformly random numbers
+	u1 := rand.Float64()
+	u2 := rand.Float64()
+
+	// Use inverse transform sampling to get Laplace noise
+	sign := 1.0
+	if u2 < 0.5 {
+		sign = -1.0
 	}
+	noise := sign * math.Log(1-u1) * b
+
+	// Add the noise to the original value
+	return value + noise
 }
 
 func main() {
-	const numJobs = 5
-	const numWorkers = 3
+	// Seed random number generator for reproducibility
+	rand.Seed(time.Now().UnixNano())
 
-	jobs := make(chan int, numJobs)
-	results := make(chan int, numJobs)
-	var wg sync.WaitGroup
+	// Original data: a numerical value
+	originalValue := 12345.6789
 
-	// Launch workers
-	for w := 1; w <= numWorkers; w++ {
-		wg.Add(1)
-		go worker(w, jobs, results, &wg)
-	}
+	// Define sensitivity and epsilon
+	sensitivity := 1.0 // Sensitivity of the query
+	epsilon := 0.5     // Privacy parameter
 
-	// Send jobs to the job channel
-	for j := 1; j <= numJobs; j++ {
-		jobs <- j
-	}
-	close(jobs) // Close the jobs channel to indicate no more jobs
+	// Add Laplace noise to the original value
+	noisyValue := LaplaceNoise(originalValue, sensitivity, epsilon)
 
-	// Wait for all workers to finish
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	// Collect results
-	for result := range results {
-		fmt.Printf("Result: %d\n", result)
-	}
-
-	fmt.Println("All jobs processed.")
+	// Print the original and noisy values
+	fmt.Printf("Original Value: %.4f\n", originalValue)
+	fmt.Printf("Noisy Value: %.4f\n", noisyValue)
 }
