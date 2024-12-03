@@ -3,102 +3,43 @@ package main
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
-type Library struct {
-	books     []string
-	lock      sync.Mutex
-	condition sync.Cond
+// Resources represents shared resources protected by mutexes
+type Resources struct {
+	mu1 sync.Mutex
+	mu2 sync.Mutex
 }
 
-func NewLibrary(books []string) *Library {
-	return &Library{books: books, condition: sync.NewCond(&sync.Mutex{})}
+// AccessResource1 safely accesses resource 1
+func (r *Resources) AccessResource1() {
+	r.mu1.Lock() // Acquire lock for resource 1
+	defer r.mu1.Unlock()
+
+	fmt.Println("Accessing resource 1")
+	time.Sleep(100 * time.Millisecond)
+
+	// Access resource 2
+	r.AccessResource2()
 }
 
-// Borrow borrows a book from the library
-func (lib *Library) Borrow(user string) (string, error) {
-	lib.condition.L.Lock()
-	defer lib.condition.L.Unlock()
+// AccessResource2 safely accesses resource 2
+func (r *Resources) AccessResource2() {
+	r.mu2.Lock() // Acquire lock for resource 2
+	defer r.mu2.Unlock()
 
-	for i, book := range lib.books {
-		if lib.books[i] != "" {
-			lib.books[i] = "" // Mark book as borrowed
-			lib.condition.Signal()
-			return book, nil
-		}
-	}
-
-	return "", fmt.Errorf("%s: No books available for borrowing", user)
-}
-
-// Return returns a book to the library
-func (lib *Library) Return(user string, book string) error {
-	lib.condition.L.Lock()
-	defer lib.condition.L.Unlock()
-
-	for i, libBook := range lib.books {
-		if libBook == "" {
-			lib.books[i] = book
-			lib.condition.Signal()
-			return nil
-		}
-	}
-
-	return fmt.Errorf("%s: Cannot return book, library is full", user)
+	fmt.Println("Accessing resource 2")
+	time.Sleep(100 * time.Millisecond)
 }
 
 func main() {
-	library := NewLibrary([]string{"Book A", "Book B", "Book C", "Book D"})
-	numUsers := 5
-	numActions := 5
+	resources := Resources{}
 
-	wg := sync.WaitGroup{}
+	go resources.AccessResource1()
+	go resources.AccessResource1()
 
-	for user := 1; user <= numUsers; user++ {
-		wg.Add(1)
-		go func(user int) {
-			defer wg.Done()
-			for action := 1; action <= numActions; action++ {
-				doAction(library, fmt.Sprintf("User %d", user))
-			}
-		}(user)
-	}
+	time.Sleep(200 * time.Millisecond) // Wait for the resources to be accessed
 
-	wg.Wait()
-}
-
-func doAction(lib *Library, user string) {
-	fmt.Printf("%s: Waiting for action...\n", user)
-	lib.condition.L.Lock()
-	defer lib.condition.L.Unlock()
-
-	for {
-		if len(lib.books) > 0 {
-			break
-		}
-		lib.condition.Wait()
-	}
-
-	action := "Borrow"
-	if rand()%2 == 1 {
-		action = "Return"
-	}
-
-	fmt.Printf("%s: %s a book...\n", user, action)
-	if action == "Borrow" {
-		book, err := lib.Borrow(user)
-		if err != nil {
-			fmt.Printf("%s: Failed to borrow book: %v\n", user, err)
-		} else {
-			fmt.Printf("%s: Borrowed book: %s\n", user, book)
-		}
-	} else {
-		book := "Book A" // Choose a book to return
-		err := lib.Return(user, book)
-		if err != nil {
-			fmt.Printf("%s: Failed to return book: %v\n", user, err)
-		} else {
-			fmt.Printf("%s: Returned book: %s\n", user, book)
-		}
-	}
+	fmt.Println("All operations completed")
 }
