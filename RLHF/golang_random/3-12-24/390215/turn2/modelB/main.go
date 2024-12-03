@@ -1,90 +1,76 @@
-package main  
-import (  
-    "fmt"
-    "math/rand"
-    "sync"
-    "time"
+package main
+
+import (
+	"fmt"
+	"sync"
 )
 
-const (
-    minWorkers        = 2           // Minimum number of workers in the pool
-    maxWorkers        = 10          // Maximum number of workers in the pool
-    maxRetryAttempts  = 3          // Maximum number of retry attempts for failed jobs
-    workerIdleTimeout = 1 * time.Second // Timeout for worker idle
-)
-
-// Job represents a work item to be processed by a worker.
-type Job struct {
-    ID    int
-    Data string
-    RetryCount int  // To track retry attempts
+// SafeMap encapsulates a map with a mutex to make it thread-safe.
+type SafeMap struct {
+	mu    sync.Mutex
+	store map[string]int
 }
 
-// Worker represents a worker that processes jobs from the queue.
-type Worker struct {
-    id           int
-    jobQueue     chan Job
-    retryQueue   chan Job
-    shutdownChan chan struct{}
-    wg           *sync.WaitGroup
+// NewSafeMap initializes a new instance of SafeMap.
+func NewSafeMap() *SafeMap {
+	return &SafeMap{
+		store: make(map[string]int),
+	}
 }
 
-// NewWorker creates a new worker with the given id and shared job and retry queues.
-func NewWorker(id int, jobQueue, retryQueue chan Job, shutdownChan chan struct{}, wg *sync.WaitGroup) *Worker {
-    return &Worker{
-        id:           id,
-        jobQueue:     jobQueue,
-        retryQueue:   retryQueue,
-        shutdownChan: shutdownChan,
-        wg:           wg,
-    }
+// Set adds or updates a key-value pair in the map.
+func (sm *SafeMap) Set(key string, value int) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.store[key] = value
 }
 
-// Start starts the worker's goroutine and begins processing jobs from the queue.
-func (w *Worker) Start() {
-    go w.processJobs()
+// Get retrieves the value associated with the given key.
+// It returns the value and a boolean indicating if the key was found.
+func (sm *SafeMap) Get(key string) (int, bool) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	value, exists := sm.store[key]
+	return value, exists
 }
 
-// processJobs continuously listens for jobs on the job queue and processes them.
-// If a job fails, it is retried after an exponential backoff period.
-func (w *Worker) processJobs() {
-    defer w.wg.Done()
-
-    for {
-        select {
-        case job := <-w.jobQueue:
-            fmt.Printf("Worker %d: Processing job %d: %s\n", w.id, job.ID, job.Data)
-
-            // Simulate job processing with a random delay
-            time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
-
-            // Simulate job failure with a random probability
-            if rand.Intn(10) == 0 {
-                fmt.Printf("Worker %d: Job %d failed\n", w.id, job.ID)
-                // Retry the job if it hasn't exceeded the maximum retry attempts
-                if job.RetryCount < maxRetryAttempts {
-                    job.RetryCount++
-                    w.retryQueue <- job
-                } else {
-                    fmt.Printf("Worker %d: Job %d failed after %d retries. Giving up.\n", w.id, job.ID, job.RetryCount)
-                }
-                break
-            }
-
-            // If the job succeeds, no need to retry it
-
-        case <-w.shutdownChan:
-            fmt.Printf("Worker %d: Received shutdown signal. Shutting down.\n", w.id)
-            return
-        }
-    }
+// Delete removes a key-value pair from the map.
+func (sm *SafeMap) Delete(key string) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	delete(sm.store, key)
 }
 
-// WorkerPool represents the dynamic worker pool manager.
-type WorkerPool struct {
-    jobQueue          chan Job
-    retryQueue        chan Job
-    workers           []*Worker
-    workerShutdownChans []chan struct{}
-    numWorkers        int
-    wg                *sync.WaitGroup
+func main() {
+	safeMap := NewSafeMap()
+	var wg sync.WaitGroup
+
+	// Number of goroutines for concurrent operations
+	numGoroutines := 10
+
+	// Concurrent writing to the map
+	wg.Add(numGoroutines)
+	for i := 0; i < numGoroutines; i++ {
+		go func(i int) {
+			defer wg.Done()
+			safeMap.Set(fmt.Sprintf("key%d", i), i)
+		}(i)
+	}
+
+	// Wait for all write operations to finish
+	wg.Wait()
+
+	// Concurrent reading from the map
+	wg.Add(numGoroutines)
+	for i := 0; i < numGoroutines; i++ {
+		go func(i int) {
+			defer wg.Done()
+			if value, exists := safeMap.Get(fmt.Sprintf("key%d", i)); exists {
+				fmt.Printf("key%d: %d\n", i, value)
+			}
+		}(i)
+	}
+
+	// Wait for all read operations to finish
+	wg.Wait()
+}
