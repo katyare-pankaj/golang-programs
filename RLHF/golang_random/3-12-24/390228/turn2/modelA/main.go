@@ -6,68 +6,43 @@ import (
 	"time"
 )
 
-// Define a type for the data processing function, which returns an error
-type DataProcessor func(data string) error
-
-// Higher-order function to process data concurrently
-func ProcessConcurrently(data []string, processor DataProcessor) {
+func main() {
+	// Initialize the worker pool
+	const numWorkers = 3
+	const numTasks = 10
 	var wg sync.WaitGroup
-	errors := make([]error, len(data))
+	workCh := make(chan int)
+	doneCh := make(chan bool)
 
-	// Function to process each data item and capture its error
-	processItem := func(i int, data string) {
-		defer wg.Done()
-		errors[i] = processor(data)
-	}
-
-	// Start processing each item in a new Goroutine
-	for i, item := range data {
+	// Start worker Goroutines
+	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go processItem(i, item)
+		go worker(i, workCh, doneCh)
 	}
 
-	// Wait for all Goroutines to finish
+	// Add tasks to the channel
+	for i := 0; i < numTasks; i++ {
+		workCh <- i
+	}
+
+	// Close the work channel when all tasks are added
+	close(workCh)
+
+	// Wait for all workers to finish
+	for i := 0; i < numWorkers; i++ {
+		<-doneCh
+	}
+
+	// Terminate the program
 	wg.Wait()
-
-	// Aggregate and display errors
-	var aggregatedErrors []error
-	for _, err := range errors {
-		if err != nil {
-			aggregatedErrors = append(aggregatedErrors, err)
-		}
-	}
-
-	if len(aggregatedErrors) > 0 {
-		fmt.Println("Errors encountered:")
-		for _, err := range aggregatedErrors {
-			fmt.Printf("%v\n", err)
-		}
-	} else {
-		fmt.Println("All data processed successfully.")
-	}
+	fmt.Println("All tasks are completed.")
 }
 
-func main() {
-	// Sample data to process
-	data := []string{
-		"Item 1",
-		"Item 2",
-		"Item 3",
+func worker(id int, workCh <-chan int, doneCh chan<- bool) {
+	defer wg.Done()
+	for job := range workCh {
+		fmt.Printf("Worker %d processing task %d\n", id, job)
+		time.Sleep(time.Duration(job) * time.Second) // Simulate work with variable duration
 	}
-
-	// Define a simple data processor function
-	processor := func(data string) error {
-		fmt.Println("Processing:", data)
-		time.Sleep(1 * time.Second) // Simulate processing time
-
-		// Introduce a simulated error for one item
-		if data == "Item 2" {
-			return fmt.Errorf("Error processing %s", data)
-		}
-
-		return nil
-	}
-
-	// Process data concurrently
-	ProcessConcurrently(data, processor)
+	doneCh <- true
 }
