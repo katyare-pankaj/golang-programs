@@ -1,90 +1,76 @@
-package main  
-import (  
-    "fmt"
-    "math/rand"
-    "sync"
-    "time"
+package main
+
+import (
+	"errors"
+	"fmt"
+	"sync"
 )
 
-const (
-    minWorkers        = 2           // Minimum number of workers in the pool
-    maxWorkers        = 10          // Maximum number of workers in the pool
-    maxRetryAttempts  = 3          // Maximum number of retry attempts for failed jobs
-    workerIdleTimeout = 1 * time.Second // Timeout for worker idle
-)
+// Define a type for Task, which is a function returning an error
+type Task func() error
 
-// Job represents a work item to be processed by a worker.
-type Job struct {
-    ID    int
-    Data string
-    RetryCount int  // To track retry attempts
+// Function to execute tasks concurrently and collect errors
+func RunTasksConcurrently(tasks []Task) []error {
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(tasks))
+
+	// Worker function to run a task and send the error to a channel
+	runTask := func(task Task) {
+		defer wg.Done()
+		errChan <- task() // Send the result to the channel
+	}
+
+	// Start Goroutines for each task
+	for _, task := range tasks {
+		wg.Add(1)
+		go runTask(task)
+	}
+
+	// Close the channel once all tasks have finished
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	// Collect errors from the channel
+	var errors []error
+	for err := range errChan {
+		// Only append non-nil errors to filter out successful results
+		if err != nil {
+			errors = append(errors, err)
+		}
+	}
+
+	return errors
 }
 
-// Worker represents a worker that processes jobs from the queue.
-type Worker struct {
-    id           int
-    jobQueue     chan Job
-    retryQueue   chan Job
-    shutdownChan chan struct{}
-    wg           *sync.WaitGroup
+func main() {
+	// Define a list of tasks
+	tasks := []Task{
+		func() error {
+			return nil // simulate a successful task
+		},
+		func() error {
+			return errors.New("error in task 2") // simulate an error
+		},
+		func() error {
+			return nil // simulate a successful task
+		},
+		func() error {
+			return errors.New("error in task 4") // simulate another error
+		},
+	}
+
+	// Execute tasks concurrently and handle errors
+	errors := RunTasksConcurrently(tasks)
+
+	// Output errors
+	if len(errors) > 0 {
+		fmt.Println("Errors occurred:")
+		for i, err := range errors {
+			fmt.Printf("Task %d: %v\n", i+1, err)
+		}
+	} else {
+		fmt.Println("All tasks completed successfully.")
+	}
 }
-
-// NewWorker creates a new worker with the given id and shared job and retry queues.
-func NewWorker(id int, jobQueue, retryQueue chan Job, shutdownChan chan struct{}, wg *sync.WaitGroup) *Worker {
-    return &Worker{
-        id:           id,
-        jobQueue:     jobQueue,
-        retryQueue:   retryQueue,
-        shutdownChan: shutdownChan,
-        wg:           wg,
-    }
-}
-
-// Start starts the worker's goroutine and begins processing jobs from the queue.
-func (w *Worker) Start() {
-    go w.processJobs()
-}
-
-// processJobs continuously listens for jobs on the job queue and processes them.
-// If a job fails, it is retried after an exponential backoff period.
-func (w *Worker) processJobs() {
-    defer w.wg.Done()
-
-    for {
-        select {
-        case job := <-w.jobQueue:
-            fmt.Printf("Worker %d: Processing job %d: %s\n", w.id, job.ID, job.Data)
-
-            // Simulate job processing with a random delay
-            time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
-
-            // Simulate job failure with a random probability
-            if rand.Intn(10) == 0 {
-                fmt.Printf("Worker %d: Job %d failed\n", w.id, job.ID)
-                // Retry the job if it hasn't exceeded the maximum retry attempts
-                if job.RetryCount < maxRetryAttempts {
-                    job.RetryCount++
-                    w.retryQueue <- job
-                } else {
-                    fmt.Printf("Worker %d: Job %d failed after %d retries. Giving up.\n", w.id, job.ID, job.RetryCount)
-                }
-                break
-            }
-
-            // If the job succeeds, no need to retry it
-
-        case <-w.shutdownChan:
-            fmt.Printf("Worker %d: Received shutdown signal. Shutting down.\n", w.id)
-            return
-        }
-    }
-}
-
-// WorkerPool represents the dynamic worker pool manager.
-type WorkerPool struct {
-    jobQueue          chan Job
-    retryQueue        chan Job
-    workers           []*Worker
-    workerShutdownChans []chan struct{}
-    numWorkers        int
-    wg                *sync.WaitGroup
