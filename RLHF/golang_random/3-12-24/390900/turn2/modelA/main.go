@@ -2,21 +2,57 @@ package main
 
 import (
 	"fmt"
-
-	"gonum.org/v1/gonum/mat"
 )
 
+// Define a simple interface for logging
+type Logger interface {
+	Log(message string)
+}
+
+// Concrete implementation of the Logger interface
+type ConsoleLogger struct{}
+
+func (l *ConsoleLogger) Log(message string) {
+	fmt.Println("Console:", message)
+}
+
+// Define a separate interface for saving data
+type Saver interface {
+	Save(data interface{}) error
+}
+
+// Concrete implementation of the Saver interface
+type FileSaver struct{}
+
+func (s *FileSaver) Save(data interface{}) error {
+	fmt.Println("File: Saving data...")
+	return nil
+}
+
+// Use interface composition to combine Logger and Saver functionalities
+type LogAndSave struct {
+	Logger
+	Saver
+}
+
+// Example function that uses the LogAndSave struct
+func useLogAndSave(las LogAndSave) {
+	las.Log("Starting operation...")
+	err := las.Save("Sample data")
+	if err != nil {
+		las.Log("Error saving data:", err)
+	} else {
+		las.Log("Data saved successfully.")
+	}
+}
+
 func main() {
-	// Define your numbers
-	a, b := 8.2, 9.5
+	// Create a LogAndSave instance using composition
+	las := LogAndSave{
+		Logger: &ConsoleLogger{},
+		Saver:  &FileSaver{},
+	}
 
-	// Create a matrix with these numbers
-	data := []float64{a, b}
-	matrix := mat.NewDense(1, len(data), data) // A 1x2 matrix
-
-	// Calculate the sum using Gonum's methods
-	sum := mat.Sum(matrix)
-
-	// Print the result
-	fmt.Printf("The sum is: %.2f\n", sum)
+	// Use the LogAndSave instance
+	useLogAndSave(las)
 }
