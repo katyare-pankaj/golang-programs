@@ -3,33 +3,48 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"time"
 )
 
-// LaplaceNoise adds Laplace noise to a value with a given sensitivity and epsilon
-func LaplaceNoise(value float64, sensitivity float64, epsilon float64) float64 {
-	// Scale parameter for the Laplace distribution
-	b := sensitivity / epsilon
-	// Generate random noise from the Laplace distribution
-	noise := rand.ExpFloat64() * 2 * b
-	// Return the value with added noise
-	return value + noise
+func main() {
+	// Create a rate limiter channel with a capacity of 5 requests per second
+	rateLimiter := time.Tick(time.Second / 5)
+
+	// Simulate sending 10 requests
+	for i := 0; i < 10; i++ {
+		<-rateLimiter // Wait for the rate limiter token
+
+		success := sendRequest(i)
+		if !success {
+			// If the request failed, apply fixed backoff strategy
+			fixedBackoffRetry(i)
+		}
+	}
 }
 
-func main() {
-	// Initialize the random number generator
-	rand.Seed(42)
+// Simulates sending a request and returns false if rate limited
+func sendRequest(requestID int) bool {
+	// Simulate a random rate limit failure
+	if rand.Float32() < 0.3 { // 30% chance of being rate limited
+		fmt.Printf("Request %d: Rate limited, will retry...\n", requestID)
+		return false
+	}
 
-	// Example data: high precision measurement
-	measurement := 1234567.890123
+	fmt.Printf("Request %d: Successfully processed.\n", requestID)
+	return true
+}
 
-	// Define sensitivity and epsilon
-	sensitivity := 1.0 // Sensitivity depends on the context
-	epsilon := 0.1
+// Implements a fixed backoff strategy
+func fixedBackoffRetry(requestID int, maxRetries int, backoff time.Duration) {
+	for retries := 0; retries < maxRetries; retries++ {
+		fmt.Printf("Request %d: Backoff for %v seconds\n", requestID, backoff.Seconds())
+		time.Sleep(backoff)
 
-	// Add Laplace noise
-	noisyMeasurement := LaplaceNoise(measurement, sensitivity, epsilon)
+		success := sendRequest(requestID)
+		if success {
+			return
+		}
+	}
 
-	// Print results
-	fmt.Printf("Original Measurement: %.6f\n", measurement)
-	fmt.Printf("Noisy Measurement: %.6f\n", noisyMeasurement)
+	fmt.Printf("Request %d: Failed after retries\n", requestID)
 }

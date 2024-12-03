@@ -2,46 +2,52 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 	"time"
 )
 
-// LaplaceNoise adds Laplace noise to a value with a given sensitivity and epsilon
-func LaplaceNoise(value float64, sensitivity float64, epsilon float64) float64 {
-	// Calculate the scale of the Laplace distribution
-	b := sensitivity / epsilon
+func main() {
+	// Create a rate limiter channel that allows 5 requests per second
+	rateLimiter := time.Tick(time.Second / 5)
 
-	// Generate two uniformly random numbers
-	u1 := rand.Float64()
-	u2 := rand.Float64()
+	// Simulate sending 10 requests
+	for i := 0; i < 10; i++ {
+		<-rateLimiter // Wait for the rate limiter token
 
-	// Use inverse transform sampling to get Laplace noise
-	sign := 1.0
-	if u2 < 0.5 {
-		sign = -1.0
+		success := sendRequest(i)
+		if !success {
+			// If the request failed, apply fixed backoff strategy
+			fixedBackoffRetry(i)
+		}
 	}
-	noise := sign * math.Log(1-u1) * b
-
-	// Add the noise to the original value
-	return value + noise
 }
 
-func main() {
-	// Seed random number generator for reproducibility
-	rand.Seed(time.Now().UnixNano())
+// Simulates sending a request and returns false if rate limited
+func sendRequest(requestID int) bool {
+	// Simulate a random rate limit failure
+	if rand.Float32() < 0.3 { // 30% chance of being rate limited
+		fmt.Printf("Request %d: Rate limited, will retry...\n", requestID)
+		return false
+	}
 
-	// Original data: a numerical value
-	originalValue := 12345.6789
+	fmt.Printf("Request %d: Successfully processed.\n", requestID)
+	return true
+}
 
-	// Define sensitivity and epsilon
-	sensitivity := 1.0 // Sensitivity of the query
-	epsilon := 0.5     // Privacy parameter
+// Implements a fixed backoff strategy
+func fixedBackoffRetry(requestID int) {
+	const maxRetries = 5
+	const backoffDuration = 2 * time.Second // Fixed backoff duration
 
-	// Add Laplace noise to the original value
-	noisyValue := LaplaceNoise(originalValue, sensitivity, epsilon)
+	for retries := 0; retries < maxRetries; retries++ {
+		fmt.Printf("Request %d: Backoff for %v seconds\n", requestID, backoffDuration.Seconds())
+		time.Sleep(backoffDuration)
 
-	// Print the original and noisy values
-	fmt.Printf("Original Value: %.4f\n", originalValue)
-	fmt.Printf("Noisy Value: %.4f\n", noisyValue)
+		success := sendRequest(requestID)
+		if success {
+			return
+		}
+	}
+
+	fmt.Printf("Request %d: Failed after retries\n", requestID)
 }
