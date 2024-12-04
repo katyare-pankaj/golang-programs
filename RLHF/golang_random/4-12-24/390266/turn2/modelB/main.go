@@ -1,53 +1,56 @@
 package main
 
-import (
-	"fmt"
-	"math/rand"
-	"time"
-)
+import "fmt"
+
+// Unused function, should be removed
+func UnusedFunc() {
+	// does nothing
+}
+
+// Used function
+func UsedFunc() {
+	fmt.Println("This function is used.")
+}
+
+// Properly documented function
+// Add returns the sum of two integers.
+func Add(a, b int) int {
+	return a + b
+}
+
+func ComplexFunction(cond1, cond2 bool) string {
+	if cond1 {
+		if cond2 {
+			return "both true"
+		} else {
+			return "only cond1 true"
+		}
+	} else if cond2 {
+		return "only cond2 true"
+	}
+	return "neither true"
+}
+
+func InefficientAppend() {
+	var list []int
+	for i := 0; i < 10; i++ {
+		list = append(list, i)
+	}
+}
+
+func EfficientAppend() {
+	list := make([]int, 0, 10)
+	for i := 0; i < 10; i++ {
+		list = append(list, i)
+	}
+}
 
 func main() {
-	// Create a rate limiter channel that allows 5 requests per second
-	rateLimiter := time.Tick(time.Second / 5)
 
-	// Simulate sending 10 requests
-	for i := 0; i < 10; i++ {
-		<-rateLimiter // Wait for the rate limiter token
+	UsedFunc()
+	add := Add(10, 20)
+	fmt.Println("Add : ", add)
 
-		success := sendRequest(i)
-		if !success {
-			// If the request failed, apply fixed backoff strategy
-			fixedBackoffRetry(i)
-		}
-	}
-}
-
-// Simulates sending a request and returns false if rate limited
-func sendRequest(requestID int) bool {
-	// Simulate a random rate limit failure
-	if rand.Float32() < 0.3 { // 30% chance of being rate limited
-		fmt.Printf("Request %d: Rate limited, will retry...\n", requestID)
-		return false
-	}
-
-	fmt.Printf("Request %d: Successfully processed.\n", requestID)
-	return true
-}
-
-// Implements a fixed backoff strategy
-func fixedBackoffRetry(requestID int) {
-	const maxRetries = 5
-	const backoffDuration = 2 * time.Second // Fixed backoff duration
-
-	for retries := 0; retries < maxRetries; retries++ {
-		fmt.Printf("Request %d: Backoff for %v seconds\n", requestID, backoffDuration.Seconds())
-		time.Sleep(backoffDuration)
-
-		success := sendRequest(requestID)
-		if success {
-			return
-		}
-	}
-
-	fmt.Printf("Request %d: Failed after retries\n", requestID)
+	str := ComplexFunction(true, false)
+	fmt.Println("Result  : ", str)
 }
