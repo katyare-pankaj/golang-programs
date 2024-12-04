@@ -1,50 +1,109 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
 )
 
-// Worker simulates a task that can take time and can respond to cancellation.
-func worker(ctx context.Context, id int, results chan<- string, wg *sync.WaitGroup) {
-	defer wg.Done()
+// Task represents a task to be executed
+type Task func() error
 
-	select {
-	case <-time.After(time.Duration(2+id) * time.Second):
-		results <- fmt.Sprintf("Worker %d completed", id)
-	case <-ctx.Done():
-		results <- fmt.Sprintf("Worker %d canceled", id)
+// TaskScheduler manages a list of tasks to be executed periodically
+type TaskScheduler struct {
+	tasks    []Task
+	errors   chan error
+	quit     chan struct{}
+	interval time.Duration
+	wg       sync.WaitGroup
+}
+
+// NewTaskScheduler initializes a new TaskScheduler
+func NewTaskScheduler(interval time.Duration) *TaskScheduler {
+	return &TaskScheduler{
+		tasks:    make([]Task, 0),
+		errors:   make(chan error, 10),
+		quit:     make(chan struct{}),
+		interval: interval,
+	}
+}
+
+// AddTask adds a new task to the scheduler
+func (ts *TaskScheduler) AddTask(task Task) {
+	ts.tasks = append(ts.tasks, task)
+}
+
+// Start begins executing the tasks periodically
+func (ts *TaskScheduler) Start() {
+	ticker := time.NewTicker(ts.interval)
+	go func() {
+		defer ticker.Stop()
+		defer ts.wg.Done()
+		for {
+			select {
+			case <-ticker.C:
+				ts.executeTasks()
+			case <-ts.quit:
+				return
+			}
+		}
+	}()
+}
+
+// Stop stops the scheduler
+func (ts *TaskScheduler) Stop() {
+	close(ts.quit)
+	ts.wg.Wait()
+}
+
+// executeTasks runs all the tasks concurrently
+func (ts *TaskScheduler) executeTasks() {
+	for _, task := range ts.tasks {
+		ts.wg.Add(1)
+		go func(task Task) {
+			defer ts.wg.Done()
+			if err := task(); err != nil {
+				ts.errors <- fmt.Errorf("error in task: %w", err)
+			}
+		}(task)
+	}
+	ts.wg.Wait()
+}
+
+// collectErrors collects errors that occurred during task execution
+func (ts *TaskScheduler) collectErrors() {
+	for err := range ts.errors {
+		fmt.Println("Task execution error:", err)
 	}
 }
 
 func main() {
-	// Create a context with a timeout of 3 seconds.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel() // Ensure all resources are cleaned up
+	scheduler := NewTaskScheduler(5 * time.Second)
 
-	results := make(chan string, 3)
-	workerCount := 3
-	var wg sync.WaitGroup
+	// Add some sample tasks to the scheduler
+	scheduler.AddTask(func() error {
+		fmt.Println("Task 1 executing...")
+		// Simulate a potential error
+		return fmt.Errorf("simulated error in Task 1")
+	})
+	scheduler.AddTask(func() error {
+		fmt.Println("Task 2 executing...")
+		time.Sleep(2 * time.Second) // Simulate a time-consuming task
+		return nil
+	})
+	scheduler.AddTask(func() error {
+		fmt.Println("Task 3 executing...")
+		return nil
+	})
 
-	// Start multiple worker goroutines.
-	for i := 1; i <= workerCount; i++ {
-		wg.Add(1)
-		go worker(ctx, i, results, &wg)
-	}
+	// Start the scheduler and error handling
+	go scheduler.Start()
+	go scheduler.collectErrors()
 
-	// Collect results or handle timeout.
-	for i := 0; i < workerCount; i++ {
-		select {
-		case res := <-results:
-			fmt.Println(res)
-		case <-ctx.Done():
-			fmt.Println("Main: Context timeout reached, canceling remaining workers")
-			cancel() // Optionally cancel the context explicitly, though it will be canceled by the timeout
-			return
-		}
-	}
+	// Let the program run for some time
+	time.Sleep(30 * time.Second)
 
-	wg.Wait() // Wait for all workers to finish
+	// Stop the scheduler
+	scheduler.Stop()
+	fmt.Println("Main program ended.")
 }
