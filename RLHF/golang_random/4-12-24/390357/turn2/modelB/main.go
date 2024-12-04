@@ -1,56 +1,44 @@
 package main
 
-import "fmt"
-
-// Unused function, should be removed
-func UnusedFunc() {
-	// does nothing
-}
-
-// Used function
-func UsedFunc() {
-	fmt.Println("This function is used.")
-}
-
-// Properly documented function
-// Add returns the sum of two integers.
-func Add(a, b int) int {
-	return a + b
-}
-
-func ComplexFunction(cond1, cond2 bool) string {
-	if cond1 {
-		if cond2 {
-			return "both true"
-		} else {
-			return "only cond1 true"
-		}
-	} else if cond2 {
-		return "only cond2 true"
-	}
-	return "neither true"
-}
-
-func InefficientAppend() {
-	var list []int
-	for i := 0; i < 10; i++ {
-		list = append(list, i)
-	}
-}
-
-func EfficientAppend() {
-	list := make([]int, 0, 10)
-	for i := 0; i < 10; i++ {
-		list = append(list, i)
-	}
-}
+import (
+	"bufio"
+	"fmt"
+	"log"
+	"os"
+)
 
 func main() {
+	err := readFileAndProcess("example.txt")
+	if err != nil {
+		log.Fatalf("Failed to read and process file: %v", err)
+	}
+}
 
-	UsedFunc()
-	add := Add(10, 20)
-	fmt.Println("Add : ", add)
+func readFileAndProcess(filename string) error {
+	// Open the file
+	file, err := os.Open(filename)
+	if err != nil {
+		return fmt.Errorf("error opening file: %v", err)
+	}
 
-	str := ComplexFunction(true, false)
-	fmt.Println("Result  : ", str)
+	// Ensure file closure when the function exits
+	defer func() {
+		if cerr := file.Close(); cerr != nil {
+			log.Printf("Failed to close file: %v", cerr)
+		}
+	}()
+
+	// Create a scanner to read the file line by line
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		// Process each line (in this case, simply output it)
+		fmt.Println(scanner.Text())
+	}
+
+	// Check for any errors encountered while reading
+	if serr := scanner.Err(); serr != nil {
+		return fmt.Errorf("error reading file: %v", serr)
+	}
+
+	return nil
 }

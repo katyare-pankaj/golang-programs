@@ -1,28 +1,41 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"log"
+	"os"
 )
 
-func sum(nums []int) int {
-	var total int
-	for _, num := range nums {
-		total += num
+// ReadFile reads the contents of a file using defer for resource management.
+func ReadFile(filename string) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Printf("Error opening file: %v\n", err)
+		return err
 	}
-	return total
-}
+	defer file.Close() // Ensure file is closed even if an error occurs
 
-func contains(nums []int, target int) bool {
-	for _, num := range nums {
-		if num == target {
-			return true
+	reader := bufio.NewReader(file)
+	for {
+		line, _, err := reader.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Printf("Error reading file: %v\n", err)
+			return err
 		}
+		fmt.Println(string(line))
 	}
-	return false
+
+	return nil
 }
 
 func main() {
-	numbers := []int{1, 2, 3, 4, 5}
-	fmt.Println("Sum:", sum(numbers))
-	fmt.Println("Contains 3:", contains(numbers, 3))
+	filename := "example.txt"
+	if err := ReadFile(filename); err != nil {
+		log.Printf("Failed to read file: %v\n", err)
+	}
 }
