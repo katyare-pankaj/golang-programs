@@ -1,118 +1,99 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 )
 
-// Task represents a task to be scheduled
-type Task func() error
-
-// TaskScheduler manages scheduled tasks
-type TaskScheduler struct {
-	jobs    map[string]Task // Map of job names to task functions
-	jobCh   chan string     // Channel to add new jobs
-	doneCh  chan struct{}   // Channel to signal shutdown
-	mu      sync.Mutex      // Mutex for locking the jobs map
-	stopCh  chan struct{}   // Channel to signal stopping the ticker
-	stopped bool            // Flag to indicate if scheduler is stopped
+// ConnectionPool represents a pool of connections
+type ConnectionPool struct {
+	maxConnections int
+	connections    []*connection
+	mutex          sync.Mutex
 }
 
-// NewTaskScheduler initializes a new task scheduler
-func NewTaskScheduler() *TaskScheduler {
-	return &TaskScheduler{
-		jobs:    make(map[string]Task),
-		jobCh:   make(chan string),
-		doneCh:  make(chan struct{}),
-		stopCh:  make(chan struct{}),
-		stopped: false,
+// connection is a simple placeholder for a real connection
+type connection struct {
+	id int
+}
+
+func (cp *ConnectionPool) Acquire(ctx context.Context) (*connection, error) {
+	cp.mutex.Lock()
+	defer cp.mutex.Unlock()
+
+	if len(cp.connections) == 0 && cp.maxConnections == 0 {
+		return nil, fmt.Errorf("connection pool is empty and max connections are not defined")
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+		if len(cp.connections) == 0 {
+			cp.connections = make([]*connection, cp.maxConnections)
+			for i := range cp.connections {
+				cp.connections[i] = &connection{id: i}
+			}
+		}
+
+		con := cp.connections[len(cp.connections)-1]
+		cp.connections = cp.connections[:len(cp.connections)-1]
+		return con, nil
 	}
 }
 
-// Schedule adds a new job to the scheduler
-func (s *TaskScheduler) Schedule(name string, interval time.Duration, task Task) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (cp *ConnectionPool) Release(ctx context.Context, con *connection) {
+	cp.mutex.Lock()
+	defer cp.mutex.Unlock()
 
-	s.jobs[name] = task
-	go s.startTicker(name, interval)
+	select {
+	case <-ctx.Done():
+		log.Printf("Release called but context canceled")
+	default:
+		cp.connections = append(cp.connections, con)
+	}
 }
 
-// startTicker starts a timer for a specific job
-func (s *TaskScheduler) startTicker(name string, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+func doWork(ctx context.Context, pool *ConnectionPool, id int) {
+	con, err := pool.Acquire(ctx)
+	if err != nil {
+		log.Printf("Worker %d: Error acquiring connection: %v\n", id, err)
+		return
+	}
+	defer func() {
+		pool.Release(ctx, con)
+	}()
 
 	for {
 		select {
-		case <-ticker.C:
-			s.runTask(name)
-		case <-s.stopCh:
+		case <-ctx.Done():
+			log.Printf("Worker %d: Context canceled, releasing connection\n", id)
 			return
-		}
-	}
-}
-
-// runTask runs the scheduled task and handles errors
-func (s *TaskScheduler) runTask(name string) {
-	if task, ok := s.jobs[name]; ok {
-		err := task()
-		if err != nil {
-			fmt.Printf("Error running task %s: %v\n", name, err)
-		}
-	} else {
-		fmt.Printf("Task %s not found\n", name)
-	}
-}
-
-// Stop stops the scheduler and removes all tasks
-func (s *TaskScheduler) Stop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if !s.stopped {
-		s.stopped = true
-		close(s.stopCh)
-		close(s.jobCh)
-		<-s.doneCh
-		for name := range s.jobs {
-			delete(s.jobs, name)
-		}
-	}
-}
-
-// Run starts the scheduler
-func (s *TaskScheduler) Run() {
-	for {
-		select {
-		case name := <-s.jobCh:
-			s.Schedule(name, time.Minute, func() error {
-				return fmt.Errorf("Running periodic task: %s", name)
-			})
-		case <-s.stopCh:
-			close(s.doneCh)
-			return
+		default:
+			fmt.Printf("Worker %d: Using connection %d\n", id, con.id)
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
 
 func main() {
-	scheduler := NewTaskScheduler()
+	pool := &ConnectionPool{maxConnections: 3}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	go scheduler.Run()
+	go doWork(ctx, pool, 1)
+	go doWork(ctx, pool, 2)
+	go doWork(ctx, pool, 3)
 
-	scheduler.Schedule("task1", time.Second*5, func() error {
-		fmt.Println("Running task1 every 5 seconds")
-		return nil
-	})
+	time.Sleep(3 * time.Second)
 
-	scheduler.Schedule("task2", time.Second*10, func() error {
-		fmt.Println("Running task2 every 10 seconds")
-		return nil
-	})
+	log.Println("Main: Canceling context...")
+	cancel()
 
-	time.Sleep(time.Second * 20) // Let the tasks run for a while
+	time.Sleep(2 * time.Second)
 
-	scheduler.Stop()
+	log.Println("Main: Done")
 }
