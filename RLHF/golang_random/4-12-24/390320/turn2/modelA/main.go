@@ -1,49 +1,118 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
 )
 
-// Worker simulates a task that takes some time to complete.
-func worker(ctx context.Context, id int) {
-	defer fmt.Println("Worker", id, "finished")
-	select {
-	case <-time.After(5 * time.Second):
-		fmt.Println("Worker", id, "completed task")
-	case <-ctx.Done():
-		fmt.Println("Worker", id, "cancelled")
+// Task represents a task to be scheduled
+type Task func() error
+
+// TaskScheduler manages scheduled tasks
+type TaskScheduler struct {
+	jobs    map[string]Task // Map of job names to task functions
+	jobCh   chan string     // Channel to add new jobs
+	doneCh  chan struct{}   // Channel to signal shutdown
+	mu      sync.Mutex      // Mutex for locking the jobs map
+	stopCh  chan struct{}   // Channel to signal stopping the ticker
+	stopped bool            // Flag to indicate if scheduler is stopped
+}
+
+// NewTaskScheduler initializes a new task scheduler
+func NewTaskScheduler() *TaskScheduler {
+	return &TaskScheduler{
+		jobs:    make(map[string]Task),
+		jobCh:   make(chan string),
+		doneCh:  make(chan struct{}),
+		stopCh:  make(chan struct{}),
+		stopped: false,
+	}
+}
+
+// Schedule adds a new job to the scheduler
+func (s *TaskScheduler) Schedule(name string, interval time.Duration, task Task) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.jobs[name] = task
+	go s.startTicker(name, interval)
+}
+
+// startTicker starts a timer for a specific job
+func (s *TaskScheduler) startTicker(name string, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.runTask(name)
+		case <-s.stopCh:
+			return
+		}
+	}
+}
+
+// runTask runs the scheduled task and handles errors
+func (s *TaskScheduler) runTask(name string) {
+	if task, ok := s.jobs[name]; ok {
+		err := task()
+		if err != nil {
+			fmt.Printf("Error running task %s: %v\n", name, err)
+		}
+	} else {
+		fmt.Printf("Task %s not found\n", name)
+	}
+}
+
+// Stop stops the scheduler and removes all tasks
+func (s *TaskScheduler) Stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.stopped {
+		s.stopped = true
+		close(s.stopCh)
+		close(s.jobCh)
+		<-s.doneCh
+		for name := range s.jobs {
+			delete(s.jobs, name)
+		}
+	}
+}
+
+// Run starts the scheduler
+func (s *TaskScheduler) Run() {
+	for {
+		select {
+		case name := <-s.jobCh:
+			s.Schedule(name, time.Minute, func() error {
+				return fmt.Errorf("Running periodic task: %s", name)
+			})
+		case <-s.stopCh:
+			close(s.doneCh)
+			return
+		}
 	}
 }
 
 func main() {
-	// Number of workers to start
-	numWorkers := 5
+	scheduler := NewTaskScheduler()
 
-	// Create a context with a timeout of 2 seconds
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel() // Ensure context is canceled even if the main exits early
+	go scheduler.Run()
 
-	var wg sync.WaitGroup
+	scheduler.Schedule("task1", time.Second*5, func() error {
+		fmt.Println("Running task1 every 5 seconds")
+		return nil
+	})
 
-	// Start multiple worker goroutines
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			worker(ctx, id)
-		}(i)
-	}
+	scheduler.Schedule("task2", time.Second*10, func() error {
+		fmt.Println("Running task2 every 10 seconds")
+		return nil
+	})
 
-	// Wait for workers to finish, but handle cancellation if it occurs
-	select {
-	case <-wg.Done():
-		fmt.Println("All workers completed successfully")
-	case <-ctx.Done():
-		fmt.Println("Context timed out, cancelling workers")
-		cancel()
-		wg.Wait() // Ensure all goroutines are done
-	}
+	time.Sleep(time.Second * 20) // Let the tasks run for a while
+
+	scheduler.Stop()
 }

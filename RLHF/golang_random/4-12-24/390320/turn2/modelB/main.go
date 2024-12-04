@@ -1,42 +1,91 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"time"
 )
 
-// Worker simulates a task that can take time and can respond to cancellation.
-func worker(ctx context.Context, id int, results chan<- string) {
-	select {
-	case <-time.After(time.Duration(2+id) * time.Second):
-		results <- fmt.Sprintf("Worker %d completed", id)
-	case <-ctx.Done():
-		results <- fmt.Sprintf("Worker %d canceled", id)
+type TaskScheduler struct {
+	tasks    chan func() error
+	errors   chan error
+	quit     chan struct{}
+	interval time.Duration
+}
+
+func NewTaskScheduler(interval time.Duration) *TaskScheduler {
+	return &TaskScheduler{
+		tasks:    make(chan func() error, 10),
+		errors:   make(chan error, 10),
+		quit:     make(chan struct{}),
+		interval: interval,
 	}
 }
 
-func main() {
-	// Create a context with a timeout of 3 seconds.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel() // Ensure all resources are cleaned up
+func (ts *TaskScheduler) Start() {
+	ticker := time.NewTicker(ts.interval)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				ts.executeTasks()
+			case <-ts.quit:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+}
 
-	results := make(chan string, 3)
-	workerCount := 3
-
-	// Start multiple worker goroutines.
-	for i := 1; i <= workerCount; i++ {
-		go worker(ctx, i, results)
-	}
-
-	// Collect results or handle timeout.
-	for i := 0; i < workerCount; i++ {
-		select {
-		case res := <-results:
-			fmt.Println(res)
-		case <-ctx.Done():
-			fmt.Println("Main: Context timeout reached, canceling remaining workers")
-			return
+func (ts *TaskScheduler) executeTasks() {
+	for task := range ts.tasks {
+		if err := task(); err != nil {
+			ts.errors <- err
 		}
 	}
+}
+
+func (ts *TaskScheduler) AddTask(task func() error) {
+	ts.tasks <- task
+}
+
+func (ts *TaskScheduler) Stop() {
+	close(ts.quit)
+	close(ts.tasks)
+}
+
+func (ts *TaskScheduler) ErrorHandling() {
+	go func() {
+		for err := range ts.errors {
+			fmt.Println("Error encountered:", err)
+		}
+	}()
+}
+
+func main() {
+	interval := 5 * time.Second
+	scheduler := NewTaskScheduler(interval)
+
+	// Sample tasks
+	scheduler.AddTask(func() error {
+		fmt.Println("Task 1 executed")
+		return nil
+	})
+	scheduler.AddTask(func() error {
+		fmt.Println("Task 2 encountered an error")
+		return fmt.Errorf("task 2 error")
+	})
+	scheduler.AddTask(func() error {
+		fmt.Println("Task 3 executed")
+		return nil
+	})
+
+	// Start the scheduler and error handling
+	scheduler.Start()
+	scheduler.ErrorHandling()
+
+	// Let the scheduler run for some time
+	time.Sleep(20 * time.Second)
+
+	// Stop the scheduler
+	scheduler.Stop()
 }
