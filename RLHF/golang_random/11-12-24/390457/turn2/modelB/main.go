@@ -1,53 +1,47 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
-	"time"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
-// Constants for rate limiting
-const (
-	maxTokens       = 5               // Maximum number of tokens in the bucket
-	tokenRefillRate = 1 * time.Second // Rate at which tokens are added (1 token per second)
+var (
+	shutdownContext = context.Background()
+	shutdownCancel  func()
 )
-
-// Token bucket implementation
-var tokenBucket = make(chan struct{}, maxTokens)
-
-// Refill the token bucket at the specified rate
-func refillTokenBucket() {
-	for {
-		tokenBucket <- struct{}{}
-		time.Sleep(tokenRefillRate)
-	}
-}
-
-// Rate limiting middleware
-func rateLimitMiddleware(next http.Handler) http.Handler {
-	go refillTokenBucket() // Start refilling the token bucket
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Wait for a token to become available
-		<-tokenBucket
-		defer func() { tokenBucket <- struct{}{} }() // Release the token after the request
-
-		// Proceed with the next handler
-		next.ServeHTTP(w, r)
-	})
-}
-
-// Main HTTP handler
-func handler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "Request served at", time.Now())
-}
 
 func main() {
-	// Apply rate limiting middleware to the main handler
-	http.HandleFunc("/", rateLimitMiddleware(http.HandlerFunc(handler)))
+	// Create a cancellable context
+	shutdownContext, shutdownCancel = context.WithCancel(shutdownContext)
+	defer shutdownCancel()
 
-	fmt.Println("Server starting on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		fmt.Println("Error starting server:", err)
+	// Set up a signal handler
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		fmt.Println("Received shutdown signal, initiating graceful shutdown...")
+		shutdownCancel() // Cancel the context
+	}()
+
+	// Start a simple HTTP server
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-shutdownContext.Done():
+			http.Error(w, "shutting down", http.StatusServiceUnavailable)
+			return
+		default:
+			w.Write([]byte("Hello, World!"))
+		}
+	})
+
+	fmt.Println("Server listening on :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("listen: %v", err)
 	}
 }

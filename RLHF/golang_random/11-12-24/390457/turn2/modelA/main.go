@@ -3,58 +3,65 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"time"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 )
 
-type RateLimiter struct {
-	tokens    chan struct{}
-	resetTime time.Duration
+// Server holds the HTTP server and a way to signal when to shut down
+type Server struct {
+	http.Server
+	shutdown chan struct{}
+	wg       sync.WaitGroup
 }
 
-// NewRateLimiter initializes a rate limiter with a specified rate limit and reset duration.
-func NewRateLimiter(rateLimit int, resetTime time.Duration) *RateLimiter {
-	rl := &RateLimiter{
-		tokens:    make(chan struct{}, rateLimit),
-		resetTime: resetTime,
+// NewServer initializes a new Server instance
+func NewServer(addr string) *Server {
+	srv := &Server{
+		shutdown: make(chan struct{}),
 	}
+	srv.Server.Addr = addr
+	http.HandleFunc("/", srv.handleRequest)
+	return srv
+}
 
+// handleRequest is a simple HTTP handler
+func (srv *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "Hello, World!")
+}
+
+// Start begins listening for HTTP requests
+func (srv *Server) Start() {
+	srv.wg.Add(1)
 	go func() {
-		ticker := time.NewTicker(resetTime)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			for i := 0; i < rateLimit; i++ {
-				rl.tokens <- struct{}{}
-			}
+		defer srv.wg.Done()
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("ListenAndServe(): %s\n", err)
 		}
 	}()
-
-	return rl
 }
 
-// ServeHTTP is the HTTP handler that enforces rate limiting.
-func (rl *RateLimiter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	select {
-	case <-rl.tokens:
-		// Process the request
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "Request processed at %s\n", time.Now().String())
-	default:
-		// Rate limit exceeded
-		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+// Shutdown gracefully stops the server
+func (srv *Server) Shutdown() {
+	close(srv.shutdown)
+	fmt.Println("Shutting down server gracefully...")
+	if err := srv.Close(); err != nil {
+		fmt.Printf("Error during server shutdown: %s\n", err)
 	}
+	srv.wg.Wait()
+	fmt.Println("All goroutines finished. Server shut down.")
 }
 
 func main() {
-	rateLimit := 5               // requests per interval
-	resetTime := 1 * time.Second // time interval
+	srv := NewServer(":8080")
+	srv.Start()
 
-	rateLimiter := NewRateLimiter(rateLimit, resetTime)
+	// Listen for termination signals
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
-	http.Handle("/", rateLimiter)
-
-	fmt.Println("Starting server on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		panic(err)
-	}
+	// Block until a signal is received
+	<-c
+	srv.Shutdown()
 }
