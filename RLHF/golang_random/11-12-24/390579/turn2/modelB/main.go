@@ -1,90 +1,91 @@
 package main
 
 import (
-	"fmt"
-	"sync/atomic"
-	"unsafe"
+	"context"
+	"log"
+	"time"
+
+	"github.com/robfig/cron"
 )
 
-type Node struct {
-	value interface{}
-	next  *Node
+// Task represents a periodic task
+type Task struct {
+	name string
+	spec string
+	fn   func()
 }
 
-type LockFreeQueue struct {
-	head *Node
-	tail *Node
+// TaskScheduler manages the execution of periodic tasks
+type TaskScheduler struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
+	c       *cron.Cron
+	tasks   []Task
+	errorCh chan error
 }
 
-// NewLockFreeQueue creates a new lock-free queue.
-func NewLockFreeQueue() *LockFreeQueue {
-	return &LockFreeQueue{}
-}
-
-// Enqueue adds a value to the end of the queue.
-func (q *LockFreeQueue) Enqueue(value interface{}) {
-	newNode := &Node{value: value}
-	for {
-		// Get the current tail
-		oldTail := atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)))
-
-		// If the queue is empty, set both head and tail to the new node
-		if oldTail == nil {
-			if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)), nil, unsafe.Pointer(newNode)) {
-				atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&q.head)), unsafe.Pointer(newNode))
-				return
-			}
-		} else {
-			// Otherwise, point the new node to the current tail
-			newNode.next = (*Node)(oldTail)
-
-			// Try to update the tail to the new node
-			if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)), oldTail, unsafe.Pointer(newNode)) {
-				return
-			}
-		}
+// NewTaskScheduler creates a new task scheduler
+func NewTaskScheduler() *TaskScheduler {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &TaskScheduler{
+		ctx:     ctx,
+		cancel:  cancel,
+		c:       cron.New(),
+		errorCh: make(chan error),
 	}
 }
 
-// Dequeue removes and returns the value from the front of the queue.
-func (q *LockFreeQueue) Dequeue() (interface{}, bool) {
-	for {
-		oldHead := atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&q.head)))
-		if oldHead == nil {
-			return nil, false // Queue is empty
+// AddTask adds a new periodic task
+func (ts *TaskScheduler) AddTask(name, spec string, fn func()) {
+	task := Task{name: name, spec: spec, fn: fn}
+	ts.tasks = append(ts.tasks, task)
+	ts.c.AddFunc(spec, func() {
+		select {
+		case <-ts.ctx.Done():
+			return
+		default:
 		}
+		fn()
+	})
+}
 
-		newHead := (*Node)(oldHead).next
+// Start starts the scheduler
+func (ts *TaskScheduler) Start() {
+	go ts.c.Start()
+	go ts.listenForErrors()
+}
 
-		// If the next node is nil, it means the queue has only one element
-		if newHead == nil {
-			if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)), oldHead, nil) {
-				return (*Node)(oldHead).value, true
-			}
-		} else {
-			// Try to update the head to the next node
-			if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&q.head)), oldHead, unsafe.Pointer(newHead)) {
-				return (*Node)(oldHead).value, true
-			}
-		}
+// Stop stops the scheduler
+func (ts *TaskScheduler) Stop() {
+	ts.cancel()
+	ts.c.Stop()
+	close(ts.errorCh)
+}
+
+// listenForErrors listens for errors and logs them
+func (ts *TaskScheduler) listenForErrors() {
+	for err := range ts.errorCh {
+		log.Printf("Error: %v", err)
 	}
 }
 
 func main() {
-	queue := NewLockFreeQueue()
+	scheduler := NewTaskScheduler()
 
-	// Enqueuing values
-	queue.Enqueue(1)
-	queue.Enqueue(2)
-	queue.Enqueue(3)
+	scheduler.AddTask("Every Minute Task", "@every 1m", func() {
+		log.Println("Every Minute Task executed")
+	})
 
-	// Dequeuing values
-	val, ok := queue.Dequeue()
-	fmt.Println(val, ok) // Outputs: 1 true
-	val, ok = queue.Dequeue()
-	fmt.Println(val, ok) // Outputs: 2 true
-	val, ok = queue.Dequeue()
-	fmt.Println(val, ok) // Outputs: 3 true
-	val, ok = queue.Dequeue()
-	fmt.Println(val, ok) // Outputs: <nil> false (queue is empty)
+	scheduler.AddTask("Every Hour Task", "@every 1h", func() {
+		log.Println("Every Hour Task executed")
+	})
+
+	scheduler.Start()
+
+	defer scheduler.Stop()
+
+	select {
+	case <-time.After(10 * time.Second):
+		log.Println("Scheduler running for 10 minutes, stopping now")
+	}
 }

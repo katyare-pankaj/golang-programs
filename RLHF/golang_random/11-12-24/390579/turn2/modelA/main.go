@@ -1,90 +1,107 @@
 package main
 
 import (
-	"fmt"
-	"sync/atomic"
-	"unsafe"
+	"context"
+	"log"
+	"sync"
+	"time"
 )
 
-type Node struct {
-	value interface{}
-	next  *Node
+// Task represents a unit of work to be scheduled
+type Task struct {
+	ID          int
+	Interval    time.Duration
+	ExecuteFunc func() error
 }
 
-type LockFreeQueue struct {
-	head *Node
-	tail *Node
+// Scheduler manages task scheduling
+type Scheduler struct {
+	tasks  []Task
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
-// NewLockFreeQueue creates a new lock-free queue.
-func NewLockFreeQueue() *LockFreeQueue {
-	node := &Node{} // Dummy node
-	return &LockFreeQueue{
-		head: node,
-		tail: node,
+// NewScheduler initializes a new Scheduler
+func NewScheduler() *Scheduler {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Scheduler{
+		tasks:  []Task{},
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 
-// Enqueue adds a value to the end of the queue.
-func (q *LockFreeQueue) Enqueue(value interface{}) {
-	newNode := &Node{value: value}
-	for {
-		tail := atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)))
-		next := (*Node)(tail).next
+// AddTask adds a new task to the scheduler
+func (s *Scheduler) AddTask(task Task) {
+	s.tasks = append(s.tasks, task)
+}
 
-		// If the tail is pointing to the last node and it has no next, try to link the new node.
-		if next == nil {
-			if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&(*Node)(tail).next)), nil, unsafe.Pointer(newNode)) {
-				// Successfully linked the new node, move the tail pointer forward.
-				atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)), tail, unsafe.Pointer(newNode))
-				return
+// Start begins executing all scheduled tasks
+func (s *Scheduler) Start() {
+	for _, task := range s.tasks {
+		s.wg.Add(1)
+		go s.runTask(task)
+	}
+}
+
+// runTask executes the provided task at specified intervals
+func (s *Scheduler) runTask(task Task) {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(task.Interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := task.ExecuteFunc(); err != nil {
+				log.Printf("Task %d failed: %v", task.ID, err)
 			}
-		} else {
-			// Tail was not pointing to the last node, move the tail pointer forward.
-			atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)), tail, unsafe.Pointer(next))
+		case <-s.ctx.Done():
+			log.Printf("Stopping task %d", task.ID)
+			return
 		}
 	}
 }
 
-// Dequeue removes and returns a value from the front of the queue.
-func (q *LockFreeQueue) Dequeue() (interface{}, bool) {
-	for {
-		head := atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&q.head)))
-		tail := atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)))
-		next := (*Node)(head).next
+// Stop gracefully shuts down the scheduler and waits for all tasks to finish
+func (s *Scheduler) Stop() {
+	s.cancel()
+	s.wg.Wait()
+}
 
-		// If the queue is empty.
-		if head == tail {
-			if next == nil {
-				return nil, false // Queue is empty
-			}
-			// Move the tail pointer forward if it is pointing to an outdated node.
-			atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)), head, unsafe.Pointer(next))
-		} else {
-			// Dequeue the front node.
-			value := next.value
-			if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&q.head)), head, unsafe.Pointer(next)) {
-				return value, true // Successfully dequeued
-			}
-		}
+// Example task function
+func exampleTaskFunc(id int) func() error {
+	return func() error {
+		log.Printf("Executing task %d", id)
+		// Simulate work
+		time.Sleep(1 * time.Second)
+		return nil // or return an error if something goes wrong
 	}
 }
 
+// Main application
 func main() {
-	queue := NewLockFreeQueue()
+	scheduler := NewScheduler()
 
-	// Enqueue values
-	queue.Enqueue(1)
-	queue.Enqueue(2)
-	queue.Enqueue(3)
+	// Adding some tasks to the scheduler
+	for i := 1; i <= 3; i++ {
+		scheduler.AddTask(Task{
+			ID:          i,
+			Interval:    2 * time.Second,
+			ExecuteFunc: exampleTaskFunc(i),
+		})
+	}
 
-	// Dequeue values
-	val, ok := queue.Dequeue()
-	fmt.Println(val, ok) // Outputs: 1 true
-	val, ok = queue.Dequeue()
-	fmt.Println(val, ok) // Outputs: 2 true
-	val, ok = queue.Dequeue()
-	fmt.Println(val, ok) // Outputs: 3 true
-	val, ok = queue.Dequeue()
-	fmt.Println(val, ok) // Outputs: <nil> false (queue is empty)
+	// Start the scheduler
+	scheduler.Start()
+
+	// Run for a while to see the periodic task execution
+	time.Sleep(10 * time.Second)
+
+	// Stop the scheduler gracefully
+	scheduler.Stop()
+
+	log.Println("Scheduler stopped")
 }
