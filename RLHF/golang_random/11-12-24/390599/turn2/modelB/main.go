@@ -2,52 +2,56 @@ package main
 
 import (
 	"fmt"
-	"net/http"
+	"sync/atomic"
 	"time"
 )
 
-// Constants for rate limiting
-const (
-	maxTokens       = 5               // Maximum number of tokens in the bucket
-	tokenRefillRate = 1 * time.Second // Rate at which tokens are added (1 token per second)
-)
-
-// Token bucket implementation
-var tokenBucket = make(chan struct{}, maxTokens)
-
-// Refill the token bucket at the specified rate
-func refillTokenBucket() {
-	for {
-		tokenBucket <- struct{}{}
-		time.Sleep(tokenRefillRate)
-	}
+// AtomicCounter struct to hold an atomic integer
+type AtomicCounter struct {
+	count int64
 }
 
-// Rate limiting middleware
-func rateLimitMiddleware(next http.Handler) http.Handler {
-	go refillTokenBucket() // Start refilling the token bucket
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Wait for a token to become available
-		<-tokenBucket
-		defer func() { tokenBucket <- struct{}{} }() // Release the token after the request
-
-		// Proceed with the next handler
-		next.ServeHTTP(w, r)
-	})
+// Increment increments the counter atomically
+func (c *AtomicCounter) Increment() {
+	atomic.AddInt64(&c.count, 1)
 }
 
-// Main HTTP handler
-func handler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "Request served at", time.Now())
+// Get returns the current count
+func (c *AtomicCounter) Get() int64 {
+	return atomic.LoadInt64(&c.count)
 }
 
 func main() {
-	// Apply rate limiting middleware to the main handler
-	http.HandleFunc("/", rateLimitMiddleware(http.HandlerFunc(handler)))
+	// Create a new atomic counter
+	counter := &AtomicCounter{}
 
-	fmt.Println("Server starting on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		fmt.Println("Error starting server:", err)
+	// Number of goroutines to run
+	numGoroutines := 1000
+
+	// Create a channel to stop goroutines
+	done := make(chan struct{})
+
+	// Start goroutines that increment the counter
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					counter.Increment()
+					time.Sleep(time.Millisecond * 100) // Simulate work
+				}
+			}
+		}()
 	}
+
+	// Allow goroutines to run for a while
+	time.Sleep(time.Second * 2)
+
+	// Close the channel to stop goroutines
+	close(done)
+
+	// Print the final count
+	fmt.Println("Final count:", counter.Get())
 }
