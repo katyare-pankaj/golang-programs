@@ -1,41 +1,60 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"io"
-	"log"
-	"os"
+	"net/http"
+	"time"
 )
 
-// ReadFile reads the contents of a file using defer for resource management.
-func ReadFile(filename string) error {
-	file, err := os.Open(filename)
-	if err != nil {
-		log.Printf("Error opening file: %v\n", err)
-		return err
-	}
-	defer file.Close() // Ensure file is closed even if an error occurs
+type RateLimiter struct {
+	tokens    chan struct{}
+	resetTime time.Duration
+}
 
-	reader := bufio.NewReader(file)
-	for {
-		line, _, err := reader.ReadLine()
-		if err != nil {
-			if err == io.EOF {
-				break
+// NewRateLimiter initializes a rate limiter with a specified rate limit and reset duration.
+func NewRateLimiter(rateLimit int, resetTime time.Duration) *RateLimiter {
+	rl := &RateLimiter{
+		tokens:    make(chan struct{}, rateLimit),
+		resetTime: resetTime,
+	}
+
+	go func() {
+		ticker := time.NewTicker(resetTime)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			for i := 0; i < rateLimit; i++ {
+				rl.tokens <- struct{}{}
 			}
-			log.Printf("Error reading file: %v\n", err)
-			return err
 		}
-		fmt.Println(string(line))
-	}
+	}()
 
-	return nil
+	return rl
+}
+
+// ServeHTTP is the HTTP handler that enforces rate limiting.
+func (rl *RateLimiter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	select {
+	case <-rl.tokens:
+		// Process the request
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Request processed at %s\n", time.Now().String())
+	default:
+		// Rate limit exceeded
+		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+	}
 }
 
 func main() {
-	filename := "example.txt"
-	if err := ReadFile(filename); err != nil {
-		log.Printf("Failed to read file: %v\n", err)
+	rateLimit := 5               // requests per interval
+	resetTime := 1 * time.Second // time interval
+
+	rateLimiter := NewRateLimiter(rateLimit, resetTime)
+
+	http.Handle("/", rateLimiter)
+
+	fmt.Println("Starting server on :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		panic(err)
 	}
 }

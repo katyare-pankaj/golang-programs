@@ -1,44 +1,53 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"log"
-	"os"
+	"net/http"
+	"time"
 )
 
-func main() {
-	err := readFileAndProcess("example.txt")
-	if err != nil {
-		log.Fatalf("Failed to read and process file: %v", err)
+// Constants for rate limiting
+const (
+	maxTokens       = 5               // Maximum number of tokens in the bucket
+	tokenRefillRate = 1 * time.Second // Rate at which tokens are added (1 token per second)
+)
+
+// Token bucket implementation
+var tokenBucket = make(chan struct{}, maxTokens)
+
+// Refill the token bucket at the specified rate
+func refillTokenBucket() {
+	for {
+		tokenBucket <- struct{}{}
+		time.Sleep(tokenRefillRate)
 	}
 }
 
-func readFileAndProcess(filename string) error {
-	// Open the file
-	file, err := os.Open(filename)
-	if err != nil {
-		return fmt.Errorf("error opening file: %v", err)
+// Rate limiting middleware
+func rateLimitMiddleware(next http.Handler) http.Handler {
+	go refillTokenBucket() // Start refilling the token bucket
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Wait for a token to become available
+		<-tokenBucket
+		defer func() { tokenBucket <- struct{}{} }() // Release the token after the request
+
+		// Proceed with the next handler
+		next.ServeHTTP(w, r)
+	})
+}
+
+// Main HTTP handler
+func handler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, "Request served at", time.Now())
+}
+
+func main() {
+	// Apply rate limiting middleware to the main handler
+	http.HandleFunc("/", rateLimitMiddleware(http.HandlerFunc(handler)))
+
+	fmt.Println("Server starting on :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		fmt.Println("Error starting server:", err)
 	}
-
-	// Ensure file closure when the function exits
-	defer func() {
-		if cerr := file.Close(); cerr != nil {
-			log.Printf("Failed to close file: %v", cerr)
-		}
-	}()
-
-	// Create a scanner to read the file line by line
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		// Process each line (in this case, simply output it)
-		fmt.Println(scanner.Text())
-	}
-
-	// Check for any errors encountered while reading
-	if serr := scanner.Err(); serr != nil {
-		return fmt.Errorf("error reading file: %v", serr)
-	}
-
-	return nil
 }
