@@ -1,84 +1,78 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 )
 
-type RateLimiter struct {
-	rate      int64         // requests per second allowed
-	burst     int           // maximum burst size
-	mu        sync.Mutex    // to protect the last request time
-	last      time.Time     // last request time
-	tokenChan chan struct{} // channel to signal available slots
+// A simple data structure for simulating background work
+type worker struct {
+	id int
 }
 
-// NewRateLimiter initializes a RateLimiter.
-func NewRateLimiter(rate int64, burst int) *RateLimiter {
-	rl := RateLimiter{
-		rate:      rate,
-		burst:     burst,
-		tokenChan: make(chan struct{}, burst),
-	}
-
-	// Fill the token channel initially to allow for burst requests
-	for i := 0; i < burst; i++ {
-		rl.tokenChan <- struct{}{}
-	}
-
-	go rl.startTokenRefill()
-	return &rl
-}
-
-// startTokenRefill fills tokens periodically according to the rate
-func (rl *RateLimiter) startTokenRefill() {
-	ticker := time.NewTicker(time.Second / time.Duration(rl.rate))
-	defer ticker.Stop()
+// Start a worker that simulates some long-running task
+func (w *worker) start(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done() // Signal that this goroutine is done when it returns
 
 	for {
-		<-ticker.C
-		rl.mu.Lock()
 		select {
-		case rl.tokenChan <- struct{}{}: // refill a token if burst capacity isn't exceeded
-		default: // burst capacity is reached, do nothing
+		case <-ctx.Done():
+			// Cleanup before exiting the worker
+			fmt.Printf("Worker %d stopping gracefully...\n", w.id)
+			return
+		default:
+			// Simulate work
+			fmt.Printf("Worker %d is working...\n", w.id)
+			time.Sleep(1 * time.Second) // Simulate some work
 		}
-		rl.mu.Unlock()
 	}
-}
-
-// ServeHTTP is the HTTP handler that enforces rate limiting.
-func (rl *RateLimiter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Wait for a token to become available
-	<-rl.tokenChan
-
-	// Process the request knowing we have permission
-	rl.mu.Lock()
-	now := time.Now()
-
-	// Delay if the last request time was too close
-	if now.Sub(rl.last) < (time.Second / time.Duration(rl.rate)) {
-		time.Sleep((time.Second / time.Duration(rl.rate)) - now.Sub(rl.last))
-	}
-	rl.last = time.Now()
-	rl.mu.Unlock()
-
-	// Respond to the request
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Request processed at %s\n", time.Now())
 }
 
 func main() {
-	rateLimit := int64(5) // allow 5 requests per second
-	burst := 10           // allow a burst of 10 requests
+	// Create a WaitGroup to wait for all workers to finish
+	var wg sync.WaitGroup
 
-	rateLimiter := NewRateLimiter(rateLimit, burst)
+	// Create a cancellable context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
 
-	http.Handle("/", rateLimiter)
+	// Set up signal handling for SIGINT and SIGTERM
+	sigChannel := make(chan os.Signal, 1)
+	signal.Notify(sigChannel, os.Interrupt, syscall.SIGTERM)
 
-	fmt.Println("Starting server on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		panic(err)
+	// Start workers
+	workerCount := 3
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		w := &worker{id: i + 1}
+		go w.start(ctx, &wg)
 	}
+
+	// HTTP Server
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "Hello, World!")
+	})
+
+	// Start the HTTP server
+	go func() {
+		fmt.Println("Starting server at :8080")
+		if err := http.ListenAndServe(":8080", nil); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("ListenAndServe: %v", err)
+		}
+	}()
+
+	// Wait for shutdown signal
+	<-sigChannel
+	fmt.Println("Received shutdown signal, initiating graceful shutdown...")
+	cancel() // Cancel the context
+
+	// Wait for all workers to finish
+	wg.Wait()
+	fmt.Println("All workers have completed. Shutting down...")
 }

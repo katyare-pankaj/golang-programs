@@ -1,80 +1,79 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 )
 
-type RateLimiter struct {
-	tokens     chan struct{}
-	rate       int // Requests per second
-	capacity   int // Maximum number of tokens to hold
-	mu         sync.Mutex
-	lastRefill time.Time
-}
-
-// NewRateLimiter initializes a new rate limiter.
-func NewRateLimiter(rate, capacity int) *RateLimiter {
-	return &RateLimiter{
-		tokens:     make(chan struct{}, capacity),
-		rate:       rate,
-		capacity:   capacity,
-		lastRefill: time.Now(),
-	}
-}
-
-// refillTokens adds tokens to the channel at the specified rate.
-func (rl *RateLimiter) refillTokens() {
-	for {
-		rl.mu.Lock()
-		now := time.Now()
-		interval := now.Sub(rl.lastRefill)
-		tokensToAdd := int(interval.Seconds() * float64(rl.rate))
-		if tokensToAdd > rl.capacity-len(rl.tokens) {
-			tokensToAdd = rl.capacity - len(rl.tokens)
-		}
-		for i := 0; i < tokensToAdd; i++ {
-			select {
-			case rl.tokens <- struct{}{}:
-			default:
-			}
-		}
-		rl.lastRefill = now
-		rl.mu.Unlock()
-		time.Sleep(time.Second / time.Duration(rl.rate))
-	}
-}
-
-// ServeHTTP is the HTTP handler that enforces rate limiting.
-func (rl *RateLimiter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Acquire a token
-	select {
-	case <-rl.tokens:
-	default:
-		// Delay until a token is available
-		<-rl.tokens
-	}
-
-	// Process the request
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Request processed at %s\n", time.Now().String())
-}
+var (
+	shutdownCtx, shutdownCancel = context.WithCancel(context.Background())
+	wg                          = &sync.WaitGroup{}
+)
 
 func main() {
-	rateLimit := 5 // requests per second
-	capacity := 10 // maximum tokens in the bucket
+	// Set up a signal handler
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		fmt.Println("Received shutdown signal, initiating graceful shutdown...")
+		shutdownCancel() // Cancel the context
+		wg.Wait()        // Wait for cleanup tasks to complete
+		fmt.Println("Application terminated.")
+		os.Exit(0)
+	}()
 
-	rateLimiter := NewRateLimiter(rateLimit, capacity)
+	// Simulate an active operation (e.g., HTTP server)
+	startHTTPServer(shutdownCtx)
 
-	// Start the token replenishment goroutine
-	go rateLimiter.refillTokens()
+	// Simulate a long-running goroutine
+	startLongRunningTask(shutdownCtx)
 
-	http.Handle("/", rateLimiter)
+	select {} // Block forever, allowing signals to handle shutdown
+}
 
-	fmt.Println("Starting server on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		panic(err)
+func startHTTPServer(ctx context.Context) {
+	wg.Add(1)
+	defer wg.Done()
+
+	fmt.Println("HTTP server starting on :8080")
+	if err := http.ListenAndServe(":8080", http.HandlerFunc(handleRequest)); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("HTTP server error: %v", err)
+	}
+}
+
+func handleRequest(w http.ResponseWriter, r *http.Request) {
+	select {
+	case <-context.Background().Done():
+		http.Error(w, "shutting down", http.StatusServiceUnavailable)
+		return
+	default:
+		fmt.Fprintln(w, "Hello, World!")
+	}
+}
+
+func startLongRunningTask(ctx context.Context) {
+	wg.Add(1)
+	defer wg.Done()
+
+	fmt.Println("Starting long-running task...")
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println("Long-running task shutting down...")
+			return
+		case <-ticker.C:
+			fmt.Println("Long-running task processing...")
+		}
 	}
 }
