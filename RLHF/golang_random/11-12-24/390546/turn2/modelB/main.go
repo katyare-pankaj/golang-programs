@@ -2,52 +2,89 @@ package main
 
 import (
 	"fmt"
-	"net/http"
-	"time"
+	"sync/atomic"
+	"unsafe"
 )
 
-// Constants for rate limiting
-const (
-	maxTokens       = 5               // Maximum number of tokens in the bucket
-	tokenRefillRate = 1 * time.Second // Rate at which tokens are added (1 token per second)
-)
+type Node struct {
+	value interface{}
+	next  *Node
+}
 
-// Token bucket implementation
-var tokenBucket = make(chan struct{}, maxTokens)
+type LockFreeQueue struct {
+	head *Node
+	tail *Node
+}
 
-// Refill the token bucket at the specified rate
-func refillTokenBucket() {
+// NewLockFreeQueue creates a new lock-free queue.
+func NewLockFreeQueue() *LockFreeQueue {
+	return &LockFreeQueue{}
+}
+
+// Enqueue adds a value to the end of the queue.
+func (q *LockFreeQueue) Enqueue(value interface{}) {
+	newNode := &Node{value: value}
 	for {
-		tokenBucket <- struct{}{}
-		time.Sleep(tokenRefillRate)
+		// Get the current tail
+		oldTail := atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)))
+
+		// If the queue is empty, set both head and tail to the new node
+		if oldTail == nil {
+			if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)), nil, unsafe.Pointer(newNode)) {
+				atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&q.head)), unsafe.Pointer(newNode))
+				return
+			}
+		} else {
+			// Otherwise, point the new node to the current tail
+			newNode.next = (*Node)(oldTail)
+
+			// Try to update the tail to the new node
+			if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)), oldTail, unsafe.Pointer(newNode)) {
+				return
+			}
+		}
 	}
 }
 
-// Rate limiting middleware
-func rateLimitMiddleware(next http.Handler) http.Handler {
-	go refillTokenBucket() // Start refilling the token bucket
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Wait for a token to become available
-		<-tokenBucket
-		defer func() { tokenBucket <- struct{}{} }() // Release the token after the request
+// Dequeue removes and returns the value from the front of the queue.
+func (q *LockFreeQueue) Dequeue() (interface{}, bool) {
+	for {
+		oldHead := atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&q.head)))
+		if oldHead == nil {
+			return nil, false // Queue is empty
+		}
 
-		// Proceed with the next handler
-		next.ServeHTTP(w, r)
-	})
-}
+		newHead := (*Node)(oldHead).next
 
-// Main HTTP handler
-func handler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "Request served at", time.Now())
+		// If the next node is nil, it means the queue has only one element
+		if newHead == nil {
+			if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&q.tail)), oldHead, nil) {
+				return (*Node)(oldHead).value, true
+			}
+		} else {
+			// Try to update the head to the next node
+			if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&q.head)), oldHead, unsafe.Pointer(newHead)) {
+				return (*Node)(oldHead).value, true
+			}
+		}
+	}
 }
 
 func main() {
-	// Apply rate limiting middleware to the main handler
-	http.HandleFunc("/", rateLimitMiddleware(http.HandlerFunc(handler)))
+	queue := NewLockFreeQueue()
 
-	fmt.Println("Server starting on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		fmt.Println("Error starting server:", err)
-	}
+	// Enqueuing values
+	queue.Enqueue(1)
+	queue.Enqueue(2)
+	queue.Enqueue(3)
+
+	// Dequeuing values
+	val, ok := queue.Dequeue()
+	fmt.Println(val, ok) // Outputs: 1 true
+	val, ok = queue.Dequeue()
+	fmt.Println(val, ok) // Outputs: 2 true
+	val, ok = queue.Dequeue()
+	fmt.Println(val, ok) // Outputs: 3 true
+	val, ok = queue.Dequeue()
+	fmt.Println(val, ok) // Outputs: <nil> false (queue is empty)
 }
