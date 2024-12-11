@@ -3,21 +3,19 @@ package main
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 var (
 	counter int64
-	mutex   sync.Mutex
 	wg      sync.WaitGroup
 )
 
 func increment() {
 	defer wg.Done()
 	for i := 0; i < 1000; i++ {
-		mutex.Lock()
-		counter++
-		mutex.Unlock()
+		atomic.AddInt64(&counter, 1)
 	}
 }
 
@@ -30,5 +28,5 @@ func main() {
 	}
 
 	wg.Wait()
-	fmt.Printf("Mutex Counter: %d, Time: %v\n", counter, time.Since(startTime))
+	fmt.Printf("Atomic Counter: %d, Time: %v\n", counter, time.Since(startTime))
 }
