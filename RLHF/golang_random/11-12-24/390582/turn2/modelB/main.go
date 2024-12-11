@@ -1,57 +1,39 @@
 package main
 
 import (
-	"fmt"
-	"sync/atomic"
+	"context"
+	"log"
+	"net/http"
 	"time"
 )
 
-// AtomicCounter struct to hold an atomic integer
-type AtomicCounter struct {
-	count int64
-}
+func slowHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log.Printf("Handling request with deadline: %v", ctx.Deadline())
 
-// Increment increments the counter atomically
-func (c *AtomicCounter) Increment() {
-	atomic.AddInt64(&c.count, 1)
-}
-
-// Get returns the current count
-func (c *AtomicCounter) Get() int64 {
-	return atomic.LoadInt64(&c.count)
+	select {
+	case <-time.After(5 * time.Second):
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Response after 5 seconds"))
+	case <-ctx.Done():
+		log.Printf("Request cancelled: %v", ctx.Err())
+		w.WriteHeader(http.StatusGatewayTimeout)
+		w.Write([]byte("Request timed out"))
+	}
 }
 
 func main() {
-	// Create a new atomic counter
-	counter := &AtomicCounter{}
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Set a 3-second timeout for the request
+		ctx, cancel := context.WithDeadline(r.Context(), time.Now().Add(3*time.Second))
+		defer cancel()
+		r = r.WithContext(ctx)
 
-	// Number of goroutines to run
-	numGoroutines := 1000
+		slowHandler(w, r)
+	})
 
-	// Create a channel to stop goroutines
-	done := make(chan struct{})
-
-	// Start goroutines that increment the counter
-	for i := 0; i < numGoroutines; i++ {
-		go func() {
-			for {
-				select {
-				case <-done:
-					return
-				default:
-					counter.Increment()
-					time.Sleep(time.Millisecond * 100) // Simulate work
-				}
-			}
-		}()
+	log.Println("Starting server on :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatal(err)
 	}
-
-	// Allow goroutines to run for a while
-	time.Sleep(time.Second * 2)
-
-	// Close the channel to stop goroutines
-	close(done)
-
-	// Print the final count
-	fmt.Println("Final count:", counter.Get())
 }

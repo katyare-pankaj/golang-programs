@@ -1,33 +1,48 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"sync"
-	"sync/atomic"
+	"net/http"
 	"time"
 )
 
-func main() {
-	var counter int64 // Declare a shared integer
+// Simulate a long-running operation
+func longRunningOperation(ctx context.Context) error {
+	select {
+	case <-time.After(5 * time.Second): // Simulate a delay
+		return nil // Operation completed successfully
+	case <-ctx.Done():
+		return ctx.Err() // Context was cancelled or timed out
+	}
+}
 
-	const numGoroutines = 1000
-	var wg sync.WaitGroup
+func handler(w http.ResponseWriter, r *http.Request) {
+	// Set a timeout for the request
+	timeout := 3 * time.Second
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
 
-	// Start multiple goroutines that increment the counter
-	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
-		go func() {
-			defer wg.Done()
-			// Atomically increment the counter
-			atomic.AddInt64(&counter, 1)
-			// Simulate some work
-			time.Sleep(time.Millisecond * 10)
-		}()
+	// Perform the long-running operation
+	if err := longRunningOperation(ctx); err != nil {
+		if err == context.DeadlineExceeded {
+			http.Error(w, "Request timed out", http.StatusRequestTimeout)
+			return
+		}
+		http.Error(w, "An error occurred", http.StatusInternalServerError)
+		return
 	}
 
-	// Wait for all goroutines to finish
-	wg.Wait()
+	// If successful, return a response
+	fmt.Fprintln(w, "Operation completed successfully")
+}
 
-	// Print the final count
-	fmt.Println("Final counter value:", counter)
+func main() {
+	http.HandleFunc("/", handler)
+
+	// Start the server
+	fmt.Println("Starting server on :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		fmt.Println("Server failed:", err)
+	}
 }
