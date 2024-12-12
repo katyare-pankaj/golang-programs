@@ -3,21 +3,42 @@ package main
 import (
 	"fmt"
 	"sync"
-	"time"
 )
+
+// CalculateFactorial calculates the factorial of a given number
+func calculateFactorial(number int, result chan<- int, wg *sync.WaitGroup) {
+	defer wg.Done() // Signal that this Goroutine is done
+
+	if number < 0 {
+		result <- 0 // Return 0 for negative numbers
+		return
+	}
+
+	factorial := 1
+	for i := 1; i <= number; i++ {
+		factorial *= i
+	}
+	result <- factorial // Send the result to the result channel
+}
 
 func main() {
 	var wg sync.WaitGroup
-	wg.Add(1)
+	resultChannel := make(chan int)
 
-	go func() {
-		defer wg.Done()
-		time.Sleep(3 * time.Second) // Simulate a long operation
-		fmt.Println("Operation completed.")
-	}()
+	numbers := []int{5, 7, 10} // Numbers for which we want to calculate factorials
 
-	time.Sleep(2 * time.Second) // Wait for 2 seconds
-	if wg.Wait(0) == sync.ErrWaitTimeout {
-		fmt.Println("Timed out waiting for operation.")
+	// Start Goroutines to calculate factorials
+	for _, number := range numbers {
+		wg.Add(1)                                         // Increment the WaitGroup counter
+		go calculateFactorial(number, resultChannel, &wg) // Start a Goroutine
+	}
+
+	// Wait for all Goroutines to finish
+	wg.Wait() // This will block until all Goroutines are done
+
+	// Collect and print results
+	close(resultChannel) // Close the channel after all results are sent
+	for result := range resultChannel {
+		fmt.Printf("Factorial of %d is %d\n", numbers[len(numbers)-1-resultChannel], result)
 	}
 }

@@ -2,32 +2,42 @@ package main
 
 import (
 	"fmt"
-	"time"
+	"sync"
 )
 
-func main() {
-	// Create channels
-	resultChannel := make(chan string)
-	timeoutChannel := make(chan struct{})
+// Function to calculate the factorial of a number
+func factorial(n int, wg *sync.WaitGroup, results chan<- int) {
+	defer wg.Done() // Signal that this Goroutine is done
 
-	// Simulate an operation in a goroutine
-	go func() {
-		// Simulate a long-running operation
-		time.Sleep(3 * time.Second) // Simulating workload
-		resultChannel <- "Operation completed successfully"
-	}()
-
-	// Set a timeout for 2 seconds
-	go func() {
-		time.Sleep(2 * time.Second)
-		close(timeoutChannel) // Signal timeout
-	}()
-
-	// Wait for the result or timeout
-	select {
-	case result := <-resultChannel:
-		fmt.Println(result)
-	case <-timeoutChannel:
-		fmt.Println("Operation timed out.")
+	// Calculate factorial
+	fact := 1
+	for i := 1; i <= n; i++ {
+		fact *= i
 	}
+	results <- fact // Send result to the results channel
+}
+
+func main() {
+	var wg sync.WaitGroup
+	results := make(chan int)      // Channel to collect results
+	numbers := []int{5, 7, 10, 12} // Numbers to calculate factorials for
+
+	// Start Goroutines to calculate factorials
+	for _, number := range numbers {
+		wg.Add(1)                          // Increment the WaitGroup counter
+		go factorial(number, &wg, results) // Start a Goroutine for each number
+	}
+
+	// Start a Goroutine to close the results channel when all calculations are done
+	go func() {
+		wg.Wait()      // Wait for all Goroutines to finish
+		close(results) // Close the results channel
+	}()
+
+	// Collect the results
+	for result := range results {
+		fmt.Println("Factorial:", result)
+	}
+
+	fmt.Println("All factorial calculations are done.")
 }
