@@ -2,44 +2,64 @@ package main
 
 import (
 	"fmt"
-	"time"
+	"io/ioutil"
 )
 
-func worker(id int, ch chan<- string, done <-chan struct{}) {
-	for {
-		select {
-		case <-done:
-			fmt.Println("Worker", id, "shutting down.")
-			return
-		case msg := <-ch:
-			fmt.Printf("Worker %d received: %s\n", id, msg)
-			time.Sleep(time.Second * 2) // Simulate work
-		default:
-			time.Sleep(time.Millisecond * 100) // Poll
-		}
+// Logger defines the interface for logging strategies.
+type Logger interface {
+	Log(message string)
+}
+
+// ConsoleLogger is a concrete strategy that logs to the console.
+type ConsoleLogger struct{}
+
+func (c *ConsoleLogger) Log(message string) {
+	fmt.Println("Console:", message)
+}
+
+// FileLogger is a concrete strategy that logs to a file.
+type FileLogger struct {
+	filePath string
+}
+
+func NewFileLogger(path string) *FileLogger {
+	return &FileLogger{filePath: path}
+}
+
+func (f *FileLogger) Log(message string) {
+	data := []byte(fmt.Sprintln("File:", message))
+	err := ioutil.WriteFile(f.filePath, data, 0644)
+	if err != nil {
+		fmt.Println("Error writing to file:", err)
 	}
 }
 
+// LogContext is a context to use a logging strategy.
+type LogContext struct {
+	logger Logger
+}
+
+// SetLogger sets the logging strategy for the context.
+func (c *LogContext) SetLogger(logger Logger) {
+	c.logger = logger
+}
+
+// Log executes the currently set logging strategy.
+func (c *LogContext) Log(message string) {
+	c.logger.Log(message)
+}
+
 func main() {
-	ch := make(chan string)
-	done := make(chan struct{})
+	// Create a logging context
+	context := &LogContext{}
 
-	// Start workers
-	for i := 1; i <= 3; i++ {
-		go worker(i, ch, done)
-	}
+	// Set the strategy to ConsoleLogger and log a message
+	consoleLogger := &ConsoleLogger{}
+	context.SetLogger(consoleLogger)
+	context.Log("This is a console log.")
 
-	// Send messages
-	for _, msg := range []string{"Hello", "World"} {
-		select {
-		case ch <- msg: // Send message
-			fmt.Println("Sent:", msg)
-		case <-time.After(time.Second * 3): // Timeout after 3 seconds
-			fmt.Println("Failed to send:", msg, "after timeout.")
-		}
-	}
-
-	// Shutdown workers
-	close(done)
-	close(ch)
+	// Set the strategy to FileLogger and log a message
+	fileLogger := NewFileLogger("application.log")
+	context.SetLogger(fileLogger)
+	context.Log("This is a file log.")
 }
