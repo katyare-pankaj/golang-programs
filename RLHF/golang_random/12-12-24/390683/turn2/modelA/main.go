@@ -5,33 +5,25 @@ import (
 	"time"
 )
 
-func producer(ch chan<- int) {
-	for i := 0; i < 5; i++ {
-		ch <- i
-		fmt.Printf("Produced: %d\n", i)
-		time.Sleep(time.Second) // Simulate work
-	}
-	close(ch) // Close the channel when done
-}
-
-func consumer(ch <-chan int) {
-	for {
-		select {
-		case val, ok := <-ch:
-			if !ok {
-				fmt.Println("Channel closed! Exiting consumer.")
-				return
-			}
-			fmt.Printf("Consumed: %d\n", val)
-		case <-time.After(2 * time.Second):
-			fmt.Println("No data received in 2 seconds, timeout.")
-			return
-		}
-	}
-}
-
 func main() {
-	ch := make(chan int)
-	go producer(ch)
-	consumer(ch)
+	// Create a channel for receiving messages
+	messageChannel := make(chan string)
+
+	// Start a goroutine to simulate sending a message after a delay
+	go func() {
+		// Simulate a delay before sending the message
+		time.Sleep(3 * time.Second)
+		messageChannel <- "Hello, World!"
+	}()
+
+	// Define a timeout duration
+	timeout := 2 * time.Second
+
+	// Use select to wait for a message or a timeout
+	select {
+	case msg := <-messageChannel:
+		fmt.Println("Received:", msg)
+	case <-time.After(timeout):
+		fmt.Println("Timeout: No message received within", timeout)
+	}
 }
