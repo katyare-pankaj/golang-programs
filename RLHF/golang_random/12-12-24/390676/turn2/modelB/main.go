@@ -1,91 +1,41 @@
 package main
 
 import (
-	"context"
-	"log"
+	"fmt"
+	"sync"
 	"time"
-
-	"github.com/robfig/cron"
 )
 
-// Task represents a periodic task
-type Task struct {
-	name string
-	spec string
-	fn   func()
-}
+var wg sync.WaitGroup
 
-// TaskScheduler manages the execution of periodic tasks
-type TaskScheduler struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	c       *cron.Cron
-	tasks   []Task
-	errorCh chan error
-}
+func worker(id int, send chan<- int, receive <-chan int) {
+	wg.Add(1)
+	defer wg.Done()
 
-// NewTaskScheduler creates a new task scheduler
-func NewTaskScheduler() *TaskScheduler {
-	ctx, cancel := context.WithCancel(context.Background())
-	return &TaskScheduler{
-		ctx:     ctx,
-		cancel:  cancel,
-		c:       cron.New(),
-		errorCh: make(chan error),
+	select {
+	case send <- id:
+		fmt.Printf("Worker %d sent message\n", id)
+		// Simulate work
+		time.Sleep(1 * time.Second)
+
+	case <-time.After(5 * time.Second):
+		fmt.Printf("Worker %d timed out sending message\n", id)
 	}
-}
 
-// AddTask adds a new periodic task
-func (ts *TaskScheduler) AddTask(name, spec string, fn func()) {
-	task := Task{name: name, spec: spec, fn: fn}
-	ts.tasks = append(ts.tasks, task)
-	ts.c.AddFunc(spec, func() {
-		select {
-		case <-ts.ctx.Done():
-			return
-		default:
-		}
-		fn()
-	})
-}
-
-// Start starts the scheduler
-func (ts *TaskScheduler) Start() {
-	go ts.c.Start()
-	go ts.listenForErrors()
-}
-
-// Stop stops the scheduler
-func (ts *TaskScheduler) Stop() {
-	ts.cancel()
-	ts.c.Stop()
-	close(ts.errorCh)
-}
-
-// listenForErrors listens for errors and logs them
-func (ts *TaskScheduler) listenForErrors() {
-	for err := range ts.errorCh {
-		log.Printf("Error: %v", err)
+	select {
+	case msg := <-receive:
+		fmt.Printf("Worker %d received message: %d\n", id, msg)
+	case <-time.After(5 * time.Second):
+		fmt.Printf("Worker %d timed out receiving message\n", id)
 	}
 }
 
 func main() {
-	scheduler := NewTaskScheduler()
+	ch1 := make(chan int)
+	ch2 := make(chan int)
 
-	scheduler.AddTask("Every Minute Task", "@every 1m", func() {
-		log.Println("Every Minute Task executed")
-	})
+	go worker(1, ch1, ch2)
+	go worker(2, ch2, ch1)
 
-	scheduler.AddTask("Every Hour Task", "@every 1h", func() {
-		log.Println("Every Hour Task executed")
-	})
-
-	scheduler.Start()
-
-	defer scheduler.Stop()
-
-	select {
-	case <-time.After(10 * time.Second):
-		log.Println("Scheduler running for 10 minutes, stopping now")
-	}
+	wg.Wait()
 }
