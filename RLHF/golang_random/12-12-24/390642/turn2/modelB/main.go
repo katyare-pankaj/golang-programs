@@ -2,40 +2,87 @@ package main
 
 import (
 	"fmt"
-	"sync"
+	"math/rand"
 	"time"
 )
 
-var wg sync.WaitGroup
+// SortStrategy defines the interface for different sorting strategies.
+type SortStrategy interface {
+	Sort([]int) []int
+}
 
-func worker(id int, send chan<- int, receive <-chan int) {
-	wg.Add(1)
-	defer wg.Done()
+// BubbleSortStrategy implements the SortStrategy interface using the Bubble Sort algorithm.
+type BubbleSortStrategy struct{}
 
-	select {
-	case send <- id:
-		fmt.Printf("Worker %d sent message\n", id)
-		// Simulate work
-		time.Sleep(1 * time.Second)
-
-	case <-time.After(5 * time.Second):
-		fmt.Printf("Worker %d timed out sending message\n", id)
+func (b *BubbleSortStrategy) Sort(arr []int) []int {
+	n := len(arr)
+	for i := 0; i < n-1; i++ {
+		for j := 0; j < n-i-1; j++ {
+			if arr[j] > arr[j+1] {
+				arr[j], arr[j+1] = arr[j+1], arr[j]
+			}
+		}
 	}
+	return arr
+}
 
-	select {
-	case msg := <-receive:
-		fmt.Printf("Worker %d received message: %d\n", id, msg)
-	case <-time.After(5 * time.Second):
-		fmt.Printf("Worker %d timed out receiving message\n", id)
+// QuickSortStrategy implements the SortStrategy interface using the Quick Sort algorithm.
+type QuickSortStrategy struct{}
+
+func (q *QuickSortStrategy) Sort(arr []int) []int {
+	if len(arr) <= 1 {
+		return arr
 	}
+	pivot := arr[len(arr)/2]
+	left := []int{}
+	middle := []int{}
+	right := []int{}
+	for _, v := range arr {
+		if v < pivot {
+			left = append(left, v)
+		} else if v > pivot {
+			right = append(right, v)
+		} else {
+			middle = append(middle, v)
+		}
+	}
+	return append(q.Sort(left), middle...) + append([]int{}, q.Sort(right)...)
+}
+
+// Context holds a reference to a SortStrategy and provides a method to sort an array.
+type Context struct {
+	strategy SortStrategy
+}
+
+// SetStrategy sets the sorting strategy for the context.
+func (c *Context) SetStrategy(strategy SortStrategy) {
+	c.strategy = strategy
+}
+
+// Sort sorts an array using the current sorting strategy.
+func (c *Context) Sort(arr []int) []int {
+	return c.strategy.Sort(arr)
 }
 
 func main() {
-	ch1 := make(chan int)
-	ch2 := make(chan int)
+	// Initialize random array
+	rand.Seed(time.Now().UnixNano())
+	arr := make([]int, 10)
+	for i := range arr {
+		arr[i] = rand.Intn(100)
+	}
+	fmt.Println("Original array:", arr)
 
-	go worker(1, ch1, ch2)
-	go worker(2, ch2, ch1)
+	// Create a context
+	context := &Context{}
 
-	wg.Wait()
+	// Set the strategy to Bubble Sort and sort
+	bubbleSort := &BubbleSortStrategy{}
+	context.SetStrategy(bubbleSort)
+	fmt.Println("\nSorted with Bubble Sort:", context.Sort(arr))
+
+	// Set the strategy to Quick Sort and sort
+	quickSort := &QuickSortStrategy{}
+	context.SetStrategy(quickSort)
+	fmt.Println("\nSorted with Quick Sort:", context.Sort(arr))
 }
