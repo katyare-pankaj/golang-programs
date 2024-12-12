@@ -2,26 +2,40 @@ package main
 
 import (
 	"fmt"
-	"time"
+	"strings"
+	"sync"
 )
 
-func main() {
-	// Channel for receiving data
-	dataChannel := make(chan int)
+// Process a single string by uppercasing it
+func processString(wg *sync.WaitGroup, input string, results chan<- string) {
+	defer wg.Done() // Signal that this Goroutine is done
 
-	// Simulate a situation where data might not be immediately available
+	// Simulate some processing time
+	fmt.Println("Processing:", input)
+	processed := strings.ToUpper(input)
+	results <- processed // Send the processed result
+}
+
+func main() {
+	var wg sync.WaitGroup
+	results := make(chan string)
+
+	dataset := []string{"hello", "world", "this", "is", "a", "test"}
+
+	// Start Goroutines to process each string
+	for _, item := range dataset {
+		wg.Add(1) // Increment the WaitGroup counter
+		go processString(&wg, item, results)
+	}
+
+	// Close the results channel once all Goroutines are done
 	go func() {
-		time.Sleep(3 * time.Second) // Simulate delay
-		dataChannel <- 42           // Send data after delay
+		wg.Wait() // Wait for all Goroutines to finish
+		close(results)
 	}()
 
-	// Set a timeout of 2 seconds
-	timeout := time.After(2 * time.Second)
-
-	select {
-	case data := <-dataChannel:
-		fmt.Println("Received data:", data)
-	case <-timeout:
-		fmt.Println("Timed out waiting for data.")
+	// Collect and print the processed results
+	for result := range results {
+		fmt.Println("Processed:", result)
 	}
 }

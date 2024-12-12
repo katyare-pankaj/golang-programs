@@ -2,28 +2,32 @@ package main
 
 import (
 	"fmt"
-	"time"
+	"sync"
 )
 
+// Process simulates a processing function for a part of a dataset
+func processData(part int, wg *sync.WaitGroup) {
+	defer wg.Done() // Signal that this Goroutine is done
+
+	// Simulate some processing work
+	result := part * 2 // Example processing (e.g., doubling the number)
+	fmt.Printf("Processed part %d: Result = %d\n", part, result)
+}
+
 func main() {
-	// Create a channel for receiving messages
-	messageChannel := make(chan string)
+	var wg sync.WaitGroup
 
-	// Start a goroutine to simulate sending a message after a delay
-	go func() {
-		// Simulate a delay before sending the message
-		time.Sleep(3 * time.Second)
-		messageChannel <- "Hello, World!"
-	}()
+	// Simulate a dataset split into parts
+	parts := []int{1, 2, 3, 4, 5}
 
-	// Define a timeout duration
-	timeout := 2 * time.Second
-
-	// Use select to wait for a message or a timeout
-	select {
-	case msg := <-messageChannel:
-		fmt.Println("Received:", msg)
-	case <-time.After(timeout):
-		fmt.Println("Timeout: No message received within", timeout)
+	// Start Goroutines for each part of the dataset
+	for _, part := range parts {
+		wg.Add(1)                 // Increment the WaitGroup counter
+		go processData(part, &wg) // Start a Goroutine for processing
 	}
+
+	// Wait for all Goroutines to finish
+	wg.Wait() // This will block until all Goroutines are done
+
+	fmt.Println("All parts processed.")
 }
