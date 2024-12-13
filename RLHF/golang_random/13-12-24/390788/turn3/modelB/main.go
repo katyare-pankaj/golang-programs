@@ -5,31 +5,45 @@ import (
 	"sync"
 )
 
-// Shared counter variable
-var sharedCounter int
-
-func incrementCounter(n int, wg *sync.WaitGroup) {
-	defer wg.Done() // Decrement the WaitGroup counter when the function completes
-	for i := 0; i < n; i++ {
-		sharedCounter++
+func parallelSum(array []int, start, end int, partialSum *int) {
+	total := 0
+	for i := start; i < end; i++ {
+		total += array[i]
 	}
+	*partialSum += total
 }
 
 func main() {
-	const numGoroutines = 10
-	const iterationsPerGoroutine = 1_000_000
-
-	var wg sync.WaitGroup
-	fmt.Println("Starting with sharedCounter:", sharedCounter)
-
-	// Start Goroutines to increment the counter
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1) // Increment the WaitGroup counter before starting the Goroutine
-		go incrementCounter(iterationsPerGoroutine, &wg)
+	const numElements = 1000000
+	array := make([]int, numElements)
+	for i := range array {
+		array[i] = i
 	}
 
-	// Wait for all Goroutines to finish
-	wg.Wait()
+	var wg sync.WaitGroup
+	var totalSum int
+	numWorkers := 4
+	chunkSize := numElements / numWorkers
 
-	fmt.Println("Final value of sharedCounter:", sharedCounter)
+	for i := 0; i < numWorkers; i++ {
+		start := i * chunkSize
+		end := min((i+1)*chunkSize, numElements)
+		wg.Add(1)
+		go func(start, end int) {
+			defer wg.Done()
+			var partialSum int
+			parallelSum(array, start, end, &partialSum)
+			sync.AddInt64(&totalSum, int64(partialSum))
+		}(start, end)
+	}
+
+	wg.Wait()
+	fmt.Println("Total sum:", totalSum)
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

@@ -5,37 +5,47 @@ import (
 	"sync"
 )
 
-// Shared counter variable
-var sharedCounter int
-
-// Mutex to protect access to sharedCounter
-var mutex sync.Mutex
-
-func incrementCounter(n int, wg *sync.WaitGroup) {
-	defer wg.Done() // Ensure that Done is called at the end of the function
-
-	for i := 0; i < n; i++ {
-		mutex.Lock() // Acquire the lock
-		sharedCounter++
-		mutex.Unlock() // Release the lock
-	}
-}
-
 func main() {
-	const numGoroutines = 10
-	const iterationsPerGoroutine = 1_000_000
+	// Example array
+	arr := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
-	var wg sync.WaitGroup // Create a WaitGroup instance
+	// Number of Goroutines
+	numWorkers := 4
+	// Create a wait group
+	var wg sync.WaitGroup
+	// Mutex for synchronizing access to the sum
+	var mu sync.Mutex
+	// Variable to hold the total sum
+	totalSum := 0
 
-	fmt.Println("Starting with sharedCounter:", sharedCounter)
+	// Calculate the size of each chunk
+	chunkSize := (len(arr) + numWorkers - 1) / numWorkers
 
-	// Start Goroutines to increment the counter
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)                                        // Increment WaitGroup counter
-		go incrementCounter(iterationsPerGoroutine, &wg) // Start Goroutine with WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1) // Add to the wait group
+
+		go func(start int) {
+			defer wg.Done() // Signal that this Goroutine is done
+			end := start + chunkSize
+			if end > len(arr) {
+				end = len(arr)
+			}
+			// Calculate partial sum
+			partialSum := 0
+			for j := start; j < end; j++ {
+				partialSum += arr[j]
+			}
+
+			// Lock before updating the shared resource
+			mu.Lock()
+			totalSum += partialSum
+			mu.Unlock()
+		}(i * chunkSize)
 	}
 
-	wg.Wait() // Wait for all Goroutines to finish
+	// Wait for all Goroutines to finish
+	wg.Wait()
 
-	fmt.Println("Final value of sharedCounter:", sharedCounter)
+	// Print the total sum
+	fmt.Printf("Total Sum: %d\n", totalSum)
 }
