@@ -2,74 +2,40 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"os"
+	"sync"
 )
 
-// Logger defines the interface for logging strategies.
-type Logger interface {
-	Log(message string)
-}
+// Shared counter variable
+var sharedCounter int
 
-// ConsoleLogger is a concrete strategy that logs to the console.
-type ConsoleLogger struct{}
+// Mutex to protect access to sharedCounter
+var mutex sync.Mutex
 
-func (c *ConsoleLogger) Log(message string) {
-	fmt.Println("Console: " + message)
-}
+func incrementCounter(n int, wg *sync.WaitGroup) {
+	defer wg.Done() // Ensure that Done is called at the end of the function
 
-// FileLogger is a concrete strategy that logs to a file.
-type FileLogger struct {
-	file *os.File
-}
-
-func (f *FileLogger) Log(message string) {
-	if f.file != nil {
-		log.SetOutput(f.file)
-		log.Println("File: " + message)
+	for i := 0; i < n; i++ {
+		mutex.Lock() // Acquire the lock
+		sharedCounter++
+		mutex.Unlock() // Release the lock
 	}
-}
-
-// Close closes the log file.
-func (f *FileLogger) Close() {
-	if f.file != nil {
-		f.file.Close()
-	}
-}
-
-// LoggerContext is a context to use a logging strategy.
-type LoggerContext struct {
-	logger Logger
-}
-
-// SetLogger sets the logging strategy for the context.
-func (c *LoggerContext) SetLogger(logger Logger) {
-	c.logger = logger
-}
-
-// Log executes the currently set logging strategy.
-func (c *LoggerContext) Log(message string) {
-	c.logger.Log(message)
 }
 
 func main() {
-	// Create a LoggerContext
-	context := &LoggerContext{}
+	const numGoroutines = 10
+	const iterationsPerGoroutine = 1_000_000
 
-	// Set the strategy to ConsoleLogger and log a message
-	consoleLogger := &ConsoleLogger{}
-	context.SetLogger(consoleLogger)
-	context.Log("This is a console log.")
+	var wg sync.WaitGroup // Create a WaitGroup instance
 
-	// Set the strategy to FileLogger and log a message
-	file, err := os.OpenFile("log.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatal(err)
+	fmt.Println("Starting with sharedCounter:", sharedCounter)
+
+	// Start Goroutines to increment the counter
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)                                        // Increment WaitGroup counter
+		go incrementCounter(iterationsPerGoroutine, &wg) // Start Goroutine with WaitGroup
 	}
-	fileLogger := &FileLogger{file: file}
-	context.SetLogger(fileLogger)
-	context.Log("This is a file log.")
 
-	// Close the file logger
-	fileLogger.Close()
+	wg.Wait() // Wait for all Goroutines to finish
+
+	fmt.Println("Final value of sharedCounter:", sharedCounter)
 }
