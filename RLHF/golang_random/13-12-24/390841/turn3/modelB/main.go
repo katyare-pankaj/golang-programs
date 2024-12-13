@@ -2,46 +2,33 @@ package main
 
 import (
 	"fmt"
-	"net/http"
+	"math/rand"
 	"sync"
+	"time"
 )
 
-// Function to fetch the status code of a given URL
-func fetchStatusCode(url string, wg *sync.WaitGroup) {
+// trackTask executes a task and measures its execution time
+func trackTask(id int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Println("Error fetching URL:", url, "->", err)
-		return
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			fmt.Println("Error closing response body for URL:", url, "->", err)
-		}
-	}()
+	start := time.Now()
 
-	fmt.Println("Status code for URL:", url, "->", resp.StatusCode)
+	// Simulate work with random sleep
+	duration := time.Duration(rand.Intn(100)) * time.Millisecond
+	time.Sleep(duration)
+
+	elapsed := time.Since(start)
+	fmt.Printf("Task %d completed in %v\n", id, elapsed)
 }
 
-// Main function
 func main() {
+	const numTasks = 10
 	var wg sync.WaitGroup
-	urls := []string{
-		"https://www.example.com",
-		"https://go.dev",
-		"https://github.com",
-		"https://non-existent-url.com", // This will cause an error
-	}
 
-	// Start goroutines to fetch status codes concurrently
-	for _, url := range urls {
+	for i := 0; i < numTasks; i++ {
 		wg.Add(1)
-		go fetchStatusCode(url, &wg)
+		go trackTask(i, &wg)
 	}
 
-	// Wait for all goroutines to finish
-	wg.Wait()
-
-	fmt.Println("All URLs have been processed.")
+	wg.Wait() // Wait for all tasks to finish
 }

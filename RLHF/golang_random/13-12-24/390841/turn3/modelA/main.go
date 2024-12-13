@@ -2,52 +2,44 @@ package main
 
 import (
 	"fmt"
-	"net/http"
+	"runtime"
 	"sync"
+	"time"
 )
 
-// Function to fetch HTTP status code for a URL
-func fetchURLStatus(url string, wg *sync.WaitGroup) {
-	defer wg.Done()
+// trackGoroutine runs a simulated task and tracks execution time
+func trackGoroutine(wg *sync.WaitGroup, id int) {
+	defer wg.Done() // Signal completion when the goroutine finishes
 
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("Recovered from panic:", r)
-		}
-	}()
+	start := time.Now() // Start time for this goroutine
 
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Printf("Error fetching %s: %v\n", url, err)
-		return
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("Error closing response body for %s: %v\n", url, err)
-		}
-	}()
+	// Simulate work (e.g., processing)
+	time.Sleep(time.Duration(id%3+1) * 100 * time.Millisecond)
 
-	fmt.Printf("Status code for %s: %s\n", url, resp.Status)
+	elapsed := time.Since(start)               // Calculate elapsed time
+	activeGoroutines := runtime.NumGoroutine() // Count active goroutines
+
+	fmt.Printf("Goroutine %d finished in %v (Active goroutines: %d)\n", id, elapsed, activeGoroutines)
 }
 
 func main() {
+	const numGoroutines = 5
 	var wg sync.WaitGroup
 
-	urls := []string{
-		"https://www.google.com",
-		"https://www.example.com",
-		"https://www.nonexistenturl.xyz",
-		"https://httpbin.org/status/404",
-	}
-
-	// Start goroutines to fetch status codes concurrently
-	for _, url := range urls {
+	// Start multiple goroutines
+	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
-		go fetchURLStatus(url, &wg)
+		go trackGoroutine(&wg, i)
+
+		activeGoroutines := runtime.NumGoroutine() // Count active goroutines after launching
+		fmt.Printf("Launched goroutine %d (Active goroutines: %d)\n", i, activeGoroutines)
 	}
 
 	// Wait for all goroutines to finish
 	wg.Wait()
+	fmt.Println("All goroutines have completed execution.")
 
-	fmt.Println("Finished fetching URLs.")
+	// Final count of active goroutines
+	finalActiveGoroutines := runtime.NumGoroutine()
+	fmt.Printf("Final number of active goroutines: %d\n", finalActiveGoroutines)
 }
