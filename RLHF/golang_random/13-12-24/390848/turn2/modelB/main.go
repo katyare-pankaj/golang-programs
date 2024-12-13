@@ -2,37 +2,44 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"sync"
-	"time"
 )
 
-// Shared counter variable
-var sharedCounter int
+// Function that simulates processing data from a file
+func processDataConcurrently(fileName string, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-// Mutex to protect access to sharedCounter
-var mutex sync.Mutex
-
-func incrementCounter(n int) {
-	for i := 0; i < n; i++ {
-		mutex.Lock() // Acquire the lock
-		sharedCounter++
-		mutex.Unlock() // Release the lock
+	file, err := os.Open(fileName)
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return
 	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Println("Error closing file:", err)
+		}
+	}()
+
+	// Simulate reading and processing data from the file
+	fmt.Println("Processing data from", fileName)
+
+	// In a real scenario, you would read from the file here
 }
 
+// Main function
 func main() {
-	const numGoroutines = 10
-	const iterationsPerGoroutine = 1_000_000
+	var wg sync.WaitGroup
+	fileNames := []string{"file1.txt", "file2.txt", "file3.txt"}
 
-	fmt.Println("Starting with sharedCounter:", sharedCounter)
-
-	// Start Goroutines to increment the counter
-	for i := 0; i < numGoroutines; i++ {
-		go incrementCounter(iterationsPerGoroutine)
+	// Start goroutines to process each file concurrently
+	for _, fileName := range fileNames {
+		wg.Add(1)
+		go processDataConcurrently(fileName, &wg)
 	}
 
-	// Wait for all Goroutines to finish
-	time.Sleep(2 * time.Second)
+	// Wait for all goroutines to finish
+	wg.Wait()
 
-	fmt.Println("Final value of sharedCounter:", sharedCounter)
+	fmt.Println("All files have been processed.")
 }
