@@ -2,59 +2,41 @@ package main
 
 import (
 	"fmt"
-	"os"
+	"runtime"
 	"sync"
+	"time"
 )
 
-// Function that simulates a worker process
-func worker(ch chan int, wg *sync.WaitGroup) {
+// trackGoroutine executes a function and tracks its execution time
+func trackGoroutine(wg *sync.WaitGroup, id int) {
 	defer wg.Done()
-	for num := range ch {
-		fmt.Println("Processed:", num)
-	}
+	start := time.Now()
+
+	// Simulate work with random sleep
+	duration := time.Duration(200+id*50) * time.Millisecond
+	time.Sleep(duration)
+
+	elapsed := time.Since(start)
+	activeGoroutines := runtime.NumGoroutine()
+
+	fmt.Printf("Goroutine %d finished in %v (Active goroutines: %d)\n", id, elapsed, activeGoroutines)
 }
 
 func main() {
+	const numGoroutines = 10
 	var wg sync.WaitGroup
 
-	// Create a channel
-	ch := make(chan int)
-	// Ensure the channel is closed when main function exits
-	defer close(ch) // this defer statement makes sure the channel will be closed later
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go trackGoroutine(&wg, i)
 
-	wg.Add(1)          // Add one to the wait group for the worker
-	go worker(ch, &wg) // Start the worker goroutine
-
-	// Sending data to the channel
-	for i := 0; i < 5; i++ {
-		ch <- i
+		activeGoroutines := runtime.NumGoroutine()
+		fmt.Printf("Launched goroutine %d (Active goroutines: %d)\n", i, activeGoroutines)
 	}
 
-	// Here we naturally don't need to close the channel manually already since it's deferred above.
+	wg.Wait() // Wait for all goroutines to finish
 
-	// Wait for the worker to finish processing
-	wg.Wait()
-	fmt.Println("All processing done.")
-
-	// Opening a file for demonstration purpose
-	file, err := os.Create("example.txt")
-	if err != nil {
-		fmt.Println("Error creating file:", err)
-		return
-	}
-	// Ensure the file is closed when main function exits
-	defer func() {
-		if err := file.Close(); err != nil {
-			fmt.Println("Error closing file:", err)
-		}
-	}()
-
-	// Write to the file
-	_, err = file.WriteString("Hello, World!\n")
-	if err != nil {
-		fmt.Println("Error writing to file:", err)
-		return
-	}
-
-	fmt.Println("File created and content written.")
+	fmt.Println("All goroutines have completed execution.")
+	rangeActiveGoroutines := runtime.NumGoroutine()
+	fmt.Printf("Final number of active goroutines: %d\n", rangeActiveGoroutines)
 }

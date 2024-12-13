@@ -2,44 +2,66 @@ package main
 
 import (
 	"fmt"
-	"os"
+	"math/rand"
+	"runtime"
 	"sync"
+	"time"
 )
 
-// Function that simulates processing data from a file
-func processDataConcurrently(fileName string, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	file, err := os.Open(fileName)
-	if err != nil {
-		fmt.Println("Error opening file:", err)
-		return
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			fmt.Println("Error closing file:", err)
-		}
-	}()
-
-	// Simulate reading and processing data from the file
-	fmt.Println("Processing data from", fileName)
-
-	// In a real scenario, you would read from the file here
+// GoroutineStats holds statistics for a single goroutine
+type GoroutineStats struct {
+	startTime time.Time
+	endTime   time.Time
 }
 
-// Main function
+// TrackGoroutineExecution measures the execution time of a goroutine
+func TrackGoroutineExecution(w *sync.WaitGroup, f func(), stats *GoroutineStats) {
+	defer w.Done()
+
+	stats.startTime = time.Now()
+	f()
+	stats.endTime = time.Now()
+}
+
+// PrintGoroutineStats prints the execution time of the goroutine
+func PrintGoroutineStats(stats *GoroutineStats) {
+	duration := stats.endTime.Sub(stats.startTime)
+	fmt.Printf("Goroutine Execution Time: %s\n", duration)
+}
+
+// PrintActiveGoroutines prints the number of active goroutines
+func PrintActiveGoroutines() {
+	fmt.Printf("Active Goroutines: %d\n", runtime.NumGoroutine())
+}
+
+func simulateWork(duration time.Duration) {
+	time.Sleep(duration)
+}
+
 func main() {
 	var wg sync.WaitGroup
-	fileNames := []string{"file1.txt", "file2.txt", "file3.txt"}
 
-	// Start goroutines to process each file concurrently
-	for _, fileName := range fileNames {
+	// Start multiple goroutines simulating work
+	numGoroutines := 10
+	for i := 0; i < numGoroutines; i++ {
+		var stats GoroutineStats
 		wg.Add(1)
-		go processDataConcurrently(fileName, &wg)
+		go TrackGoroutineExecution(&wg, func() {
+			simulateWork(time.Duration(rand.Intn(500)) * time.Millisecond)
+		}, &stats)
 	}
 
-	// Wait for all goroutines to finish
+	// Print initial active goroutines
+	fmt.Println("Starting...")
+	PrintActiveGoroutines()
+
+	// Wait for all goroutines to complete
 	wg.Wait()
 
-	fmt.Println("All files have been processed.")
+	// Print final active goroutines
+	fmt.Println("\nFinished...")
+	PrintActiveGoroutines()
+
+	// Print execution stats for each goroutine
+	fmt.Println("\nGoroutine Execution Stats:")
 }
