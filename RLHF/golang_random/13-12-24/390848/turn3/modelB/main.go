@@ -2,34 +2,46 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"sync"
 )
 
-// Shared counter variable
-var sharedCounter int
+// Function to fetch the status code of a given URL
+func fetchStatusCode(url string, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-func incrementCounter(n int, wg *sync.WaitGroup) {
-	defer wg.Done() // Decrement the WaitGroup counter when the function completes
-	for i := 0; i < n; i++ {
-		sharedCounter++
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("Error fetching URL:", url, "->", err)
+		return
 	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Println("Error closing response body for URL:", url, "->", err)
+		}
+	}()
+
+	fmt.Println("Status code for URL:", url, "->", resp.StatusCode)
 }
 
+// Main function
 func main() {
-	const numGoroutines = 10
-	const iterationsPerGoroutine = 1_000_000
-
 	var wg sync.WaitGroup
-	fmt.Println("Starting with sharedCounter:", sharedCounter)
-
-	// Start Goroutines to increment the counter
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1) // Increment the WaitGroup counter before starting the Goroutine
-		go incrementCounter(iterationsPerGoroutine, &wg)
+	urls := []string{
+		"https://www.example.com",
+		"https://go.dev",
+		"https://github.com",
+		"https://non-existent-url.com", // This will cause an error
 	}
 
-	// Wait for all Goroutines to finish
+	// Start goroutines to fetch status codes concurrently
+	for _, url := range urls {
+		wg.Add(1)
+		go fetchStatusCode(url, &wg)
+	}
+
+	// Wait for all goroutines to finish
 	wg.Wait()
 
-	fmt.Println("Final value of sharedCounter:", sharedCounter)
+	fmt.Println("All URLs have been processed.")
 }

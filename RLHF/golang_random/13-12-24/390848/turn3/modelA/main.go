@@ -2,40 +2,52 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"sync"
 )
 
-// Shared counter variable
-var sharedCounter int
+// Function to fetch HTTP status code for a URL
+func fetchURLStatus(url string, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-// Mutex to protect access to sharedCounter
-var mutex sync.Mutex
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic:", r)
+		}
+	}()
 
-func incrementCounter(n int, wg *sync.WaitGroup) {
-	defer wg.Done() // Ensure that Done is called at the end of the function
-
-	for i := 0; i < n; i++ {
-		mutex.Lock() // Acquire the lock
-		sharedCounter++
-		mutex.Unlock() // Release the lock
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Printf("Error fetching %s: %v\n", url, err)
+		return
 	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body for %s: %v\n", url, err)
+		}
+	}()
+
+	fmt.Printf("Status code for %s: %s\n", url, resp.Status)
 }
 
 func main() {
-	const numGoroutines = 10
-	const iterationsPerGoroutine = 1_000_000
+	var wg sync.WaitGroup
 
-	var wg sync.WaitGroup // Create a WaitGroup instance
-
-	fmt.Println("Starting with sharedCounter:", sharedCounter)
-
-	// Start Goroutines to increment the counter
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)                                        // Increment WaitGroup counter
-		go incrementCounter(iterationsPerGoroutine, &wg) // Start Goroutine with WaitGroup
+	urls := []string{
+		"https://www.google.com",
+		"https://www.example.com",
+		"https://www.nonexistenturl.xyz",
+		"https://httpbin.org/status/404",
 	}
 
-	wg.Wait() // Wait for all Goroutines to finish
+	// Start goroutines to fetch status codes concurrently
+	for _, url := range urls {
+		wg.Add(1)
+		go fetchURLStatus(url, &wg)
+	}
 
-	fmt.Println("Final value of sharedCounter:", sharedCounter)
+	// Wait for all goroutines to finish
+	wg.Wait()
+
+	fmt.Println("Finished fetching URLs.")
 }
