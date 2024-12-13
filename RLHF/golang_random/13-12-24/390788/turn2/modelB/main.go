@@ -3,36 +3,60 @@ package main
 import (
 	"fmt"
 	"sync"
-	"time"
 )
 
-// Shared counter variable
-var sharedCounter int
+// Multiplies two matrices
+func multiplyMatrices(A [][]int, B [][]int) [][]int {
+	rowsA := len(A)
+	colsA := len(A[0])
+	rowsB := len(B)
+	colsB := len(B[0])
 
-// Mutex to protect access to sharedCounter
-var mutex sync.Mutex
-
-func incrementCounter(n int) {
-	for i := 0; i < n; i++ {
-		mutex.Lock() // Acquire the lock
-		sharedCounter++
-		mutex.Unlock() // Release the lock
+	// Ensure matrices can be multiplied
+	if colsA != rowsB {
+		panic("Matrices cannot be multiplied")
 	}
+
+	// Resultant matrix
+	C := make([][]int, rowsA, rowsA)
+	for i := range C {
+		C[i] = make([]int, colsB, colsB)
+	}
+
+	// Parallely calculate each element of matrix C
+	var wg sync.WaitGroup
+	for i := 0; i < rowsA; i++ {
+		wg.Add(1)
+		go func(row int) {
+			defer wg.Done()
+			for j := 0; j < colsB; j++ {
+				for k := 0; k < colsA; k++ {
+					C[row][j] += A[row][k] * B[k][j]
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	return C
 }
 
 func main() {
-	const numGoroutines = 10
-	const iterationsPerGoroutine = 1_000_000
-
-	fmt.Println("Starting with sharedCounter:", sharedCounter)
-
-	// Start Goroutines to increment the counter
-	for i := 0; i < numGoroutines; i++ {
-		go incrementCounter(iterationsPerGoroutine)
+	A := [][]int{
+		{1, 2, 3},
+		{4, 5, 6},
 	}
 
-	// Wait for all Goroutines to finish
-	time.Sleep(2 * time.Second)
+	B := [][]int{
+		{7, 8},
+		{9, 10},
+		{11, 12},
+	}
 
-	fmt.Println("Final value of sharedCounter:", sharedCounter)
+	C := multiplyMatrices(A, B)
+
+	fmt.Println("Resulting matrix:")
+	for _, row := range C {
+		fmt.Println(row)
+	}
 }

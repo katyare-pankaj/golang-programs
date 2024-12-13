@@ -5,41 +5,46 @@ import (
 	"sync"
 )
 
-// Counter struct that holds the value and a mutex for synchronization
-type Counter struct {
-	mu    sync.Mutex
-	value int
-}
-
-func (c *Counter) Increment() {
-	c.mu.Lock()   // Lock the mutex before accessing the counter
-	c.value++     // Increment the counter
-	c.mu.Unlock() // Unlock the mutex after the operation
-}
-
-func (c *Counter) GetValue() int {
-	c.mu.Lock()         // Lock the mutex for reading the value
-	defer c.mu.Unlock() // Ensure the mutex is unlocked after reading
-	return c.value
-}
-
-func worker(c *Counter, wg *sync.WaitGroup) {
-	defer wg.Done() // Decrement the WaitGroup counter when the function completes
-	for i := 0; i < 1000; i++ {
-		c.Increment() // Increment the counter
+// Function to compute factorial of n
+func factorial(n int, wg *sync.WaitGroup, results chan<- int, errors chan<- error) {
+	defer wg.Done() // Indicate that this Goroutine is done
+	if n < 0 {
+		errors <- fmt.Errorf("factorial of negative number %d does not exist", n)
+		return
 	}
+	result := 1
+	for i := 2; i <= n; i++ {
+		result *= i
+	}
+	results <- result // Send the result back through the channel
 }
 
 func main() {
+	numbers := []int{5, 4, -1, 7, 6} // List of numbers to compute factorials for
 	var wg sync.WaitGroup
-	counter := &Counter{} // Create a new counter instance
+	results := make(chan int, len(numbers))  // Results channel
+	errors := make(chan error, len(numbers)) // Errors channel
 
-	// Start 10 worker Goroutines
-	for i := 0; i < 10; i++ {
-		wg.Add(1)               // Increment the WaitGroup counter
-		go worker(counter, &wg) // Start a worker Goroutine
+	// Start Goroutines
+	for _, n := range numbers {
+		wg.Add(1) // Increment the WaitGroup counter
+		go factorial(n, &wg, results, errors)
 	}
 
-	wg.Wait() // Wait for all Goroutines to finish
-	fmt.Printf("Final counter value: %d\n", counter.GetValue())
+	// Start a Goroutine to wait for all computations to complete
+	go func() {
+		wg.Wait()      // Wait for all Goroutines to finish
+		close(results) // Close the results channel when done
+		close(errors)  // Close the errors channel when done
+	}()
+
+	// Fetch results and errors
+	for i := 0; i < len(numbers); i++ {
+		select {
+		case res := <-results:
+			fmt.Printf("Factorial result: %d\n", res)
+		case err := <-errors:
+			fmt.Printf("Error: %v\n", err)
+		}
+	}
 }
