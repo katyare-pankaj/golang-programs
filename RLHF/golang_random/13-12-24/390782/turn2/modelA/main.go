@@ -1,50 +1,55 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"sync"
+	"time"
 )
 
-// Function to compute factorial of n
-func factorial(n int, wg *sync.WaitGroup, results chan<- int, errors chan<- error) {
-	defer wg.Done() // Indicate that this Goroutine is done
-	if n < 0 {
-		errors <- fmt.Errorf("factorial of negative number %d does not exist", n)
-		return
+func doWork(ctx context.Context, id int, wg *sync.WaitGroup) {
+	defer wg.Done() // Notify that this Goroutine is done when it exits
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Cleanup code here if needed
+			fmt.Printf("Goroutine %d cancelled and cleaning up.\n", id)
+			return
+		default:
+			// Simulate work
+			fmt.Printf("Goroutine %d is working...\n", id)
+			time.Sleep(1 * time.Second)
+		}
 	}
-	result := 1
-	for i := 2; i <= n; i++ {
-		result *= i
-	}
-	results <- result // Send the result back through the channel
 }
 
 func main() {
-	numbers := []int{5, 4, -1, 7, 6} // List of numbers to compute factorials for
 	var wg sync.WaitGroup
-	results := make(chan int, len(numbers))  // Results channel
-	errors := make(chan error, len(numbers)) // Errors channel
 
-	// Start Goroutines
-	for _, n := range numbers {
-		wg.Add(1) // Increment the WaitGroup counter
-		go factorial(n, &wg, results, errors)
+	// Create a cancellable context with a signal interrupt listener
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Listen for OS interrupt signals to trigger cancellation
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt)
+
+	// Start multiple Goroutines
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go doWork(ctx, i, &wg)
 	}
 
-	// Start a Goroutine to wait for all computations to complete
-	go func() {
-		wg.Wait()      // Wait for all Goroutines to finish
-		close(results) // Close the results channel when done
-		close(errors)  // Close the errors channel when done
-	}()
+	// Wait for an interrupt signal
+	<-sigs
+	fmt.Println("Received an interrupt signal, cancelling Goroutines...")
 
-	// Fetch results and errors
-	for i := 0; i < len(numbers); i++ {
-		select {
-		case res := <-results:
-			fmt.Printf("Factorial result: %d\n", res)
-		case err := <-errors:
-			fmt.Printf("Error: %v\n", err)
-		}
-	}
+	// Call cancel to signal all Goroutines to stop
+	cancel()
+
+	// Wait for all Goroutines to finish
+	wg.Wait()
+	fmt.Println("All Goroutines have completed.")
 }

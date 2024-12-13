@@ -1,62 +1,51 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"sync"
+	"log"
+	"os"
+	"time"
 )
 
-// Multiplies two matrices
-func multiplyMatrices(A [][]int, B [][]int) [][]int {
-	rowsA := len(A)
-	colsA := len(A[0])
-	rowsB := len(B)
-	colsB := len(B[0])
+// Simulates a long-running operation
+func longRunningOperation(ctx context.Context, filePath string) error {
+	defer log.Println("Cleaning up file handle")
 
-	// Ensure matrices can be multiplied
-	if colsA != rowsB {
-		panic("Matrices cannot be multiplied")
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
 	}
+	defer file.Close()
 
-	// Resultant matrix
-	C := make([][]int, rowsA, rowsA)
-	for i := range C {
-		C[i] = make([]int, colsB, colsB)
+	select {
+	case <-time.After(5 * time.Second): // Simulate 5 seconds of work
+		fmt.Println("Operation completed successfully")
+		return nil
+	case <-ctx.Done():
+		log.Println("Operation cancelled")
+		return ctx.Err()
 	}
-
-	// Parallely calculate each element of matrix C
-	var wg sync.WaitGroup
-	for i := 0; i < rowsA; i++ {
-		wg.Add(1)
-		go func(row int) {
-			defer wg.Done()
-			for j := 0; j < colsB; j++ {
-				for k := 0; k < colsA; k++ {
-					C[row][j] += A[row][k] * B[k][j]
-				}
-			}
-		}(i)
-	}
-
-	wg.Wait()
-	return C
 }
 
 func main() {
-	A := [][]int{
-		{1, 2, 3},
-		{4, 5, 6},
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
-	B := [][]int{
-		{7, 8},
-		{9, 10},
-		{11, 12},
-	}
+	filePath := "example.txt"
 
-	C := multiplyMatrices(A, B)
+	go func() {
+		if err := longRunningOperation(ctx, filePath); err != nil {
+			log.Printf("Error in longRunningOperation: %v\n", err)
+		}
+	}()
 
-	fmt.Println("Resulting matrix:")
-	for _, row := range C {
-		fmt.Println(row)
+	time.Sleep(2 * time.Second)
+	log.Println("Cancelling operation...")
+	cancel() // Cancel the context
+
+	select {
+	case <-time.After(1 * time.Second):
+		log.Println("Main thread exiting")
 	}
 }
