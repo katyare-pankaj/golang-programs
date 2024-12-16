@@ -2,56 +2,67 @@ package main
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
-	"time"
 )
 
-const (
-	numItems = 100
-)
-
-// Producer function generates numbers and sends them over the channel
-func producer(id int, ch chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for i := 0; i < numItems; i++ {
-		ch <- i
-	}
+// Task is an interface that all tasks must implement
+type Task interface {
+	Execute()
 }
 
-// Consumer function receives numbers from the channel and processes them
-func consumer(id int, ch <-chan int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for range ch {
-		time.Sleep(10 * time.Millisecond) // Simulate time to process each item
-	}
+// PrintTask simply prints a message
+type PrintTask struct {
+	Message string
 }
 
-func measurePingPong(channelType string, bufferSize int) {
-	start := time.Now()
+func (p *PrintTask) Execute() {
+	fmt.Println("Executing PrintTask:", p.Message)
+}
 
-	var wg sync.WaitGroup
-	ch := make(chan int, bufferSize)
+// MultiplyTask multiplies two numbers
+type MultiplyTask struct {
+	A, B int
+}
 
-	wg.Add(1)
-	go producer(1, ch, &wg)
+func (m *MultiplyTask) Execute() {
+	result := m.A * m.B
+	fmt.Printf("Executing MultiplyTask: %d * %d = %d\n", m.A, m.B, result)
+}
 
-	wg.Add(1)
-	go consumer(1, ch, &wg)
+// DynamicTaskHandler processes tasks of various types using reflection
+func DynamicTaskHandler(tasks chan Task, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for task := range tasks {
+		valueOfTask := reflect.ValueOf(task)
 
-	wg.Wait()
-	close(ch)
-
-	elapsed := time.Since(start)
-	fmt.Printf("%s Channel with buffer size %d took %s to complete.\n", channelType, bufferSize, elapsed)
+		// Call the Execute method using reflection.
+		executeMethod := valueOfTask.MethodByName("Execute")
+		if executeMethod.IsValid() {
+			executeMethod.Call(nil)
+		} else {
+			fmt.Println("Error: No valid Execute method found.")
+		}
+	}
 }
 
 func main() {
-	// Test with buffered channel of size 2
-	measurePingPong("Buffered", 2)
+	tasks := make(chan Task)
 
-	// Test with buffered channel of size 20
-	measurePingPong("Buffered", 20)
+	var wg sync.WaitGroup
+	wg.Add(1)
 
-	// Test with unbuffered channel
-	measurePingPong("Unbuffered", 0)
+	// Start the dynamic task handler in a goroutine
+	go DynamicTaskHandler(tasks, &wg)
+
+	// Create tasks and push them to the channel
+	tasks <- &PrintTask{Message: "Hello, World!"}
+	tasks <- &MultiplyTask{A: 10, B: 5}
+
+	// Close the task channel after sending all tasks
+	close(tasks)
+
+	// Wait for the goroutine to finish
+	wg.Wait()
+	fmt.Println("All tasks done!")
 }

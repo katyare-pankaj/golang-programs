@@ -2,64 +2,70 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
+	"reflect"
 	"sync"
 	"time"
 )
 
-// Producer function that sends data to the channel
-func producer(ch chan<- int, count int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for i := 0; i < count; i++ {
-		value := rand.Intn(100)
-		fmt.Printf("Producer sending: %d\n", value)
-		ch <- value
-		time.Sleep(time.Millisecond * 50) // simulate work
-	}
+// Task represents a generic task to be executed
+type Task interface {
+	Run()
 }
 
-// Consumer function that receives data from the channel
-func consumer(ch <-chan int, count int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for i := 0; i < count; i++ {
-		value, ok := <-ch
-		if !ok {
-			fmt.Println("Consumer received end signal.")
-			return
-		}
-		fmt.Printf("Consumer received: %d\n", value)
-		time.Sleep(time.Millisecond * 200) // simulate work
+// PrintTask is a simple task that prints a message
+type PrintTask struct {
+	Message string
+}
+
+func (t *PrintTask) Run() {
+	fmt.Println("Running PrintTask:", t.Message)
+	time.Sleep(1 * time.Second)
+}
+
+// CalculateTask is a task that performs a calculation
+type CalculateTask struct {
+	A, B int
+}
+
+func (t *CalculateTask) Run() {
+	result := t.A + t.B
+	fmt.Println("Running CalculateTask:", t.A, "+", t.B, "=", result)
+	time.Sleep(1 * time.Second)
+}
+
+// TaskExecutor uses reflection to execute tasks
+func TaskExecutor(tasks chan Task) {
+	for task := range tasks {
+		val := reflect.ValueOf(task)
+		typ := val.Type()
+
+		fmt.Printf("Executing task of type %s\n", typ.Name())
+
+		// Call the Run method using reflection
+		val.MethodByName("Run").Call(nil)
 	}
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-	const workCount = 100
+	// Create a channel for tasks
+	tasks := make(chan Task)
+
+	// Start a goroutine to execute tasks
 	var wg sync.WaitGroup
-
-	fmt.Println("Unbuffered Channel Example:")
-	// Unbuffered channel
-	unbufferedCh := make(chan int)
-
 	wg.Add(1)
-	go producer(unbufferedCh, workCount, &wg)
+	go func() {
+		TaskExecutor(tasks)
+		wg.Done()
+	}()
 
-	wg.Add(1)
-	go consumer(unbufferedCh, workCount, &wg)
+	// Dispatch tasks concurrently
+	tasks <- &PrintTask{Message: "Hello, World!"}
+	tasks <- &CalculateTask{A: 10, B: 20}
+	tasks <- &PrintTask{Message: "Task completed."}
+	tasks <- &CalculateTask{A: 100, B: 200}
+
+	// Close the task channel to signal the executor to stop
+	close(tasks)
 
 	wg.Wait()
-	close(unbufferedCh)
-
-	fmt.Println("\nBuffered Channel Example (buffer size = 10):")
-	// Buffered channel with a size of 10
-	bufferedCh := make(chan int, 10)
-
-	wg.Add(1)
-	go producer(bufferedCh, workCount, &wg)
-
-	wg.Add(1)
-	go consumer(bufferedCh, workCount, &wg)
-
-	wg.Wait()
-	close(bufferedCh)
 }
