@@ -2,70 +2,67 @@ package main
 
 import (
 	"fmt"
-	"reflect"
+	"math/rand"
 	"sync"
 	"time"
 )
 
-// Task represents a generic task to be executed
-type Task interface {
-	Run()
-}
-
-// PrintTask is a simple task that prints a message
-type PrintTask struct {
-	Message string
-}
-
-func (t *PrintTask) Run() {
-	fmt.Println("Running PrintTask:", t.Message)
-	time.Sleep(1 * time.Second)
-}
-
-// CalculateTask is a task that performs a calculation
-type CalculateTask struct {
-	A, B int
-}
-
-func (t *CalculateTask) Run() {
-	result := t.A + t.B
-	fmt.Println("Running CalculateTask:", t.A, "+", t.B, "=", result)
-	time.Sleep(1 * time.Second)
-}
-
-// TaskExecutor uses reflection to execute tasks
-func TaskExecutor(tasks chan Task) {
-	for task := range tasks {
-		val := reflect.ValueOf(task)
-		typ := val.Type()
-
-		fmt.Printf("Executing task of type %s\n", typ.Name())
-
-		// Call the Run method using reflection
-		val.MethodByName("Run").Call(nil)
+func sumArray(array []int) int {
+	total := 0
+	for _, num := range array {
+		total += num
 	}
+	return total
+}
+
+func processChunk(chunk []int, wg *sync.WaitGroup, results chan<- int) {
+	defer wg.Done()
+	results <- sumArray(chunk)
+}
+
+func parallelSum(data []int, numWorkers int) int {
+	rand.Seed(time.Now().UnixNano())
+	chunkSize := len(data) / numWorkers
+	if chunkSize == 0 {
+		chunkSize = 1
+	}
+
+	results := make(chan<- int)
+	var wg sync.WaitGroup
+
+	for i := 0; i < numWorkers; i++ {
+		start := i * chunkSize
+		end := min((i+1)*chunkSize, len(data))
+		wg.Add(1)
+		go processChunk(data[start:end], &wg, results)
+	}
+
+	total := 0
+	for i := 0; i < numWorkers; i++ {
+		total += <-results
+	}
+
+	wg.Wait()
+	close(results)
+	return total
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func main() {
-	// Create a channel for tasks
-	tasks := make(chan Task)
+	data := make([]int, 10000000)
+	for i := range data {
+		data[i] = rand.Intn(1000)
+	}
 
-	// Start a goroutine to execute tasks
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		TaskExecutor(tasks)
-		wg.Done()
-	}()
+	startTime := time.Now()
+	totalSum := parallelSum(data, 8) // Adjust numWorkers based on CPU cores
+	elapsed := time.Since(startTime)
 
-	// Dispatch tasks concurrently
-	tasks <- &PrintTask{Message: "Hello, World!"}
-	tasks <- &CalculateTask{A: 10, B: 20}
-	tasks <- &PrintTask{Message: "Task completed."}
-	tasks <- &CalculateTask{A: 100, B: 200}
-
-	// Close the task channel to signal the executor to stop
-	close(tasks)
-
-	wg.Wait()
+	fmt.Printf("Parallel sum: %d, completed in %s\n", totalSum, elapsed)
 }

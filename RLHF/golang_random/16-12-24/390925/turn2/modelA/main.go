@@ -2,67 +2,53 @@ package main
 
 import (
 	"fmt"
-	"reflect"
 	"sync"
+	"time"
 )
 
-// Task is an interface that all tasks must implement
-type Task interface {
-	Execute()
-}
-
-// PrintTask simply prints a message
-type PrintTask struct {
-	Message string
-}
-
-func (p *PrintTask) Execute() {
-	fmt.Println("Executing PrintTask:", p.Message)
-}
-
-// MultiplyTask multiplies two numbers
-type MultiplyTask struct {
-	A, B int
-}
-
-func (m *MultiplyTask) Execute() {
-	result := m.A * m.B
-	fmt.Printf("Executing MultiplyTask: %d * %d = %d\n", m.A, m.B, result)
-}
-
-// DynamicTaskHandler processes tasks of various types using reflection
-func DynamicTaskHandler(tasks chan Task, wg *sync.WaitGroup) {
+func squareWorker(numbers <-chan int, results chan<- int, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for task := range tasks {
-		valueOfTask := reflect.ValueOf(task)
-
-		// Call the Execute method using reflection.
-		executeMethod := valueOfTask.MethodByName("Execute")
-		if executeMethod.IsValid() {
-			executeMethod.Call(nil)
-		} else {
-			fmt.Println("Error: No valid Execute method found.")
-		}
+	for n := range numbers {
+		results <- n * n
 	}
 }
 
 func main() {
-	tasks := make(chan Task)
+	start := 1
+	end := 100000
+
+	numbers := make(chan int, 100)
+	results := make(chan int, 100)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	// Start the dynamic task handler in a goroutine
-	go DynamicTaskHandler(tasks, &wg)
+	// Starting several workers
+	for w := 1; w <= 8; w++ { // e.g. 8 workers
+		wg.Add(1)
+		go squareWorker(numbers, results, &wg)
+	}
 
-	// Create tasks and push them to the channel
-	tasks <- &PrintTask{Message: "Hello, World!"}
-	tasks <- &MultiplyTask{A: 10, B: 5}
+	startTime := time.Now()
 
-	// Close the task channel after sending all tasks
-	close(tasks)
+	// Feeding the input to the workers
+	go func() {
+		for i := start; i <= end; i++ {
+			numbers <- i
+		}
+		close(numbers)
+	}()
 
-	// Wait for the goroutine to finish
-	wg.Wait()
-	fmt.Println("All tasks done!")
+	// Gathering results
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Output the results
+	for result := range results {
+		fmt.Println(result)
+	}
+
+	elapsed := time.Since(startTime)
+	fmt.Printf("Processing took %s\n", elapsed)
 }
