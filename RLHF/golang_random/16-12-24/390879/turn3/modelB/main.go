@@ -2,63 +2,111 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
+	"reflect"
 	"sync"
 	"time"
 )
 
-// Producer function that sends data to the channel
-func producer(ch chan<- int, count int) {
-	for i := 0; i < count; i++ {
-		value := rand.Intn(100)
-		ch <- value
-	}
-	close(ch)
+// Task interface defines the behaviour all tasks must follow
+type Task interface {
+	Run()
 }
 
-// Consumer function that receives data from the channel
-func consumer(ch <-chan int, count int) {
-	for i := 0; i < count; i++ {
-		<-ch
+// PrintTask is a simple task that prints a message
+type PrintTask struct {
+	Message string
+}
+
+func (t *PrintTask) Run() {
+	fmt.Println("Running PrintTask:", t.Message)
+	time.Sleep(1 * time.Second)
+}
+
+// CalculateTask is a task that performs a calculation
+type CalculateTask struct {
+	A, B int
+}
+
+func (t *CalculateTask) Run() {
+	result := t.A + t.B
+	fmt.Println("Running CalculateTask:", t.A, "+", t.B, "=", result)
+	time.Sleep(1 * time.Second)
+}
+
+// LoadAndExecuteTasks uses reflection to dynamically load and execute tasks
+func LoadAndExecuteTasks(taskDescs []string, taskExecutor chan Task) {
+	for _, taskDesc := range taskDescs {
+		parts := reflect.Split(taskDesc, ".")
+		if len(parts) != 2 {
+			fmt.Println("Invalid task description:", taskDesc)
+			continue
+		}
+
+		pkg := parts[0]
+		typ := parts[1]
+
+		// Import the package dynamically
+		if err := importPackage(pkg); err != nil {
+			fmt.Println("Error importing package", pkg, ":", err)
+			continue
+		}
+
+		// Create an instance of the task using reflection
+		var task Task
+		switch typ {
+		case "PrintTask":
+			task = &PrintTask{Message: "Dynamic Task"}
+		case "CalculateTask":
+			task = &CalculateTask{A: 42, B: 13}
+		default:
+			fmt.Println("Unknown task type:", typ)
+			continue
+		}
+
+		// Send the task to the executor
+		taskExecutor <- task
 	}
+	close(taskExecutor)
+}
+
+func importPackage(pkg string) error {
+	// For demonstration purposes, we're not actually importing dynamically
+	// In a real scenario, you'd use a package like "plugin" to dynamically load packages.
+	return nil
+}
+
+// TaskExecutor handles executing tasks concurrently
+func TaskExecutor(taskExecutor chan Task) {
+	var wg sync.WaitGroup
+
+	// Create a fixed number of worker goroutines
+	const numWorkers = 5
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for task := range taskExecutor {
+				task.Run()
+			}
+		}()
+	}
+
+	wg.Wait()
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-	const workCount = 100000
-	var wg sync.WaitGroup
+	// Define task descriptions (package.Type)
+	taskDescs := []string{
+		"main.PrintTask",
+		"main.CalculateTask",
+		"main.PrintTask",
+		"main.CalculateTask",
+	}
 
-	fmt.Println("\nUnbuffered Channel Performance:")
-	unbufferedStart := time.Now()
+	// Create a channel for tasks
+	taskExecutor := make(chan Task)
 
-	// Unbuffered channel
-	unbufferedCh := make(chan int)
-
-	wg.Add(1)
-	go producer(unbufferedCh, workCount)
-
-	wg.Add(1)
-	go consumer(unbufferedCh, workCount)
-
-	wg.Wait()
-
-	unbufferedEnd := time.Now()
-	fmt.Printf("Unbuffered Channel Execution Time: %v\n", unbufferedEnd.Sub(unbufferedStart))
-
-	fmt.Println("\nBuffered Channel Performance (buffer size = 1000):")
-	bufferedStart := time.Now()
-
-	// Buffered channel with a size of 1000
-	bufferedCh := make(chan int, 1000)
-
-	wg.Add(1)
-	go producer(bufferedCh, workCount)
-
-	wg.Add(1)
-	go consumer(bufferedCh, workCount)
-
-	wg.Wait()
-
-	bufferedEnd := time.Now()
-	fmt.Printf("Buffered Channel Execution Time: %v\n", bufferedEnd.Sub(bufferedStart))
+	// Start task loading and execution concurrently
+	go LoadAndExecuteTasks(taskDescs, taskExecutor)
+	go TaskExecutor(taskExecutor)
 }

@@ -2,63 +2,68 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
+	"reflect"
 	"sync"
 	"time"
 )
 
-// Producer function that sends data to the channel
-func producer(ch chan<- int, count int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for i := 0; i < count; i++ {
-		value := rand.Intn(100)
-		ch <- value
-		time.Sleep(time.Millisecond * time.Duration(rand.Intn(10))) // simulate work
-	}
+// Task interface represents a generic task that can be executed
+type Task interface {
+	Run()
 }
 
-// Consumer function that receives data from the channel
-func consumer(ch <-chan int, count int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for i := 0; i < count; i++ {
-		<-ch                              // Simulate processing
-		time.Sleep(time.Millisecond * 20) // simulate work
-	}
+// PrintTask is a task that prints a message
+type PrintTask struct {
+	Message string
 }
 
-func measureTime(channelType string, bufferSize int, count int) {
-	var wg sync.WaitGroup
+func (t *PrintTask) Run() {
+	fmt.Println("Executing PrintTask:", t.Message)
+	time.Sleep(1 * time.Second) // Simulating work
+}
 
-	var ch interface{}
-	if channelType == "buffered" {
-		ch = make(chan int, bufferSize)
-	} else {
-		ch = make(chan int)
+// CalculateTask is a task that performs a calculation
+type CalculateTask struct {
+	A, B int
+}
+
+func (t *CalculateTask) Run() {
+	result := t.A + t.B
+	fmt.Printf("Executing CalculateTask: %d + %d = %d\n", t.A, t.B, result)
+	time.Sleep(1 * time.Second) // Simulating work
+}
+
+// TaskExecutor is responsible for executing tasks concurrently
+func TaskExecutor(tasks <-chan Task, wg *sync.WaitGroup) {
+	defer wg.Done() // Notify that this goroutine is done when returning
+
+	for task := range tasks {
+		// Use reflection to call Run method
+		val := reflect.ValueOf(task)
+		val.MethodByName("Run").Call(nil)
 	}
-
-	start := time.Now()
-
-	wg.Add(1)
-	go producer(ch.(chan int), count, &wg)
-
-	wg.Add(1)
-	go consumer(ch.(chan int), count, &wg)
-
-	wg.Wait()
-	elapsed := time.Since(start)
-	fmt.Printf("%s Channel (buffer size = %d) took %s\n", channelType, bufferSize, elapsed)
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-	const itemCount = 1000
+	// Create a channel for tasks
+	tasks := make(chan Task)
 
-	// Measure performance for unbuffered channel
-	measureTime("Unbuffered", 0, itemCount)
+	// WaitGroup to manage goroutines
+	var wg sync.WaitGroup
+	wg.Add(1)
 
-	// Measure performance for buffered channel with a buffer size of 10
-	measureTime("Buffered", 10, itemCount)
+	// Start a goroutine to execute tasks
+	go TaskExecutor(tasks, &wg)
 
-	// Measure performance for buffered channel with a larger buffer size of 100
-	measureTime("Buffered", 100, itemCount)
+	// Dispatch tasks to the channel
+	tasks <- &PrintTask{Message: "Hello, World!"}
+	tasks <- &CalculateTask{A: 10, B: 20}
+	tasks <- &PrintTask{Message: "Executing another task!"}
+	tasks <- &CalculateTask{A: 100, B: 200}
+
+	// Close the task channel to indicate no more tasks will be sent
+	close(tasks)
+
+	// Wait for the task executor to finish
+	wg.Wait()
 }
