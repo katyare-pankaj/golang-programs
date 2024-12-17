@@ -2,68 +2,81 @@ package main
 
 import (
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
 )
 
-// Task interface represents a generic task that can be executed
-type Task interface {
-	Run()
-}
+const (
+	chunkSize   = 10000 // Define chunk size
+	workerCount = 8     // Number of workers
+)
 
-// PrintTask is a task that prints a message
-type PrintTask struct {
-	Message string
-}
-
-func (t *PrintTask) Run() {
-	fmt.Println("Executing PrintTask:", t.Message)
-	time.Sleep(1 * time.Second) // Simulating work
-}
-
-// CalculateTask is a task that performs a calculation
-type CalculateTask struct {
-	A, B int
-}
-
-func (t *CalculateTask) Run() {
-	result := t.A + t.B
-	fmt.Printf("Executing CalculateTask: %d + %d = %d\n", t.A, t.B, result)
-	time.Sleep(1 * time.Second) // Simulating work
-}
-
-// TaskExecutor is responsible for executing tasks concurrently
-func TaskExecutor(tasks <-chan Task, wg *sync.WaitGroup) {
-	defer wg.Done() // Notify that this goroutine is done when returning
-
-	for task := range tasks {
-		// Use reflection to call Run method
-		val := reflect.ValueOf(task)
-		val.MethodByName("Run").Call(nil)
+// worker function
+func worker(id int, jobs <-chan []int, results chan<- int, wg *sync.WaitGroup, errors chan<- error) {
+	defer wg.Done()
+	for nums := range jobs {
+		for _, n := range nums {
+			// Simulating processing: squaring the number
+			if n < 0 {
+				errors <- fmt.Errorf("negative number: %d", n) // Error example
+			} else {
+				results <- n * n
+			}
+		}
 	}
 }
 
 func main() {
-	// Create a channel for tasks
-	tasks := make(chan Task)
+	start := 1
+	end := 100000
+	numbers := make([]int, end-start+1)
+	for i := start; i <= end; i++ {
+		numbers[i-start] = i
+	}
 
-	// WaitGroup to manage goroutines
+	jobs := make(chan []int, workerCount)
+	results := make(chan int, chunkSize)
+	errors := make(chan error, workerCount)
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	// Start a goroutine to execute tasks
-	go TaskExecutor(tasks, &wg)
+	// Start worker goroutines
+	for w := 1; w <= workerCount; w++ {
+		wg.Add(1)
+		go worker(w, jobs, results, &wg, errors)
+	}
 
-	// Dispatch tasks to the channel
-	tasks <- &PrintTask{Message: "Hello, World!"}
-	tasks <- &CalculateTask{A: 10, B: 20}
-	tasks <- &PrintTask{Message: "Executing another task!"}
-	tasks <- &CalculateTask{A: 100, B: 200}
+	go func() {
+		// Handle errors
+		for err := range errors {
+			if err != nil {
+				fmt.Println("Error:", err)
+			}
+		}
+	}()
 
-	// Close the task channel to indicate no more tasks will be sent
-	close(tasks)
+	startTime := time.Now()
 
-	// Wait for the task executor to finish
+	// Chunk the dataset and send to jobs channel
+	for i := 0; i < len(numbers); i += chunkSize {
+		end := i + chunkSize
+		if end > len(numbers) {
+			end = len(numbers)
+		}
+		jobs <- numbers[i:end]
+	}
+
+	close(jobs) // Close jobs channel after sending all chunks
+
+	// Wait for all workers to finish
 	wg.Wait()
+	close(results) // Close results channel after all workers are done
+	close(errors)  // Close errors channel
+
+	// Collect results
+	for res := range results {
+		fmt.Println(res) // Output the results (squared numbers)
+	}
+
+	elapsed := time.Since(startTime)
+	fmt.Printf("Processing took %s\n", elapsed)
 }
