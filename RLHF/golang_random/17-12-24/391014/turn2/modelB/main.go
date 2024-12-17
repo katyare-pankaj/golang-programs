@@ -2,55 +2,73 @@ package main
 
 import (
 	"fmt"
-	"sync"
+	"math/rand"
 	"time"
 )
 
-func main() {
-	var wg sync.WaitGroup
-	wg.Add(2)
+type WorkerPool struct {
+	workers  []chan func()
+	sem      *Semaphore
+	shutdown chan struct{}
+}
 
-	// Create a send-only channel for work items
-	workCh := make(chan<- string)
-
-	// Create a receive-only channel for results
-	resultCh := make(chan string)
-
-	// Worker function that consumes work and produces results
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case task, ok := <-workCh:
-				if !ok {
-					// Channel is closed, exit worker
-					return
-				}
-				fmt.Println("Working on:", task)
-				time.Sleep(time.Second) // Simulate work
-				result := fmt.Sprintf("Completed: %s", task)
-				resultCh <- result // Send result back
-			default:
-				time.Sleep(10 * time.Millisecond) // Polling
-			}
-		}
-	}()
-
-	// Consumer function that receives results
-	go func() {
-		defer wg.Done()
-		for result := range resultCh {
-			fmt.Println(result)
-		}
-	}()
-
-	// Send work items
-	for i := 0; i < 5; i++ {
-		workCh <- fmt.Sprintf("Task %d", i)
+// NewWorkerPool creates a new worker pool with a specified number of workers
+func NewWorkerPool(size int) *WorkerPool {
+	pool := &WorkerPool{
+		workers:  make([]chan func(), size),
+		sem:      NewSemaphore(size),
+		shutdown: make(chan struct{}),
 	}
 
-	// Close work channel to signal no more work
-	close(workCh)
+	for i := range pool.workers {
+		pool.workers[i] = make(chan func())
+		go pool.workerRoutine(i)
+	}
 
-	wg.Wait()
+	return pool
+}
+
+func (pool *WorkerPool) workerRoutine(id int) {
+	for {
+		select {
+		case task := <-pool.workers[id]:
+			task() // Execute the task
+		case <-pool.shutdown:
+			return // Shut down the worker
+		}
+	}
+}
+
+// Submit a task to the worker pool
+func (pool *WorkerPool) Submit(task func()) {
+	pool.sem.Acquire()
+	defer pool.sem.Release()
+
+	id := rand.Intn(len(pool.workers))
+	pool.workers[id] <- task
+}
+
+// Shutdown the worker pool
+func (pool *WorkerPool) Shutdown() {
+	close(pool.shutdown)
+	for _, worker := range pool.workers {
+		close(worker)
+	}
+}
+
+func main() {
+	const numWorkers = 3
+	pool := NewWorkerPool(numWorkers)
+
+	for i := 1; i <= 10; i++ {
+		pool.Submit(func() {
+			fmt.Printf("Task %d is starting\n", i)
+			time.Sleep(time.Duration(rand.Intn(3)) * time.Second)
+			fmt.Printf("Task %d is done\n", i)
+		})
+	}
+
+	time.Sleep(5 * time.Second)
+	pool.Shutdown()
+	fmt.Println("Worker pool shut down")
 }

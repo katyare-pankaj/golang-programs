@@ -2,51 +2,49 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 )
 
-// Producer sends random numbers to the send-only channel.
-func producer(ch chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for i := 0; i < 5; i++ {
-		num := rand.Intn(100) // Generate a random number
-		fmt.Printf("Produced: %d\n", num)
-		ch <- num                          // Send the number to the channel
-		time.Sleep(time.Millisecond * 500) // Simulate work
-	}
-	close(ch) // Close the channel when done
+// Task represents a unit of work that the worker will execute
+type Task struct {
+	id int
 }
 
-// Consumer receives numbers from the receive-only channel.
-func consumer(ch <-chan int, wg *sync.WaitGroup) {
+// Worker function that processes tasks
+func worker(id int, tasks <-chan Task, sem chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for {
-		select {
-		case num, ok := <-ch:
-			if !ok {
-				fmt.Println("Channel closed. Consumer exiting.")
-				return // Exit when the channel is closed
-			}
-			fmt.Printf("Consumed: %d\n", num)
-		case <-time.After(time.Second): // Timeout to avoid blocking
-			fmt.Println("No message received within 1 second.")
-		}
+	for task := range tasks {
+		// Acquire semaphore token before processing the task
+		sem <- struct{}{} // Block if the channel is full
+		fmt.Printf("Worker %d is processing task %d\n", id, task.id)
+		time.Sleep(1 * time.Second) // Simulate work
+		fmt.Printf("Worker %d completed task %d\n", id, task.id)
+		<-sem // Release semaphore token
 	}
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-	ch := make(chan int) // Create a channel for integers
+	const numWorkers = 3         // Number of workers
+	const maxConcurrentTasks = 2 // Max concurrent tasks (semaphore limit)
+
+	tasks := make(chan Task, 10)                   // Channel for tasks
+	sem := make(chan struct{}, maxConcurrentTasks) // Semaphore channel
 
 	var wg sync.WaitGroup
-	wg.Add(2)
 
-	go producer(ch, &wg) // Start the producer
-	go consumer(ch, &wg) // Start the consumer
+	// Start worker goroutines
+	for i := 1; i <= numWorkers; i++ {
+		wg.Add(1)
+		go worker(i, tasks, sem, &wg)
+	}
 
-	wg.Wait() // Wait for both goroutines to finish
+	// Send tasks to the workers
+	for i := 1; i <= 10; i++ {
+		tasks <- Task{id: i}
+	}
+	close(tasks) // Close the tasks channel to signal no more tasks
 
-	fmt.Println("Main: All done.")
+	wg.Wait() // Wait for all workers to finish
+	fmt.Println("All tasks completed")
 }
