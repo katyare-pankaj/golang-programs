@@ -1,62 +1,103 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"math/rand"
 	"sync"
+	"time"
 )
 
-// Example using a mutex to prevent race conditions
-var counter int
-var counterMutex sync.Mutex
+// Data represents the data being streamed
+type Data struct {
+	ID    int
+	Value float64
+}
 
-func incrementCounterWithMutex() {
-	for i := 0; i < 10000; i++ {
-		counterMutex.Lock()
-		counter++
-		counterMutex.Unlock()
+// Process simulates processing a piece of data
+func Process(ctx context.Context, data Data, wg *sync.WaitGroup, results chan<- Data) {
+	defer wg.Done()
+	select {
+	case <-ctx.Done():
+		return
+	default:
+		// Simulate processing time
+		time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
+		// Transform or process data
+		processedData := Data{ID: data.ID, Value: data.Value * 2.0}
+		results <- processedData
+		fmt.Printf("Processed: %+v\n", processedData)
 	}
 }
 
 func main() {
-	// Create multiple goroutines incrementing the counter with a mutex
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	var wg sync.WaitGroup
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
+
+	// Channel for incoming data stream
+	dataIn := make(chan Data, 100)
+
+	// Channel for processed data
+	dataOut := make(chan Data)
+
+	// Worker pool
+	const numWorkers = 4
+	workerPool := make(chan struct{}, numWorkers)
+
+	// Start worker goroutines
+	for i := 0; i < numWorkers; i++ {
 		go func() {
-			incrementCounterWithMutex()
-			wg.Done()
+			for {
+				select {
+				case <-workerPool:
+					// Defer returning the worker to the pool
+					defer func() { workerPool <- struct{}{} }()
+
+					select {
+					case data, ok := <-dataIn:
+						if !ok {
+							return
+						}
+						wg.Add(1)
+						Process(ctx, data, &wg, dataOut)
+					case <-ctx.Done():
+						return
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
 		}()
 	}
-	wg.Wait()
 
-	fmt.Println("Final counter value with mutex:", counter)
-
-	// Example using a channel to synchronize access
-	sharedData := make(chan int, 1)
-	sharedData <- 0 // Initial value
-
-	var sharedCounter int
-
-	incrementCounterWithChannel := func() {
-		for i := 0; i < 10000; i++ {
-			// Wait for access
-			<-sharedData
-
-			// Increment the shared counter
-			sharedCounter++
-
-			// Release access
-			sharedData <- sharedCounter
+	// Simulate data streaming
+	go func() {
+		for i := 0; i < 1000; i++ {
+			dataIn <- Data{ID: i, Value: float64(i) * 10.0}
+			time.Sleep(10 * time.Millisecond) // Simulate incoming data rate
 		}
-	}
+		close(dataIn)
+	}()
 
-	// Create multiple goroutines incrementing the counter with a channel
-	wg.Add(5)
-	for i := 0; i < 5; i++ {
-		go incrementCounterWithChannel()
-		wg.Done()
-	}
+	// Consume processed data
+	go func() {
+		for {
+			select {
+			case processedData, ok := <-dataOut:
+				if !ok {
+					return
+				}
+				fmt.Printf("Consumed: %+v\n", processedData)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// Wait for all workers to finish
 	wg.Wait()
 
-	fmt.Println("Final counter value with channel:", sharedCounter)
+	fmt.Println("All data processed.")
 }

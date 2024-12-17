@@ -1,49 +1,72 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"math/rand"
 	"sync"
+	"time"
 )
 
-// Shared resource
-type Counter struct {
-	mu    sync.Mutex
-	value int
+// Data represents the type of data we'll be processing
+type Data struct {
+	ID int
 }
 
-// Increment the counter safely
-func (c *Counter) Increment() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.value++
-}
-
-// Get the counter value safely
-func (c *Counter) Value() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.value
+// Process simulates processing a piece of data
+func Process(data Data) {
+	// Simulate work by sleeping
+	time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
+	fmt.Printf("Processed Data ID: %d\n", data.ID)
 }
 
 func main() {
+	// Set up context for cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const (
+		numWorkers   = 5   // Number of worker goroutines
+		dataBuffer   = 100 // Size of the buffer for incoming data
+		numDataItems = 500 // Total items to process
+	)
+
+	// Create a buffered channel for incoming data
+	dataChan := make(chan Data, dataBuffer)
+
+	// WaitGroup to manage goroutine completion
 	var wg sync.WaitGroup
-	counter := &Counter{}
 
-	// Number of goroutines
-	n := 10
-	wg.Add(n)
-
-	// Start multiple goroutines to increment the counter
-	for i := 0; i < n; i++ {
-		go func() {
+	// Start worker goroutines
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
 			defer wg.Done()
-			for j := 0; j < 1000; j++ {
-				counter.Increment()
+			for {
+				select {
+				case data, ok := <-dataChan:
+					if !ok {
+						return // Channel closed, exit the goroutine
+					}
+					Process(data)
+				case <-ctx.Done():
+					return // Context canceled, exit the goroutine
+				}
 			}
-		}()
+		}(i)
 	}
 
-	// Wait for all goroutines to finish
+	// Simulate data production
+	go func() {
+		for i := 0; i < numDataItems; i++ {
+			data := Data{ID: i}
+			dataChan <- data // Send data to the channel
+		}
+		close(dataChan) // Close the channel after sending all data
+	}()
+
+	// Wait for all workers to finish processing
 	wg.Wait()
-	fmt.Printf("Final counter value: %d\n", counter.Value())
+
+	fmt.Println("All data processed.")
 }
