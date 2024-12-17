@@ -3,33 +3,48 @@ package main
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
-// Produce generates numbers and sends them to a send-only channel
-func produce(numbers chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for i := 0; i < 5; i++ {
-		numbers <- i
-		fmt.Printf("Produced: %d\n", i)
-	}
-	close(numbers) // Close the channel when done
+// Task represents a unit of work that the worker will execute
+type Task struct {
+	id int
 }
 
-// Consume receives numbers from a receive-only channel
-func consume(numbers <-chan int, wg *sync.WaitGroup) {
+// Worker function that processes tasks
+func worker(id int, tasks <-chan Task, sem chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for num := range numbers { // Automatically handles channel closure
-		fmt.Printf("Consumed: %d\n", num)
+	for task := range tasks {
+		// Acquire semaphore token before processing the task
+		sem <- struct{}{} // Block if the channel is full
+		fmt.Printf("Worker %d is processing task %d\n", id, task.id)
+		time.Sleep(1 * time.Second) // Simulate work
+		fmt.Printf("Worker %d completed task %d\n", id, task.id)
+		<-sem // Release semaphore token
 	}
 }
 
 func main() {
+	const numWorkers = 3           // Number of workers
+	const maxConcurrentWorkers = 2 // Max concurrent tasks (semaphore limit)
+
+	tasks := make(chan Task, 10)                     // Channel for tasks
+	sem := make(chan struct{}, maxConcurrentWorkers) // Semaphore channel to limit concurrent workers
+
 	var wg sync.WaitGroup
-	numbers := make(chan int) // Create an unidirectional channel for integers
 
-	wg.Add(2)
-	go produce(numbers, &wg) // Start producer
-	go consume(numbers, &wg) // Start consumer
+	// Start worker goroutines
+	for i := 1; i <= numWorkers; i++ {
+		wg.Add(1)
+		go worker(i, tasks, sem, &wg)
+	}
 
-	wg.Wait() // Wait for both goroutines to finish
+	// Send tasks to the workers
+	for i := 1; i <= 10; i++ {
+		tasks <- Task{id: i}
+	}
+	close(tasks) // Close the tasks channel to signal no more tasks
+
+	wg.Wait() // Wait for all workers to finish
+	fmt.Println("All tasks completed")
 }
