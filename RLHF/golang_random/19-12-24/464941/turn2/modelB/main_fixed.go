@@ -39,12 +39,12 @@ func main() {
 	close(work)
 
 	// Wait for workers to finish
-	wg.Wait()
+	go func() {
+		wg.Wait()
+		close(result) // Close result channel once all workers are done
+	}()
 
-	// Close the result channel to signal that all results are ready
-	close(result)
-
-	// Collect and print results
+	// Collect and print results from result channel
 	fmt.Println("Results:")
 	for res := range result {
 		fmt.Println(res)

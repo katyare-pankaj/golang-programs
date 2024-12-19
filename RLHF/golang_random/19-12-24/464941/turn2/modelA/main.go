@@ -1,30 +1,54 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"strconv"
+	"sync"
+	"time"
 )
 
-// ConvertStringsToInts converts a slice of strings to a slice of integers,
-// handling invalid entries by skipping them and returning the valid integers.
-func ConvertStringsToInts(inputSlice []string) []int {
-	resultSlice := make([]int, 0, len(inputSlice))
+func worker(id int, work chan int, wg *sync.WaitGroup, ctx context.Context) {
+	defer wg.Done()
 
-	for _, input := range inputSlice {
-		num, err := strconv.Atoi(input)
-		if err == nil {
-			resultSlice = append(resultSlice, num)
-		} else {
-			fmt.Printf("Skipping invalid input: %q (error: %v)\n", input, err)
-		}
+	select {
+	case num := <-work:
+		fmt.Printf("Worker %d: processing %d\n", id, num)
+		time.Sleep(time.Second)
+	case <-ctx.Done():
+		fmt.Printf("Worker %d: cancelled\n", id)
+		return
 	}
-
-	return resultSlice
 }
 
 func main() {
-	inputSlice := []string{"1", "2", "three", "4", "five", "6"}
-	validIntegers := ConvertStringsToInts(inputSlice)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	fmt.Println("Valid integers:", validIntegers)
+	numWorkers := 5
+	work := make(chan int, 10) // Buffered channel
+	wg := &sync.WaitGroup{}
+
+	// Start workers
+	for i := 1; i <= numWorkers; i++ {
+		wg.Add(1)
+		go worker(i, work, wg, ctx)
+	}
+
+	// Send work to workers
+	for i := 1; i <= 20; i++ {
+		select {
+		case work <- i:
+		case <-ctx.Done():
+			fmt.Println("Work cancelled while sending")
+			return
+		}
+	}
+
+	// Close the work channel to signal workers to stop
+	close(work)
+
+	// Wait for workers to finish
+	wg.Wait()
+
+	fmt.Println("All work completed")
 }
