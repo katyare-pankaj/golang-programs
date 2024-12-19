@@ -2,22 +2,48 @@ package main
 
 import (
 	"fmt"
-	"strconv"
+	"sync"
 )
 
-func convertStringsToInts(input []string) []int {
-	var result []int
+const (
+	numProducers = 10
+	numConsumers = 5
+	numItems     = 100
+	bufferSize   = 10
+)
 
-	for _, s := range input {
-		if num, err := strconv.Atoi(s); err == nil {
-			result = append(result, num)
-		}
+func producer(id int, items chan<- int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for i := 0; i < numItems; i++ {
+		items <- i
+		fmt.Printf("Producer %d: Produced item %d\n", id, i)
 	}
-	return result
+}
+
+func consumer(id int, items <-chan int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for item := range items {
+		fmt.Printf("Consumer %d: Consumed item %d\n", id, item)
+	}
 }
 
 func main() {
-	strSlice := []string{"1", "2", "three", "4", "5", "a", "7", "b"}
-	intSlice := convertStringsToInts(strSlice)
-	fmt.Println(intSlice) // Output will be [1 2 4 5 7]
+	items := make(chan int, bufferSize)
+	var wg sync.WaitGroup
+
+	// Start producers
+	for i := 0; i < numProducers; i++ {
+		wg.Add(1)
+		go producer(i, items, &wg)
+	}
+
+	// Start consumers
+	for i := 0; i < numConsumers; i++ {
+		wg.Add(1)
+		go consumer(i, items, &wg)
+	}
+
+	// Wait for all producers and consumers to finish
+	wg.Wait()
+	close(items)
 }

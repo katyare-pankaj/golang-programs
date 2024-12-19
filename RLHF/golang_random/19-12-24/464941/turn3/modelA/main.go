@@ -2,29 +2,50 @@ package main
 
 import (
 	"fmt"
-	"strconv"
+	"math/rand"
+	"sync"
+	"time"
 )
 
-// filterAndConvertStringsToInts filters out invalid strings and converts valid strings to integers.
-func filterAndConvertStringsToInts(inputSlice []string) []int {
-	// Create a new slice to store valid integers
-	resultSlice := make([]int, 0, len(inputSlice))
+// Shared data structure
+type Counter struct {
+	count int
+	mu    *sync.Mutex
+}
 
-	// Use a loop to filter and convert strings to integers
-	for _, input := range inputSlice {
-		if num, err := strconv.Atoi(input); err == nil {
-			resultSlice = append(resultSlice, num)
-		} else {
-			fmt.Printf("Skipping invalid input: %q (error: %v)\n", input, err)
-		}
+func (c *Counter) Increment() {
+	c.mu.Lock()
+	c.count++
+	c.mu.Unlock()
+}
+
+func (c *Counter) GetCount() int {
+	c.mu.RLock() // Acquire read lock
+	defer c.mu.RUnlock()
+	return c.count
+}
+
+func incrementCounter(c *Counter) {
+	for i := 0; i < 10000; i++ {
+		c.Increment()
 	}
-
-	return resultSlice
 }
 
 func main() {
-	inputSlice := []string{"1", "two", "3.5", "four", "5", "nan", "7"}
-	validIntegers := filterAndConvertStringsToInts(inputSlice)
+	rand.Seed(time.Now().UnixNano())
 
-	fmt.Println("Valid integers:", validIntegers)
+	counter := &Counter{
+		count: 0,
+		mu:    &sync.Mutex{},
+	}
+
+	// Create multiple Goroutines that increment the counter
+	for i := 0; i < 10; i++ {
+		go incrementCounter(counter)
+	}
+
+	// Wait for all Goroutines to finish
+	time.Sleep(time.Second * 2)
+
+	fmt.Println("Final count:", counter.GetCount())
 }
