@@ -2,29 +2,23 @@ package main
 
 import (
 	"fmt"
-	"strconv"
+	"reflect"
 )
 
-// ConvertStringsToInts converts a slice of strings to a slice of integers,
-// handling invalid entries by skipping them and returning the valid integers.
-func ConvertStringsToInts(inputSlice []string) []int {
-	resultSlice := make([]int, 0, len(inputSlice))
+func describe(v interface{}) {
+	val := reflect.ValueOf(v)
+	typ := reflect.TypeOf(v)
 
-	for _, input := range inputSlice {
-		num, err := strconv.Atoi(input)
-		if err == nil {
-			resultSlice = append(resultSlice, num)
-		} else {
-			fmt.Printf("Skipping invalid input: %q (error: %v)\n", input, err)
-		}
-	}
-
-	return resultSlice
+	fmt.Printf("Value: %v\n", v)
+	fmt.Printf("Type: %v\n", typ)
+	fmt.Printf("Kind: %v\n", val.Kind())
+	fmt.Println()
 }
 
 func main() {
-	inputSlice := []string{"1", "2", "three", "4", "five", "6"}
-	validIntegers := ConvertStringsToInts(inputSlice)
-
-	fmt.Println("Valid integers:", validIntegers)
+	describe(42)
+	describe(3.14)
+	describe("hello")
+	describe([]int{1, 2, 3})
+	describe(struct{ Name string }{"Alice"})
 }
