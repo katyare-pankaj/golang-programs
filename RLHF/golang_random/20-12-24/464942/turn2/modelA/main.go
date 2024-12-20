@@ -2,44 +2,28 @@ package main
 
 import (
 	"fmt"
-	"sync"
-	"time"
+	"os"
 )
 
 func main() {
-	// Create a new WaitGroup
-	var wg sync.WaitGroup
+	files := make([]*os.File, 3)
+	for i := range files {
+		file, err := os.Create(fmt.Sprintf("file%d.txt", i))
+		if err != nil {
+			fmt.Println("Error creating file:", err)
+			return
+		}
+		files[i] = file
+		defer file.Close() // Schedule file closure on function return
+	}
 
-	// Add a count of 3 to the WaitGroup, one for each goroutine
-	wg.Add(3)
-
-	// Start the first goroutine
-	go func() {
-		defer wg.Done() // Call Done() when the goroutine is finished
-		fmt.Println("Goroutine 1 is running...")
-		time.Sleep(1 * time.Second) // Simulate work by sleeping for 1 second
-		fmt.Println("Goroutine 1 has finished.")
-	}()
-
-	// Start the second goroutine
-	go func() {
-		defer wg.Done() // Call Done() when the goroutine is finished
-		fmt.Println("Goroutine 2 is running...")
-		time.Sleep(2 * time.Second) // Simulate work by sleeping for 2 seconds
-		fmt.Println("Goroutine 2 has finished.")
-	}()
-
-	// Start the third goroutine
-	go func() {
-		defer wg.Done() // Call Done() when the goroutine is finished
-		fmt.Println("Goroutine 3 is running...")
-		time.Sleep(3 * time.Second) // Simulate work by sleeping for 3 seconds
-		fmt.Println("Goroutine 3 has finished.")
-	}()
-
-	// Wait for all goroutines to complete
-	wg.Wait()
-
-	// Print a message to indicate the main function is finishing
-	fmt.Println("All goroutines have finished. Main function is exiting.")
+	// Perform operations with the files
+	for _, file := range files {
+		_, err := file.WriteString("Some data\n")
+		if err != nil {
+			fmt.Println("Error writing to file:", err)
+			return
+		}
+		fmt.Println("Wrote data to file successfully.")
+	}
 }
