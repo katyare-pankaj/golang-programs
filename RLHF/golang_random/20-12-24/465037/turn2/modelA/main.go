@@ -1,45 +1,40 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 )
 
+func concurrentWorker(ctx context.Context, wg *sync.WaitGroup, workID int, workDuration time.Duration) {
+	defer wg.Done()
+
+	select {
+	case <-ctx.Done():
+		fmt.Printf("Worker %d: Canceled or timed out\n", workID)
+		return
+	default:
+		fmt.Printf("Worker %d: Started\n", workID)
+		time.Sleep(workDuration)
+		fmt.Printf("Worker %d: Completed\n", workID)
+	}
+}
+
 func main() {
-	// Create a new WaitGroup
-	var wg sync.WaitGroup
+	numWorkers := 5
+	wg := &sync.WaitGroup{}
 
-	// Add a count of 3 to the WaitGroup, one for each goroutine
-	wg.Add(3)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
-	// Start the first goroutine
-	go func() {
-		defer wg.Done() // Call Done() when the goroutine is finished
-		fmt.Println("Goroutine 1 is running...")
-		time.Sleep(1 * time.Second) // Simulate work by sleeping for 1 second
-		fmt.Println("Goroutine 1 has finished.")
-	}()
+	for i := 0; i < numWorkers; i++ {
+		workDuration := time.Duration(rand.Intn(5)) * time.Second
+		wg.Add(1)
+		go concurrentWorker(ctx, wg, i, workDuration)
+	}
 
-	// Start the second goroutine
-	go func() {
-		defer wg.Done() // Call Done() when the goroutine is finished
-		fmt.Println("Goroutine 2 is running...")
-		time.Sleep(2 * time.Second) // Simulate work by sleeping for 2 seconds
-		fmt.Println("Goroutine 2 has finished.")
-	}()
-
-	// Start the third goroutine
-	go func() {
-		defer wg.Done() // Call Done() when the goroutine is finished
-		fmt.Println("Goroutine 3 is running...")
-		time.Sleep(3 * time.Second) // Simulate work by sleeping for 3 seconds
-		fmt.Println("Goroutine 3 has finished.")
-	}()
-
-	// Wait for all goroutines to complete
 	wg.Wait()
-
-	// Print a message to indicate the main function is finishing
-	fmt.Println("All goroutines have finished. Main function is exiting.")
+	fmt.Println("All workers completed or timed out")
 }
