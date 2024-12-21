@@ -2,71 +2,45 @@ package main
 
 import (
 	"fmt"
-	"sync"
-	"time"
 )
 
-// Task represents a unit of work to be performed by a worker.
-type Task struct {
-	id int
-}
+// DataProcessor is a function type that takes an int and returns a string.
+type DataProcessor func(int) string
 
-// WorkerPool is a structure that manages a pool of worker Goroutines.
-type WorkerPool struct {
-	numWorkers int
-	tasks      chan Task
-	wg         sync.WaitGroup
-}
-
-// NewWorkerPool creates a new worker pool with the specified number of workers.
-func NewWorkerPool(numWorkers int) *WorkerPool {
-	return &WorkerPool{
-		numWorkers: numWorkers,
-		tasks:      make(chan Task),
-		wg:         sync.WaitGroup{},
+// ProcessData applies a DataProcessor function to each integer in a slice
+// and returns the results as a slice of strings.
+func ProcessData(numbers []int, processor DataProcessor) []string {
+	var results []string
+	for _, num := range numbers {
+		results = append(results, processor(num))
 	}
+	return results
 }
 
-// Start starts the worker pool, launching the specified number of worker Goroutines.
-func (wp *WorkerPool) Start() {
-	for i := 0; i < wp.numWorkers; i++ {
-		wp.wg.Add(1)
-		go wp.worker()
-	}
+// AddOneProcessor adds one to the input and converts it to a string.
+func AddOneProcessor(num int) string {
+	return fmt.Sprintf("%d+1", num)
 }
 
-// worker is a Goroutine that processes tasks from the channel.
-func (wp *WorkerPool) worker() {
-	defer wp.wg.Done()
-	for task := range wp.tasks {
-		fmt.Printf("Worker %d processing task %d\n", wp.numWorkers, task.id)
-		// Simulate work
-		time.Sleep(time.Second)
-	}
-}
-
-// Stop stops the worker pool by closing the task channel and waiting for all workers to finish.
-func (wp *WorkerPool) Stop() {
-	close(wp.tasks)
-	wp.wg.Wait()
-	fmt.Println("Worker pool stopped")
-}
-
-// Submit submits a task to the worker pool for processing.
-func (wp *WorkerPool) Submit(task Task) {
-	wp.tasks <- task
+// MultiplyByTwoProcessor multiplies the input by two and converts it to a string.
+func MultiplyByTwoProcessor(num int) string {
+	return fmt.Sprintf("%d*2", num)
 }
 
 func main() {
-	// Create a worker pool with 3 workers
-	wp := NewWorkerPool(3)
-	wp.Start()
+	numbers := []int{1, 2, 3, 4, 5}
 
-	// Submit some tasks
-	for i := 0; i < 10; i++ {
-		wp.Submit(Task{id: i + 1})
+	// Using AddOneProcessor as the callback
+	addOneResults := ProcessData(numbers, AddOneProcessor)
+	fmt.Println("Results with AddOneProcessor:")
+	for _, result := range addOneResults {
+		fmt.Println(result)
 	}
 
-	// Wait for the worker pool to stop
-	wp.Stop()
+	// Using MultiplyByTwoProcessor as the callback
+	multiplyTwoResults := ProcessData(numbers, MultiplyByTwoProcessor)
+	fmt.Println("\nResults with MultiplyByTwoProcessor:")
+	for _, result := range multiplyTwoResults {
+		fmt.Println(result)
+	}
 }
