@@ -87,7 +87,8 @@ func main() {
 		totalN += len(result.data)
 	}
 
-	overallMean := totalMean / float64(totalN)
+	overall
+	Mean := totalMean / float64(totalN)
 	overallStd := math.Sqrt((totalSumSq - totalMean*totalMean/float64(totalN)) / float64(totalN))
 
 	fmt.Printf("Overall Mean: %.2f, Overall Std: %.2f\n", overallMean, overallStd)
