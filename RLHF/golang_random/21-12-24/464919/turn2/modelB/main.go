@@ -1,43 +1,66 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 )
 
-func processingRoutine(ctx context.Context, wg *sync.WaitGroup, id int) {
-	defer wg.Done()
-	log.Printf("Goroutine %d started\n", id)
-	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("Goroutine %d: Context canceled. Exiting!\n", id)
-			return
-		default:
-			// Simulate some work being done
-			time.Sleep(time.Second * 1)
-			fmt.Printf("Goroutine %d is working...\n", id)
-		}
+// Task represents the unit of work to be performed
+type Task struct {
+	id    int
+	sleep time.Duration
+}
+
+func (t Task) run() {
+	fmt.Printf("Worker %d is running task %d\n", t.id, t.id)
+	time.Sleep(t.sleep)
+}
+
+// workerPool creates a worker pool with the specified number of workers.
+// It takes a channel of tasks and starts a goroutine for each worker.
+// Workers wait on the task channel for incoming tasks, and once a task
+// is received, they process it until the channel is closed.
+func workerPool(numWorkers int, taskChan <-chan Task) {
+	var wg sync.WaitGroup
+
+	// Start the specified number of workers
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for task := range taskChan {
+				task.run()
+			}
+		}(i + 1) // Assign worker ID starting from 1
 	}
+
+	// Wait for all workers to complete
+	wg.Wait()
 }
 
 func main() {
-	var wg sync.WaitGroup
-	ctx, cancel := context.WithCancel(context.Background())
+	tasks := []Task{
+		{id: 1, sleep: 2 * time.Second},
+		{id: 2, sleep: 1 * time.Second},
+		{id: 3, sleep: 3 * time.Second},
+		{id: 4, sleep: 1 * time.Second},
+		{id: 5, sleep: 2 * time.Second},
+	}
 
-	// Start a single goroutine
-	wg.Add(1)
-	go processingRoutine(ctx, &wg, 1)
+	// Create a channel to send tasks to the worker pool
+	taskChan := make(chan Task, len(tasks))
 
-	// Simulate some main work
-	time.Sleep(time.Second * 3)
-	fmt.Println("Main routine wants to cancel the goroutine now.")
-	cancel()
+	// Start the worker pool with 3 workers
+	go workerPool(3, taskChan)
 
-	// Wait for the goroutine to terminate
-	wg.Wait()
-	fmt.Println("Program ended.")
+	// Send all the tasks to the channel
+	for _, task := range tasks {
+		taskChan <- task
+	}
+
+	// Close the channel to signal the end of tasks
+	close(taskChan)
+
+	fmt.Println("All tasks have been completed")
 }
