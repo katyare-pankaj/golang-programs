@@ -2,50 +2,33 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 )
 
-// BookFlight simulates booking a flight.
-func BookFlight(wg *sync.WaitGroup, itineraryName string) {
-	defer wg.Done()
-	fmt.Printf("Booking flight for %s...\n", itineraryName)
-	time.Sleep(time.Duration(rand.Intn(5)) * time.Second)
-	fmt.Printf("Flight for %s booked successfully!\n", itineraryName)
-}
-
-// BookHotel simulates booking a hotel.
-func BookHotel(wg *sync.WaitGroup, itineraryName string) {
-	defer wg.Done()
-	fmt.Printf("Booking hotel for %s...\n", itineraryName)
-	time.Sleep(time.Duration(rand.Intn(5)) * time.Second)
-	fmt.Printf("Hotel for %s booked successfully!\n", itineraryName)
-}
-
-// BookRentalCar simulates booking a rental car.
-func BookRentalCar(wg *sync.WaitGroup, itineraryName string) {
-	defer wg.Done()
-	fmt.Printf("Booking rental car for %s...\n", itineraryName)
-	time.Sleep(time.Duration(rand.Intn(5)) * time.Second)
-	fmt.Printf("Rental car for %s booked successfully!\n", itineraryName)
+// A function that simulates a task taking different input values.
+func processTask(id int, input string, wg *sync.WaitGroup) {
+	defer wg.Done()                             // Decrement the WaitGroup counter when the task is complete
+	time.Sleep(time.Duration(id) * time.Second) // Simulate work taking different times
+	fmt.Printf("Task %d with input '%s' completed\n", id, input)
 }
 
 func main() {
 	var wg sync.WaitGroup
 
-	itineraries := []string{"New York Trip", "Paris Getaway", "Tokyo Adventure"}
+	// Define the input values for the tasks
+	inputs := []string{"Input A", "Input B", "Input C"}
 
-	for _, itineraryName := range itineraries {
-		wg.Add(3) // Add 1 for each concurrent task
-
-		go BookFlight(&wg, itineraryName)
-		go BookHotel(&wg, itineraryName)
-		go BookRentalCar(&wg, itineraryName)
+	// Start a goroutine for each input value
+	for id, input := range inputs {
+		wg.Add(1) // Increment the WaitGroup counter for each goroutine
+		go func(id int, input string) {
+			processTask(id, input, &wg)
+		}(id, input)
 	}
 
-	fmt.Println("Waiting for all itinerary tasks to complete...")
+	// Wait for all goroutines to complete
 	wg.Wait()
 
-	fmt.Println("All itinerary tasks completed.")
+	fmt.Println("All tasks have completed")
 }
