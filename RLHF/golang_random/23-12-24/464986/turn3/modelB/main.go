@@ -2,30 +2,72 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
+	"os"
 )
 
-func task(taskNo int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	fmt.Printf("Starting task %d...\n", taskNo)
-	sleepDuration := time.Duration(rand.Intn(3)+1) * time.Second //random sleep from 1 to 3 seconds
-	time.Sleep(sleepDuration)
-	fmt.Printf("Task %d completed after sleeping for %s\n", taskNo, sleepDuration)
+type ToDoList []string
+
+func (tdl *ToDoList) AddTask(task string) {
+	*tdl = append(*tdl, task)
+}
+
+func (tdl *ToDoList) RemoveTask(index int) {
+	if index >= 0 && index < len(*tdl) {
+		*tdl = append((*tdl)[:index], (*tdl)[index+1:]...)
+	}
+}
+
+func (tdl ToDoList) ListTasks() {
+	for index, task := range tdl {
+		fmt.Printf("%d. %s\n", index+1, task)
+	}
 }
 
 func main() {
-	var wg sync.WaitGroup
-	fmt.Println("Starting tasks concurrently...")
+	var toDoList ToDoList
 
-	numTasks := 3
-	wg.Add(numTasks)
-	//Run each task in a separate goroutine
-	for i := 1; i <= numTasks; i++ {
-		go task(i, &wg)
+	for {
+		fmt.Println("To-Do List Manager:")
+		fmt.Println("-------------------")
+		fmt.Println("1. Add a task")
+		fmt.Println("2. Remove a task")
+		fmt.Println("3. List tasks")
+		fmt.Println("4. Exit")
+		fmt.Print("Enter your choice: ")
+
+		var choice int
+		_, err := fmt.Scan(&choice)
+		if err != nil {
+			fmt.Println("Invalid input. Please enter a number.")
+			continue
+		}
+
+		switch choice {
+		case 1:
+			fmt.Print("Enter a task to add: ")
+			var task string
+			_, err := fmt.Scanln(&task)
+			if err != nil {
+				fmt.Println("Invalid input. Please enter a valid task.")
+				continue
+			}
+			toDoList.AddTask(task)
+		case 2:
+			fmt.Print("Enter the index of the task to remove: ")
+			var index int
+			_, err := fmt.Scan(&index)
+			if err != nil {
+				fmt.Println("Invalid input. Please enter a valid index.")
+				continue
+			}
+			toDoList.RemoveTask(index - 1)
+		case 3:
+			fmt.Println("Your To-Do List:")
+			toDoList.ListTasks()
+		case 4:
+			os.Exit(0)
+		default:
+			fmt.Println("Invalid choice. Please try again.")
+		}
 	}
-
-	wg.Wait() //Wait for all tasks to finish
-	fmt.Println("All tasks completed.")
 }

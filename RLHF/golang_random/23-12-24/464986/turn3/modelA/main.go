@@ -2,46 +2,71 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
 )
 
-func task1(wg *sync.WaitGroup) {
-	defer wg.Done() // Signal that this goroutine is done
-	fmt.Println("Starting task 1...")
-	time.Sleep(time.Duration(rand.Intn(3)) * time.Second)
-	fmt.Println("Task 1 completed.")
+// Task represents a single task in the to-do list.
+type Task struct {
+	Description string
+	Completed   bool
 }
 
-func task2(wg *sync.WaitGroup) {
-	defer wg.Done() // Signal that this goroutine is done
-	fmt.Println("Starting task 2...")
-	time.Sleep(time.Duration(rand.Intn(4)) * time.Second)
-	fmt.Println("Task 2 completed.")
+// ToDoList is a slice of Task that manages the to-do list.
+type ToDoList []Task
+
+// AddTask adds a new task to the to-do list.
+func (t *ToDoList) AddTask(description string) {
+	*t = append(*t, Task{Description: description, Completed: false})
 }
 
-func task3(wg *sync.WaitGroup) {
-	defer wg.Done() // Signal that this goroutine is done
-	fmt.Println("Starting task 3...")
-	time.Sleep(time.Duration(rand.Intn(5)) * time.Second)
-	fmt.Println("Task 3 completed.")
+// RemoveTask removes a task at a specific index from the to-do list.
+func (t *ToDoList) RemoveTask(index int) {
+	if index < 0 || index >= len(*t) {
+		fmt.Println("Invalid task index.")
+		return
+	}
+	*t = append((*t)[:index], (*t)[index+1:]...)
+}
+
+// MarkTaskAsCompleted marks a task at a specific index as completed.
+func (t *ToDoList) MarkTaskAsCompleted(index int) {
+	if index < 0 || index >= len(*t) {
+		fmt.Println("Invalid task index.")
+		return
+	}
+	(*t)[index].Completed = true
+}
+
+// ListTasks prints out all tasks in the to-do list.
+func (t *ToDoList) ListTasks() {
+	for _, task := range *t {
+		completedStatus := "❌"
+		if task.Completed {
+			completedStatus = "✅"
+		}
+		fmt.Printf("[%s] %s\n", completedStatus, task.Description)
+	}
 }
 
 func main() {
-	var wg sync.WaitGroup // Create a WaitGroup
+	var toDoList ToDoList
 
-	// Add three tasks to the WaitGroup
-	wg.Add(3)
+	// Adding tasks
+	toDoList.AddTask("Buy groceries")
+	toDoList.AddTask("Learn Go")
+	toDoList.AddTask("Read a book")
 
-	// Run task1, task2, and task3 as separate goroutines
-	go task1(&wg)
-	go task2(&wg)
-	go task3(&wg)
+	fmt.Println("--- Initial To-Do List ---")
+	toDoList.ListTasks()
 
-	// Wait for all tasks to finish
-	fmt.Println("Waiting for tasks to complete...")
-	wg.Wait()
+	// Marking a task as completed
+	toDoList.MarkTaskAsCompleted(1)
 
-	fmt.Println("All tasks completed.")
+	fmt.Println("--- After Marking Task 2 as Completed ---")
+	toDoList.ListTasks()
+
+	// Removing a task
+	toDoList.RemoveTask(0)
+
+	fmt.Println("--- After Removing Task 1 ---")
+	toDoList.ListTasks()
 }
