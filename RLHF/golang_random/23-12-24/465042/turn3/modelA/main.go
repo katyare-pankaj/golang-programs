@@ -2,71 +2,53 @@ package main
 
 import (
 	"fmt"
+	"sync"
+	"time"
 )
 
-// Task represents a single task in the to-do list.
-type Task struct {
-	Description string
-	Completed   bool
+// Function to simulate processing each itinerary task
+func processTask(taskID string, duration time.Duration) {
+	fmt.Printf("Processing task: %s for %s\n", taskID, duration)
+	time.Sleep(duration) // Simulate work by sleeping for a duration
 }
 
-// ToDoList is a slice of Task that manages the to-do list.
-type ToDoList []Task
+// Function to plan a trip, processing all tasks in the itinerary
+func planTrip(itinerary [](string, time.Duration), wg *sync.WaitGroup) {
+	defer wg.Done() // Decrement counter when the task is done
 
-// AddTask adds a new task to the to-do list.
-func (t *ToDoList) AddTask(description string) {
-	*t = append(*t, Task{Description: description, Completed: false})
-}
-
-// RemoveTask removes a task at a specific index from the to-do list.
-func (t *ToDoList) RemoveTask(index int) {
-	if index < 0 || index >= len(*t) {
-		fmt.Println("Invalid task index.")
-		return
-	}
-	*t = append((*t)[:index], (*t)[index+1:]...)
-}
-
-// MarkTaskAsCompleted marks a task at a specific index as completed.
-func (t *ToDoList) MarkTaskAsCompleted(index int) {
-	if index < 0 || index >= len(*t) {
-		fmt.Println("Invalid task index.")
-		return
-	}
-	(*t)[index].Completed = true
-}
-
-// ListTasks prints out all tasks in the to-do list.
-func (t *ToDoList) ListTasks() {
-	for _, task := range *t {
-		completedStatus := "❌"
-		if task.Completed {
-			completedStatus = "✅"
-		}
-		fmt.Printf("[%s] %s\n", completedStatus, task.Description)
+	for _, task := range itinerary {
+		taskID, duration := task
+		go processTask(taskID, duration)
 	}
 }
 
 func main() {
-	var toDoList ToDoList
+	var wg sync.WaitGroup
+	
+	// Define different itineraries with various tasks
+	itineraries := [][] (string, time.Duration) {
+		{
+			// Example trip to Paris
+			{"Research attractions", 2 * time.Second},
+			{"Book flights", 3 * time.Second},
+			{"Book accommodation", 1 * time.Second},
+		},
+		{
+			// Example trip to Rome
+			{"Research attractions", 2 * time.Second},
+			{"Order travel insurance", 1 * time.Second},
+			{"Plan transportation", 3 * time.Second},
+		},
+	}
+	
+	// Iterate over each itinerary and execute concurrently
+	for _, itinerary := range itineraries {
+		wg.Add(1) // Increment counter before starting goroutine
+		go planTrip(itinerary, &wg)
+	}
+	
+	// Wait for all trips to be planned
+	wg.Wait()
 
-	// Adding tasks
-	toDoList.AddTask("Buy groceries")
-	toDoList.AddTask("Learn Go")
-	toDoList.AddTask("Read a book")
-
-	fmt.Println("--- Initial To-Do List ---")
-	toDoList.ListTasks()
-
-	// Marking a task as completed
-	toDoList.MarkTaskAsCompleted(1)
-
-	fmt.Println("--- After Marking Task 2 as Completed ---")
-	toDoList.ListTasks()
-
-	// Removing a task
-	toDoList.RemoveTask(0)
-
-	fmt.Println("--- After Removing Task 1 ---")
-	toDoList.ListTasks()
+	fmt.Println("All itineraries processed successfully!")
 }

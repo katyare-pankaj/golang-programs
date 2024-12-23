@@ -2,72 +2,49 @@ package main
 
 import (
 	"fmt"
-	"os"
+	"sync"
+	"time"
 )
 
-type ToDoList []string
+type task func()
 
-func (tdl *ToDoList) AddTask(task string) {
-	*tdl = append(*tdl, task)
-}
-
-func (tdl *ToDoList) RemoveTask(index int) {
-	if index >= 0 && index < len(*tdl) {
-		*tdl = append((*tdl)[:index], (*tdl)[index+1:]...)
-	}
-}
-
-func (tdl ToDoList) ListTasks() {
-	for index, task := range tdl {
-		fmt.Printf("%d. %s\n", index+1, task)
-	}
+func executeTask(task task, wg *sync.WaitGroup) {
+	defer wg.Done()
+	task()
 }
 
 func main() {
-	var toDoList ToDoList
+	var wg sync.WaitGroup
 
-	for {
-		fmt.Println("To-Do List Manager:")
-		fmt.Println("-------------------")
-		fmt.Println("1. Add a task")
-		fmt.Println("2. Remove a task")
-		fmt.Println("3. List tasks")
-		fmt.Println("4. Exit")
-		fmt.Print("Enter your choice: ")
-
-		var choice int
-		_, err := fmt.Scan(&choice)
-		if err != nil {
-			fmt.Println("Invalid input. Please enter a number.")
-			continue
-		}
-
-		switch choice {
-		case 1:
-			fmt.Print("Enter a task to add: ")
-			var task string
-			_, err := fmt.Scanln(&task)
-			if err != nil {
-				fmt.Println("Invalid input. Please enter a valid task.")
-				continue
-			}
-			toDoList.AddTask(task)
-		case 2:
-			fmt.Print("Enter the index of the task to remove: ")
-			var index int
-			_, err := fmt.Scan(&index)
-			if err != nil {
-				fmt.Println("Invalid input. Please enter a valid index.")
-				continue
-			}
-			toDoList.RemoveTask(index - 1)
-		case 3:
-			fmt.Println("Your To-Do List:")
-			toDoList.ListTasks()
-		case 4:
-			os.Exit(0)
-		default:
-			fmt.Println("Invalid choice. Please try again.")
-		}
+	// Define different tasks with their respective operations
+	task1 := func() {
+		fmt.Println("Starting Task 1...")
+		time.Sleep(2 * time.Second)
+		fmt.Println("Task 1 completed.")
 	}
+
+	task2 := func() {
+		fmt.Println("Starting Task 2...")
+		time.Sleep(3 * time.Second)
+		fmt.Println("Task 2 completed.")
+	}
+
+	task3 := func() {
+		fmt.Println("Starting Task 3...")
+		time.Sleep(1 * time.Second)
+		fmt.Println("Task 3 completed.")
+	}
+
+	// Add the number of tasks to the WaitGroup
+	wg.Add(3)
+
+	// Launch each task in a separate goroutine
+	go executeTask(task1, &wg)
+	go executeTask(task2, &wg)
+	go executeTask(task3, &wg)
+
+	// Wait for all tasks to complete
+	wg.Wait()
+
+	fmt.Println("All tasks completed successfully!")
 }
