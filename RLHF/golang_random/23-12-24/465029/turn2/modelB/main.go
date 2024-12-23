@@ -2,38 +2,31 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 )
 
-func task1(wg *sync.WaitGroup) {
-	defer wg.Done() //signal that this goroutine is done
-	fmt.Println("Starting task 1...")
-	time.Sleep(time.Duration(rand.Intn(3)) * time.Second)
-	fmt.Println("Task 1 completed.")
-}
-
-func task2(wg *sync.WaitGroup) {
-	defer wg.Done() //signal that this goroutine is done
-	fmt.Println("Starting task 2...")
-	time.Sleep(time.Duration(rand.Intn(4)) * time.Second)
-	fmt.Println("Task 2 completed.")
-}
-
 func main() {
-	var wg sync.WaitGroup //Create a WaitGroup
+	var counter int
+	var mutex sync.Mutex
 
-	//Add two tasks to the WaitGroup
-	wg.Add(2)
+	// Start 100 goroutines that will increment the counter
+	for i := 0; i < 100; i++ {
+		go incrementCounter(&counter, &mutex)
+	}
 
-	//Run task1 and task2 as separate goroutines
-	go task1(&wg)
-	go task2(&wg)
+	// Wait for all goroutines to finish
+	// (In a real application, use a sync.WaitGroup instead)
+	time.Sleep(1 * time.Second)
 
-	//Wait for both tasks to finish
-	fmt.Println("Waiting for tasks to complete...")
-	wg.Wait()
+	// Print the final value of the counter
+	fmt.Println("Final value of the counter:", counter)
+}
 
-	fmt.Println("Both tasks completed.")
+func incrementCounter(counter *int, mutex *sync.Mutex) {
+	for i := 0; i < 10000; i++ {
+		mutex.Lock()
+		*counter++
+		mutex.Unlock()
+	}
 }

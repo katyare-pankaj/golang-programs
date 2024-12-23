@@ -6,32 +6,37 @@ import (
 	"time"
 )
 
-func task1(wg *sync.WaitGroup) {
-	defer wg.Done()
-	fmt.Println("Task 1 is starting.")
-	time.Sleep(2 * time.Second)
-	fmt.Println("Task 1 is completed.")
-}
+var (
+	sharedCounter = 0
+	mu            sync.Mutex
+)
 
-func task2(wg *sync.WaitGroup) {
-	defer wg.Done()
-	fmt.Println("Task 2 is starting.")
-	time.Sleep(1 * time.Second)
-	fmt.Println("Task 2 is completed.")
+func incrementCounter(n int) {
+	for i := 0; i < n; i++ {
+		mu.Lock() // Acquire the lock before updating the counter
+		sharedCounter++
+		mu.Unlock() // Release the lock after updating the counter
+	}
 }
 
 func main() {
-	var wg sync.WaitGroup
+	const (
+		numGoroutines          = 100
+		iterationsPerGoroutine = 1000000
+	)
 
-	// Add two to the WaitGroup since we have two tasks
-	wg.Add(2)
+	// Start multiple goroutines to increment the counter
+	start := time.Now()
+	for i := 0; i < numGoroutines; i++ {
+		go incrementCounter(iterationsPerGoroutine)
+	}
 
-	// Start both tasks
-	go task1(&wg)
-	go task2(&wg)
+	// Wait for all goroutines to finish
+	for i := 0; i < numGoroutines; i++ {
+		time.Sleep(10 * time.Millisecond) // Allow some time for goroutines to complete
+	}
 
-	// Wait for both tasks to finish
-	wg.Wait()
-
-	fmt.Println("All tasks are completed. Main function is exiting.")
+	// Print the final value of the shared counter
+	fmt.Printf("Final shared counter value: %d\n", sharedCounter)
+	fmt.Printf("Elapsed time: %v\n", time.Since(start))
 }
