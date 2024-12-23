@@ -2,38 +2,47 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
+	"sort"
 )
 
-func task1(wg *sync.WaitGroup) {
-	defer wg.Done() //signal that this goroutine is done
-	fmt.Println("Starting task 1...")
-	time.Sleep(time.Duration(rand.Intn(3)) * time.Second)
-	fmt.Println("Task 1 completed.")
+// Task represents a simple task with a title and a due date.
+type Task struct {
+	Title   string
+	DueDate string
 }
 
-func task2(wg *sync.WaitGroup) {
-	defer wg.Done() //signal that this goroutine is done
-	fmt.Println("Starting task 2...")
-	time.Sleep(time.Duration(rand.Intn(4)) * time.Second)
-	fmt.Println("Task 2 completed.")
+// TaskList is a slice of tasks that represents the list of tasks.
+type TaskList []Task
+
+// AddTask adds a new task to the task list.
+func (t *TaskList) AddTask(title, dueDate string) {
+	*t = append(*t, Task{Title: title, DueDate: dueDate})
+}
+
+// SortTasks sorts the task list based on their due date.
+func (t *TaskList) SortTasks() {
+	sort.Slice(*t, func(i, j int) bool {
+		return (*t)[i].DueDate < (*t)[j].DueDate
+	})
+}
+
+// DisplayTasks prints out the task list in a organized manner.
+func (t *TaskList) DisplayTasks() {
+	for _, task := range *t {
+		fmt.Printf("Task: %s, Due Date: %s\n", task.Title, task.DueDate)
+	}
 }
 
 func main() {
-	var wg sync.WaitGroup //Create a WaitGroup
+	var taskList TaskList
+	taskList.AddTask("Learn Go", "2023-07-30")
+	taskList.AddTask("Implement Task Manager", "2023-08-10")
+	taskList.AddTask("Buy groceries", "2023-07-25")
 
-	//Add two tasks to the WaitGroup
-	wg.Add(2)
+	fmt.Println("--- Unsorted Tasks ---")
+	taskList.DisplayTasks()
 
-	//Run task1 and task2 as separate goroutines
-	go task1(&wg)
-	go task2(&wg)
-
-	//Wait for both tasks to finish
-	fmt.Println("Waiting for tasks to complete...")
-	wg.Wait()
-
-	fmt.Println("Both tasks completed.")
+	fmt.Println("--- Sorted Tasks ---")
+	taskList.SortTasks()
+	taskList.DisplayTasks()
 }

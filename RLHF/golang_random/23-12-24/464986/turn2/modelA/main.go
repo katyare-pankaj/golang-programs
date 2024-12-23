@@ -2,36 +2,59 @@ package main
 
 import (
 	"fmt"
-	"sync"
-	"time"
 )
 
-func task1(wg *sync.WaitGroup) {
-	defer wg.Done()
-	fmt.Println("Task 1 is starting.")
-	time.Sleep(2 * time.Second)
-	fmt.Println("Task 1 is completed.")
+// Task represents a task with a name and priority
+type Task struct {
+	Name     string
+	Priority int
 }
 
-func task2(wg *sync.WaitGroup) {
-	defer wg.Done()
-	fmt.Println("Task 2 is starting.")
-	time.Sleep(1 * time.Second)
-	fmt.Println("Task 2 is completed.")
+// TaskManager manages a list of tasks
+type TaskManager struct {
+	Tasks []Task
 }
 
+// AddTask adds a new task to the manager
+func (t *TaskManager) AddTask(name string, priority int) {
+	t.Tasks = append(t.Tasks, Task{Name: name, Priority: priority})
+}
+
+// DisplayTasks prints all tasks in the manager
+func (t *TaskManager) DisplayTasks() {
+	for _, task := range t.Tasks {
+		fmt.Printf("Task: %s (Priority: %d)\n", task.Name, task.Priority)
+	}
+}
+
+// MarkTaskComplete removes a task from the list by index
+func (t *TaskManager) MarkTaskComplete(index int) {
+	if index >= 0 && index < len(t.Tasks) {
+		t.Tasks = append(t.Tasks[:index], t.Tasks[index+1:]...)
+		fmt.Printf("Task marked as complete: %s\n", t.Tasks[index].Name)
+	} else {
+		fmt.Println("Invalid task index.")
+	}
+}
+
+// Main function to demonstrate the task manager
 func main() {
-	var wg sync.WaitGroup
+	taskManager := TaskManager{}
 
-	// Add two to the WaitGroup since we have two tasks
-	wg.Add(2)
+	// Add a few tasks
+	taskManager.AddTask("Buy groceries", 1)
+	taskManager.AddTask("Read book", 2)
+	taskManager.AddTask("Go for a walk", 3)
 
-	// Start both tasks
-	go task1(&wg)
-	go task2(&wg)
+	// Display all tasks
+	fmt.Println("Current tasks:")
+	taskManager.DisplayTasks()
 
-	// Wait for both tasks to finish
-	wg.Wait()
+	// Mark a task as complete
+	fmt.Println("\nMarking a task as complete...")
+	taskManager.MarkTaskComplete(1)
 
-	fmt.Println("All tasks are completed. Main function is exiting.")
+	// Display tasks again
+	fmt.Println("\nUpdated tasks:")
+	taskManager.DisplayTasks()
 }
