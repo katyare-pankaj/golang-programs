@@ -2,80 +2,74 @@ package main
 
 import (
 	"fmt"
-	"sync"
+	"os"
 	"time"
 )
 
-// Configuration represents the configuration structure.
-type Configuration struct {
-	AppName string
-	Port    int
+func main() {
+	// Generate some random data for testing
+	data := make([]int, 1000000)
+	for i := range data {
+		data[i] = i
+	}
+
+	// Profile the execution of the function with defer
+	start := time.Now()
+	funcWithDefer(data)
+	elapsed := time.Since(start)
+	fmt.Println("Execution time with defer:", elapsed)
+
+	// Profile the execution of the function without defer
+	start = time.Now()
+	funcWithoutDefer(data)
+	elapsed = time.Since(start)
+	fmt.Println("Execution time without defer:", elapsed)
 }
 
-// AsyncConfigManager represents the configuration manager.
-type AsyncConfigManager struct {
-	config *Configuration
-	wg     sync.WaitGroup
-	lock   sync.Mutex
-	done   chan struct{}
-}
+func funcWithDefer(data []int) {
+	var sum int
 
-// NewAsyncConfigManager creates a new AsyncConfigManager instance.
-func NewAsyncConfigManager() *AsyncConfigManager {
-	return &AsyncConfigManager{
-		config: &Configuration{},
-		wg:     sync.WaitGroup{},
-		lock:   sync.Mutex{},
-		done:   make(chan struct{}),
+	// Open a file for writing results
+	file, err := os.Create("results.txt")
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	for _, value := range data {
+		sum += value
+	}
+
+	// Write the sum to the file
+	_, err = file.WriteString(fmt.Sprintf("Sum: %d\n", sum))
+	if err != nil {
+		panic(err)
 	}
 }
 
-// LoadConfigAsync initiates the asynchronous configuration loading process.
-// It takes a callback function that will be called when the configuration is loaded.
-func (m *AsyncConfigManager) LoadConfigAsync(callback func(*Configuration)) {
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
-		// Simulate loading configuration from an external source (e.g., file, database)
-		// This operation could take some time, so we run it asynchronously.
-		time.Sleep(2 * time.Second)
-		config := &Configuration{
-			AppName: "MyApp",
-			Port:    8080,
+func funcWithoutDefer(data []int) {
+	var sum int
+
+	// Open a file for writing results
+	file, err := os.Create("results.txt")
+	if err != nil {
+		panic(err)
+	}
+
+	defer func() {
+		// Close the file at the end of the function
+		if err := file.Close(); err != nil {
+			panic(err)
 		}
-		m.lock.Lock()
-		m.config = config
-		m.lock.Unlock()
-		// Call the callback function with the loaded configuration
-		callback(config)
 	}()
-}
 
-// WaitForConfigBlocking waits for the configuration to be loaded and returns it.
-// It blocks the main goroutine until the configuration is available.
-func (m *AsyncConfigManager) WaitForConfigBlocking() *Configuration {
-	m.wg.Wait()
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	return m.config
-}
+	for _, value := range data {
+		sum += value
+	}
 
-// Close shuts down the configuration manager.
-func (m *AsyncConfigManager) Close() {
-	close(m.done)
-}
-
-func main() {
-	cm := NewAsyncConfigManager()
-	// Start the asynchronous configuration loading
-	cm.LoadConfigAsync(func(config *Configuration) {
-		fmt.Println("Configuration loaded:", config)
-	})
-	// Do other work without blocking on configuration loading
-	fmt.Println("Doing other work...")
-	// Wait for the configuration to be loaded and use it
-	config := cm.WaitForConfigBlocking()
-	fmt.Println("Using configuration:", config)
-	// Close the configuration manager
-	cm.Close()
+	// Write the sum to the file
+	_, err = file.WriteString(fmt.Sprintf("Sum: %d\n", sum))
+	if err != nil {
+		panic(err)
+	}
 }
