@@ -15,14 +15,15 @@ type Configuration struct {
 type ConfigManager struct {
 	config *Configuration
 	loaded bool
+	mu     sync.Mutex
 	wg     sync.WaitGroup
-	lock   sync.Mutex
 	ch     chan struct{}
 }
 
+// NewConfigManager initializes a new ConfigManager.
 func NewConfigManager() *ConfigManager {
 	return &ConfigManager{
-		ch: make(chan struct{}),
+		ch: make(chan struct{}, 1), // Buffered channel to avoid blocking
 	}
 }
 
@@ -36,23 +37,31 @@ func (m *ConfigManager) LoadConfigAsync() {
 			AppName: "MyApp",
 			Port:    8080,
 		}
-		m.lock.Lock()
+
+		m.mu.Lock()
 		m.config = config
 		m.loaded = true
-		m.lock.Unlock()
-		close(m.ch) // Signal configuration loaded
+		m.mu.Unlock()
+
+		// Notify that the configuration is loaded.
+		select {
+		case m.ch <- struct{}{}:
+		default:
+		}
 	}()
 }
 
 // WaitForConfig blocks until the configuration is loaded and returns it.
 func (m *ConfigManager) WaitForConfig() *Configuration {
 	m.wg.Wait()
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	// If the configuration is not loaded, wait for it to be loaded.
-	for !m.loaded {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Wait for the configuration to be loaded if not already
+	if !m.loaded {
 		<-m.ch
 	}
+
 	return m.config
 }
 
@@ -64,21 +73,21 @@ func (m *ConfigManager) LoadConfig() *Configuration {
 
 func main() {
 	cm := NewConfigManager()
-	fmt.Println("Doing some work...")
+
+	fmt.Println("Starting asynchronous configuration loading...")
 
 	// Load configuration asynchronously
 	cm.LoadConfigAsync()
-	fmt.Println("Asynchronous configuration loading initiated.")
 
-	// Other work can be done concurrently while configuration is being loaded.
-	time.Sleep(time.Second)
-	fmt.Println("Doing some more work...")
+	// Simulate doing some other work
+	time.Sleep(1 * time.Second)
+	fmt.Println("Doing some other work...")
 
-	// Later, when needed, the application can block until the configuration is loaded using WaitForConfig.
+	// Later, block and wait for the configuration to be ready
 	config := cm.WaitForConfig()
-	fmt.Println("Using configuration:", config)
+	fmt.Println("Configuration loaded:", config)
 
 	// Alternatively, load configuration synchronously
 	config = cm.LoadConfig()
-	fmt.Println("Using configuration (synchronously):", config)
+	fmt.Println("Configuration loaded synchronously:", config)
 }
