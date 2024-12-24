@@ -2,47 +2,75 @@ package main
 
 import (
 	"fmt"
-	"sort"
 )
 
-// Task represents a simple task with a title and a due date.
 type Task struct {
-	Title   string
-	DueDate string
+	Name string
 }
 
-// TaskList is a slice of tasks that represents the list of tasks.
-type TaskList []Task
-
-// AddTask adds a new task to the task list.
-func (t *TaskList) AddTask(title, dueDate string) {
-	*t = append(*t, Task{Title: title, DueDate: dueDate})
-}
-
-// SortTasks sorts the task list based on their due date.
-func (t *TaskList) SortTasks() {
-	sort.Slice(*t, func(i, j int) bool {
-		return (*t)[i].DueDate < (*t)[j].DueDate
-	})
-}
-
-// DisplayTasks prints out the task list in a organized manner.
-func (t *TaskList) DisplayTasks() {
-	for _, task := range *t {
-		fmt.Printf("Task: %s, Due Date: %s\n", task.Title, task.DueDate)
-	}
-}
+var tasks []Task
 
 func main() {
-	var taskList TaskList
-	taskList.AddTask("Learn Go", "2023-07-30")
-	taskList.AddTask("Implement Task Manager", "2023-08-10")
-	taskList.AddTask("Buy groceries", "2023-07-25")
-
-	fmt.Println("--- Unsorted Tasks ---")
-	taskList.DisplayTasks()
-
-	fmt.Println("--- Sorted Tasks ---")
-	taskList.SortTasks()
-	taskList.DisplayTasks()
+	showMenu()
+}
+func showMenu() {
+	for {
+		fmt.Println(`
+        1. Add Task
+        2. Remove Task
+        3. Display Tasks
+        4. Exit
+        Enter your choice: `)
+		var choice int
+		_, err := fmt.Scanf("%d", &choice)
+		if err != nil {
+			fmt.Println("Invalid input. Please try again.")
+			continue
+		}
+		switch choice {
+		case 1:
+			addTask()
+		case 2:
+			removeTask()
+		case 3:
+			displayTasks()
+		case 4:
+			fmt.Println("Goodbye!")
+			return
+		default:
+			fmt.Println("Invalid choice. Please select between 1-4.")
+		}
+	}
+}
+func addTask() {
+	var task Task
+	fmt.Print("Enter task name: ")
+	fmt.Scanln(&task.Name)
+	tasks = append(tasks, task)
+	fmt.Println("Task added successfully.")
+}
+func removeTask() {
+	var taskName string
+	fmt.Print("Enter task name to remove: ")
+	fmt.Scanln(&taskName)
+	for index, task := range tasks {
+		if task.Name == taskName {
+			tasks = append(tasks[:index], tasks[index+1:]...)
+			fmt.Println("Task removed successfully.")
+			return
+		}
+	}
+	fmt.Println("Task not found.")
+}
+func displayTasks() {
+	if len(tasks) == 0 {
+		fmt.Println("No tasks found.")
+		return
+	}
+	fmt.Println("\nTasks:")
+	fmt.Println("--------------------")
+	for _, task := range tasks {
+		fmt.Printf("%s\n", task.Name)
+	}
+	fmt.Println("--------------------")
 }
