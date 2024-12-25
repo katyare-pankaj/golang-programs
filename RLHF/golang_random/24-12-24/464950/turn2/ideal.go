@@ -2,92 +2,47 @@ package main
 
 import (
 	"fmt"
-	"sync"
+	"os"
+	"runtime/pprof"
 	"time"
 )
 
-type Configuration struct {
-	AppName string
-	Port    int
-}
-
-// ConfigManager represents the configuration manager.
-type ConfigManager struct {
-	config *Configuration
-	loaded bool
-	mu     sync.Mutex
-	wg     sync.WaitGroup
-	ch     chan struct{}
-}
-
-// NewConfigManager initializes a new ConfigManager.
-func NewConfigManager() *ConfigManager {
-	return &ConfigManager{
-		ch: make(chan struct{}, 1), // Buffered channel to avoid blocking
-	}
-}
-
-// LoadConfigAsync initiates the asynchronous configuration loading process.
-func (m *ConfigManager) LoadConfigAsync() {
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
-		time.Sleep(2 * time.Second) // Simulate loading time
-		config := &Configuration{
-			AppName: "MyApp",
-			Port:    8080,
-		}
-
-		m.mu.Lock()
-		m.config = config
-		m.loaded = true
-		m.mu.Unlock()
-
-		// Notify that the configuration is loaded.
-		select {
-		case m.ch <- struct{}{}:
-		default:
-		}
-	}()
-}
-
-// WaitForConfig blocks until the configuration is loaded and returns it.
-func (m *ConfigManager) WaitForConfig() *Configuration {
-	m.wg.Wait()
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Wait for the configuration to be loaded if not already
-	if !m.loaded {
-		<-m.ch
-	}
-
-	return m.config
-}
-
-// LoadConfig loads the configuration synchronously.
-func (m *ConfigManager) LoadConfig() *Configuration {
-	m.LoadConfigAsync()
-	return m.WaitForConfig()
-}
-
 func main() {
-	cm := NewConfigManager()
+	// Create a file to write the CPU profile
+	cpuProfileFile, err := os.Create("cpu.prof")
+	if err != nil {
+		fmt.Println("Error creating CPU profile file:", err)
+		return
+	}
+	defer cpuProfileFile.Close()
 
-	fmt.Println("Starting asynchronous configuration loading...")
+	// Start CPU profiling
+	err = pprof.StartCPUProfile(cpuProfileFile)
+	if err != nil {
+		fmt.Println("Error starting CPU profile:", err)
+		return
+	}
+	defer pprof.StopCPUProfile()
 
-	// Load configuration asynchronously
-	cm.LoadConfigAsync()
+	// Record the start time
+	start := time.Now()
+	defer fmt.Println("Total time:", time.Since(start))
 
-	// Simulate doing some other work
-	time.Sleep(1 * time.Second)
-	fmt.Println("Doing some other work...")
+	// Run the benchmark function multiple times to get an average
+	const numBenchmarks = 1000000
+	for i := 0; i < numBenchmarks; i++ {
+		benchmarkDefer()
+	}
+}
 
-	// Later, block and wait for the configuration to be ready
-	config := cm.WaitForConfig()
-	fmt.Println("Configuration loaded:", config)
+func benchmarkDefer() {
+	// Simulate some work being done
+	for i := 0; i < 100; i++ {
+		_ = i * i
+	}
 
-	// Alternatively, load configuration synchronously
-	config = cm.LoadConfig()
-	fmt.Println("Configuration loaded synchronously:", config)
+	// Simulate resource cleanup with defer
+	defer func() {
+		time.Sleep(time.Nanosecond * 1)
+	}()
 }
