@@ -2,27 +2,28 @@ package main
 
 import (
 	"fmt"
+	"sync"
 	"time"
 )
 
+func worker(id int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	fmt.Printf("Worker %d started\n", id)
+	// Simulate work
+	time.Sleep(time.Duration(1000) * time.Millisecond)
+	fmt.Printf("Worker %d completed\n", id)
+}
+
 func main() {
-	ch1 := make(chan int)
-	ch2 := make(chan string)
+	var wg sync.WaitGroup
+	numWorkers := 5
 
-	go func() {
-		time.Sleep(2 * time.Second)
-		ch1 <- 42
-	}()
-
-	go func() {
-		time.Sleep(1 * time.Second)
-		ch2 <- "hello"
-	}()
-
-	select {
-	case msg := <-ch1:
-		fmt.Println("Received int:", msg)
-	case msg := <-ch2:
-		fmt.Println("Received string:", msg)
+	wg.Add(numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		go worker(i, &wg)
 	}
+
+	fmt.Println("Main goroutine waiting for workers to complete...")
+	wg.Wait()
+	fmt.Println("All workers completed.")
 }
