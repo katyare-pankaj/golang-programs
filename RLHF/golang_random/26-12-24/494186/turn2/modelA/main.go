@@ -2,29 +2,39 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 )
 
-func worker(id int, wg *sync.WaitGroup) {
-	defer wg.Done() // Ensure Done() is called even if the function panics
-	fmt.Printf("Worker %d starting\n", id)
-	time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond) // Simulate work
-	fmt.Printf("Worker %d finished\n", id)
+func producer(id int, ch chan int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for i := 0; i < 5; i++ {
+		num := id*10 + i
+		ch <- num
+		fmt.Println("Producer", id, "sent:", num)
+		time.Sleep(time.Second / 2)
+	}
+}
+
+func consumer(id int, ch chan int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for num := range ch {
+		fmt.Println("Consumer", id, "received:", num)
+		time.Sleep(time.Second / 2)
+	}
 }
 
 func main() {
 	var wg sync.WaitGroup
-	wg.Add(3) // Start with 3 workers
+	ch := make(chan int)
 
-	go worker(1, &wg)
-	go worker(2, &wg)
-	go worker(3, &wg)
+	wg.Add(2) // 2 producers
+	go producer(1, ch, &wg)
+	go producer(2, ch, &wg)
 
-	fmt.Println("Main starting other tasks...")
-	time.Sleep(time.Second)
-	fmt.Println("Main waiting for workers...")
+	wg.Add(1) // 1 consumer
+	go consumer(3, ch, &wg)
+
 	wg.Wait()
-	fmt.Println("All workers done, main continuing...")
+	close(ch) // Inform all consumers that channel is closed
 }

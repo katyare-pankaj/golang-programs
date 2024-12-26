@@ -45,11 +45,9 @@ func main() {
 	c := &Counter{}
 	done := make(chan bool)
 	errChan := make(chan error)
-
 	for i := 1; i <= numWorkers; i++ {
 		go worker(i, c, done, errChan)
 	}
-
 	// Wait for all workers to complete or report an error
 	for i := 1; i <= numWorkers; i++ {
 		select {
@@ -59,7 +57,6 @@ func main() {
 			fmt.Println("Error:", err)
 		}
 	}
-
 	// Read the final counter value
 	c.Lock()
 	finalValue := c.value
