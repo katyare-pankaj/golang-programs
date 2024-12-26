@@ -2,45 +2,40 @@ package main
 
 import (
 	"fmt"
+	"runtime"
+	"sync"
 	"time"
 )
 
-func main() {
-	// Start with a slice of channels
-	channels := make([]chan string, 0)
+// Number of goroutines
+const numGoroutines = 10000
 
-	// Create channels at runtime
-	channels = append(channels, make(chan string))
-	channels = append(channels, make(chan string))
-	channels = append(channels, make(chan string))
-
-	go func() {
-		time.Sleep(time.Second)
-		channels[0] <- "Channel 1: Message received"
-	}()
-
-	go func() {
-		time.Sleep(time.Second * 2)
-		channels[1] <- "Channel 2: Message received"
-	}()
-
-	go func() {
-		time.Sleep(time.Second * 3)
-		channels[2] <- "Channel 3: Message received"
-	}()
-
-	// Listen for messages from the dynamic channels
-	for {
-		select {
-		case message := <-channels[0]:
-			fmt.Println(message)
-		case message := <-channels[1]:
-			fmt.Println(message)
-		case message := <-channels[2]:
-			fmt.Println(message)
-		default:
-			// Optionally add a timeout or other behavior here
-			time.Sleep(time.Millisecond * 100)
-		}
+func worker(id int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for i := 0; i < 5; i++ {
+		time.Sleep(time.Duration(100) * time.Microsecond)
+		fmt.Printf("Goroutine %d: %d\n", id, i)
 	}
+}
+
+func main() {
+	var wg sync.WaitGroup
+
+	fmt.Printf("Starting %d goroutines.\n", numGoroutines)
+	// Initialize goroutines
+	wg.Add(numGoroutines)
+	for i := 0; i < numGoroutines; i++ {
+		go worker(i, &wg)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+	fmt.Printf("All goroutines completed.\n")
+
+	// Output runtime statistics
+	runtime.GC()
+	fmt.Println("\nRuntime Statistics:")
+	runtime.ReadMemStats(&stats)
+	fmt.Printf("NumGoroutine: %d\n", stats.NumGoroutine)
+	fmt.Printf("NumGoroutine (sched): %d\n", stats.NumGoroutineSched)
 }

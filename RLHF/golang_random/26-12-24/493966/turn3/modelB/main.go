@@ -2,43 +2,29 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
+	"runtime"
 	"time"
 )
 
-func producer(id int, c chan<- int) {
+func worker(id int) {
 	for {
-		time.Sleep(time.Duration(rand.Intn(2000)) * time.Millisecond)
-		c <- id
+		fmt.Printf("Worker %d is running\n", id)
+		// Simulate work
+		time.Sleep(time.Duration(100) * time.Millisecond)
 	}
 }
 
 func main() {
-	channels := []chan int{}
+	runtime.GOMAXPROCS(1) // Limit Go to use only 1 thread for simplicity
 
-	// Generate some random channels
-	for i := 0; i < 5; i++ {
-		c := make(chan int)
-		channels = append(channels, c)
-		go producer(i, c)
+	numWorkers := 3
+	for i := 0; i < numWorkers; i++ {
+		go worker(i) // Create and start worker goroutines
 	}
 
-	fmt.Println("Waiting for data from channels...")
+	// The main goroutine runs continuously while other goroutines are scheduled
 	for {
-		select {
-		case data := <-channels[0]:
-			fmt.Println("Received data from channel 0:", data)
-		case data := <-channels[1]:
-			fmt.Println("Received data from channel 1:", data)
-		case data := <-channels[2]:
-			fmt.Println("Received data from channel 2:", data)
-		case data := <-channels[3]:
-			fmt.Println("Received data from channel 3:", data)
-		case data := <-channels[4]:
-			fmt.Println("Received data from channel 4:", data)
-		default:
-			time.Sleep(time.Second)
-			fmt.Println("No data available, checking again...")
-		}
+		// Let's introduce a slight delay in the main goroutine
+		time.Sleep(time.Duration(500) * time.Millisecond)
 	}
 }
