@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 func consumer(ch <-chan int) {
 	for i := range ch {
@@ -14,4 +17,7 @@ func main() {
 	for i := 0; i < 5; i++ {
 		ch <- i
 	}
+	close(ch) // Close the channel after sending all the data
+	// Allow goroutines to finish their tasks before exiting
+	time.Sleep(1 * time.Second)
 }

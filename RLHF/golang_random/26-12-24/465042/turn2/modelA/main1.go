@@ -10,6 +10,7 @@ func producer(wg *sync.WaitGroup, c chan int) {
 	for i := 0; i < 5; i++ {
 		c <- i
 	}
+	close(c) // Close the channel after all senders are done
 }
 
 func consumer(wg *sync.WaitGroup, c chan int) {
@@ -30,5 +31,5 @@ func main() {
 	go consumer(&wg, c)
 
 	wg.Wait()
-	// The program will hang here because the channel is not closed
+	// The program will now exit after all data is processed
 }
