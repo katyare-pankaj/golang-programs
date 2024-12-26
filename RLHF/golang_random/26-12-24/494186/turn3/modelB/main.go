@@ -1,30 +1,54 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"runtime"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 )
 
-func worker(id int) {
+func worker(ctx context.Context, id int, wg *sync.WaitGroup) {
+	defer wg.Done()
 	for {
-		fmt.Printf("Worker %d is running\n", id)
-		// Simulate work
-		time.Sleep(time.Duration(100) * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			fmt.Println("Worker", id, "received termination signal")
+			return
+		default:
+			fmt.Println("Worker", id, "is working...")
+			time.Sleep(time.Second)
+		}
 	}
 }
 
 func main() {
-	runtime.GOMAXPROCS(1) // Limit Go to use only 1 thread for simplicity
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
+	var wg sync.WaitGroup
 	numWorkers := 3
-	for i := 0; i < numWorkers; i++ {
-		go worker(i) // Create and start worker goroutines
+
+	wg.Add(numWorkers)
+	for i := 1; i <= numWorkers; i++ {
+		go worker(ctx, i, &wg)
 	}
 
-	// The main goroutine runs continuously while other goroutines are scheduled
-	for {
-		// Let's introduce a slight delay in the main goroutine
-		time.Sleep(time.Duration(500) * time.Millisecond)
-	}
+	// Graceful shutdown handling
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-c
+		fmt.Println("Received termination signal. Gracefully shutting down...")
+		cancel()
+		wg.Wait()
+		fmt.Println("All goroutines stopped. Exiting.")
+		os.Exit(0)
+	}()
+
+	// Main application logic here
+	fmt.Println("Main program is running...")
+	time.Sleep(5 * time.Second)
 }

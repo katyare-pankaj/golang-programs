@@ -1,41 +1,66 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"runtime"
+	"os"
+	"os/signal"
 	"sync"
 	"time"
 )
 
-// Number of goroutines
-const numGoroutines = 10000
-
-func worker(id int, wg *sync.WaitGroup) {
+// Simulates a long-running task
+func worker(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for i := 0; i < 5; i++ {
-		time.Sleep(time.Duration(100) * time.Microsecond)
-		fmt.Printf("Goroutine %d: %d\n", id, i)
+
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println("Worker received shutdown signal. Exiting...")
+			return
+		default:
+			fmt.Println("Worker doing work...")
+			time.Sleep(2 * time.Second)
+		}
 	}
 }
 
 func main() {
+	// Create a wait group to keep track of goroutines
 	var wg sync.WaitGroup
 
-	fmt.Printf("Starting %d goroutines.\n", numGoroutines)
-	// Initialize goroutines
-	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
-		go worker(i, &wg)
+	// Create a context with a cancellation function
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start some worker goroutines
+	numWorkers := 3
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go worker(ctx, &wg)
 	}
 
-	// Wait for all goroutines to complete
-	wg.Wait()
-	fmt.Printf("All goroutines completed.\n")
+	// Register a signal handler for SIGINT and SIGTERM
+	sigChan := make(chan os.Signal)
+	signal.Notify(sigChan, os.Interrupt, os.Kill)
+	defer signal.Stop(sigChan)
 
-	// Output runtime statistics
-	runtime.GC()
-	fmt.Println("\nRuntime Statistics:")
-	runtime.ReadMemStats(&stats)
-	fmt.Printf("NumGoroutine: %d\n", stats.NumGoroutine)
-	fmt.Printf("NumGoroutine (sched): %d\n", stats.NumGoroutineSched)
+	fmt.Println("Program started. Press Ctrl+C to terminate...")
+
+	// Wait for a signal
+	select {
+	case sig := <-sigChan:
+		fmt.Println("Received signal:", sig)
+
+		// Cancel the context, signaling workers to shut down
+		cancel()
+
+		// Wait for all worker goroutines to finish
+		wg.Wait()
+
+	case <-ctx.Done():
+		fmt.Println("Context canceled, exiting...")
+	}
+
+	fmt.Println("Program terminated gracefully.")
 }
