@@ -73,9 +73,13 @@ func (p *EventProcessor) validateLoginEvent(event LoginEvent) error {
 }
 
 func main() {
+	// Initialize the in-memory user service and add a user
 	userService := NewInMemoryUserService()
+	userService.users["john"] = "password" // Add user "john" with password "password"
+
 	eventProcessor := NewEventProcessor(userService)
 
+	// Try to log in with the correct credentials
 	loginEvent := LoginEvent{Username: "john", Password: "password"}
 	if err := eventProcessor.ProcessLoginEvent(loginEvent); err != nil {
 		fmt.Printf("Error: %v\n", err)
