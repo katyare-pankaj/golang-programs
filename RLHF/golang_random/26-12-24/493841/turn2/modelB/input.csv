@@ -1,0 +1,4 @@
+id,username,email,age
+1,johndoe,johndoe@example.com,25
+2,janedoe,janedoe@example.com,30
+3,invaliduser,invalidemail,20

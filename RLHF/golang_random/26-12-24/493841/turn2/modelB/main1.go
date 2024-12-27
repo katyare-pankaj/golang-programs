@@ -1,4 +1,4 @@
-package main  
+package main
 
 import (
 	"encoding/csv"
@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -34,6 +35,53 @@ func (u *User) Validate() error {
 	return nil
 }
 
+// Function to parse and validate a CSV record
+func (u *User) parseAndValidateCSVRecord(record []string) error {
+	// We expect a record with exactly 4 fields: id, username, email, age
+	if len(record) != 4 {
+		return errors.Errorf("expected 4 fields in record, got: %d", len(record))
+	}
+
+	var err error
+	u.ID, err = parseInt64(record[0])
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse field 'id'")
+	}
+
+	u.Username = record[1]
+	u.Email = record[2]
+	u.Age, err = parseInt(record[3])
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse field 'age'")
+	}
+
+	// Validate the user object
+	if err := u.Validate(); err != nil {
+		return errors.Wrap(err, "validation failed")
+	}
+
+	return nil
+}
+
+// Helper function to parse an integer (int)
+func parseInt(value string) (int, error) {
+	parsedValue, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to convert '%s' to an integer", value)
+	}
+	return parsedValue, nil
+}
+
+// Helper function to parse an integer (int64)
+func parseInt64(value string) (int64, error) {
+	parsedValue, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to convert '%s' to an int64", value)
+	}
+	return parsedValue, nil
+}
+
+// Function to migrate data from a CSV file to a JSON file
 func migrateDataFromCSVToJSON(csvFilePath, jsonFilePath string) error {
 	// Read CSV data from file
 	file, err := os.Open(csvFilePath)
@@ -87,12 +135,15 @@ func migrateDataFromCSVToJSON(csvFilePath, jsonFilePath string) error {
 	return nil
 }
 
-func (u *User) parseAndValidateCSVRecord(record []string) error {
-	// We expect a record with exactly 4 fields: id, username, email, age
-	if len(record) != 4 {
-		return errors.Errorf("expected 4 fields in record, got: %d", len(record))
+func main() {
+	// Paths to the CSV and JSON files
+	csvFilePath := "input.csv"
+	jsonFilePath := "output.json"
+
+	// Migrate data from CSV to JSON
+	if err := migrateDataFromCSVToJSON(csvFilePath, jsonFilePath); err != nil {
+		log.Fatalf("Error: %v", err)
 	}
-	var err error
-	u.ID, err = parseInt(record[0])
-	if err != nil {
-		return errors.Wrapf(err, "failed to parse field 'id'")
+
+	fmt.Println("Data migration completed successfully!")
+}
