@@ -1,83 +1,58 @@
 package main
 
 import (
-	"errors"
 	"fmt"
+	"math/rand"
+	"sync"
+	"time"
 )
 
-type LoginEvent struct {
-	Username string
-	Password string
+type Task struct {
+	ID       int
+	Workload int
 }
 
-// UserService handles user-related operations.
-type UserService interface {
-	Login(event LoginEvent) error
-}
-
-// In-memory user service for demonstration purposes.
-type InMemoryUserService struct {
-	users map[string]string
-}
-
-func NewInMemoryUserService() *InMemoryUserService {
-	return &InMemoryUserService{users: make(map[string]string)}
-}
-
-func (s *InMemoryUserService) Login(event LoginEvent) error {
-	expectedPassword, ok := s.users[event.Username]
-	if !ok {
-		return errors.New("user not found")
+func worker(id int, work chan *Task, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for task := range work {
+		fmt.Printf("Worker %d: Starting task %d with workload %d\n", id, task.ID, task.Workload)
+		processTask(task.Workload)
+		fmt.Printf("Worker %d: Completed task %d\n", id, task.ID)
 	}
-
-	if expectedPassword != event.Password {
-		return errors.New("invalid password")
-	}
-
-	return nil
 }
 
-// EventProcessor processes login events.
-type EventProcessor struct {
-	userService UserService
-}
-
-func NewEventProcessor(userService UserService) *EventProcessor {
-	return &EventProcessor{userService: userService}
-}
-
-func (p *EventProcessor) ProcessLoginEvent(event LoginEvent) error {
-	if err := p.validateLoginEvent(event); err != nil {
-		return fmt.Errorf("event validation failed: %w", err)
-	}
-
-	err := p.userService.Login(event)
-	if err != nil {
-		return fmt.Errorf("user login failed: %w", err)
-	}
-
-	fmt.Println("User logged in successfully!")
-	return nil
-}
-
-func (p *EventProcessor) validateLoginEvent(event LoginEvent) error {
-	if event.Username == "" {
-		return errors.New("username is required")
-	}
-
-	if event.Password == "" {
-		return errors.New("password is required")
-	}
-
-	return nil
+func processTask(workload int) {
+	// Simulate task processing by sleeping for a duration based on the workload.
+	// In a real scenario, you would do actual work here.
+	duration := time.Duration(workload) * time.Millisecond
+	time.Sleep(duration)
 }
 
 func main() {
-	userService := NewInMemoryUserService()
-	eventProcessor := NewEventProcessor(userService)
+	numWorkers := 4
+	tasks := make([]*Task, 0, 20)
 
-	loginEvent := LoginEvent{Username: "john", Password: "password"}
-	if err := eventProcessor.ProcessLoginEvent(loginEvent); err != nil {
-		fmt.Printf("Error: %v\n", err)
+	// Generate some tasks with different workloads
+	for i := 0; i < 20; i++ {
+		workload := rand.Intn(100) + 50
+		tasks = append(tasks, &Task{ID: i, Workload: workload})
 	}
+
+	work := make(chan *Task)
+	var wg sync.WaitGroup
+
+	// Start the worker goroutines
+	wg.Add(numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		go worker(i, work, &wg)
+	}
+
+	// Dispatch the tasks to the workers
+	for _, task := range tasks {
+		work <- task
+	}
+
+	close(work)
+	wg.Wait()
+	fmt.Println("All tasks completed.")
 }

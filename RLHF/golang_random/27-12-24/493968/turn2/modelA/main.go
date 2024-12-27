@@ -1,77 +1,92 @@
 package main
 
 import (
-	"errors"
-	"log"
+	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 )
 
-type Event struct {
-	Type string
-	Data interface{}
+// Task represents a task to be processed by the worker pool
+type Task func()
+
+// WorkerPool represents a pool of worker goroutines
+type WorkerPool struct {
+	workers        int            // Number of worker goroutines
+	taskQueue      chan Task      // Channel for queuing tasks
+	shutdownSignal chan bool      // Signal to shut down the worker pool
+	wg             sync.WaitGroup // Wait group to synchronize worker shutdown
 }
 
-type EventHandler func(Event) error
-
-func processEvent(event Event, handler EventHandler) error {
-	log.Printf("Processing event: %v\n", event)
-	return handler(event)
-}
-
-func errorEventHandler(event Event) error {
-	log.Printf("Error event: %v\n", event)
-	// Simulate an error handling operation
-	if _, ok := event.Data.(string); !ok {
-		return errors.New("Invalid error event data")
+// NewWorkerPool creates a new worker pool with a specified number of workers
+func NewWorkerPool(workers int) *WorkerPool {
+	return &WorkerPool{
+		workers:        workers,
+		taskQueue:      make(chan Task),
+		shutdownSignal: make(chan bool),
 	}
-	return nil
 }
 
-func successEventHandler(event Event) error {
-	log.Printf("Success event: %v\n", event)
-	// Simulate a successful operation
-	return nil
+// Start starts the worker pool
+func (pool *WorkerPool) Start() {
+	for i := 0; i < pool.workers; i++ {
+		go pool.worker()
+	}
+}
+
+// AddTask adds a task to the task queue
+func (pool *WorkerPool) AddTask(task Task) {
+	pool.taskQueue <- task
+}
+
+// Shutdown signals the worker pool to shut down
+func (pool *WorkerPool) Shutdown() {
+	pool.shutdownSignal <- true
+	pool.wg.Wait()
+	close(pool.taskQueue)
+}
+
+// worker is a goroutine that processes tasks from the queue
+func (pool *WorkerPool) worker() {
+	defer pool.wg.Done()
+	for {
+		select {
+		case task, ok := <-pool.taskQueue:
+			if !ok {
+				// Queue is closed, exit worker
+				return
+			}
+			task()
+		case <-pool.shutdownSignal:
+			// Shutdown signal received, exit worker
+			return
+		}
+	}
 }
 
 func main() {
-	eventQueue := make(chan Event)
-	var wg sync.WaitGroup
+	// Create a worker pool with 5 workers
+	pool := NewWorkerPool(5)
+	pool.Start()
 
-	// Start event handlers in goroutines
-	wg.Add(2)
-	go func() {
-		for event := range eventQueue {
-			if err := processEvent(event, errorEventHandler); err != nil {
-				log.Printf("Error processing event: %v\n", err)
+	// Generate a set of tasks to be processed
+	tasks := make([]Task, 100)
+	for i := range tasks {
+		tasks[i] = func(id int) Task {
+			return func() {
+				fmt.Printf("Processing task %d...\n", id)
+				time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
+				fmt.Printf("Task %d completed.\n", id)
 			}
-		}
-		wg.Done()
-	}()
+		}(i)
+	}
 
-	go func() {
-		for event := range eventQueue {
-			if err := processEvent(event, successEventHandler); err != nil {
-				log.Printf("Error processing event: %v\n", err)
-			}
-		}
-		wg.Done()
-	}()
+	// Add tasks to the worker pool
+	for _, task := range tasks {
+		pool.AddTask(task)
+	}
 
-	// Simulate producing events
-	time.AfterFunc(time.Second, func() {
-		eventQueue <- Event{Type: "error", Data: "Invalid data"}
-	})
-
-	time.AfterFunc(2*time.Second, func() {
-		eventQueue <- Event{Type: "success", Data: "Operation completed"}
-	})
-
-	time.AfterFunc(3*time.Second, func() {
-		eventQueue <- Event{Type: "error", Data: 42} // This will cause an error
-	})
-
-	// Wait for all event handlers to finish
-	wg.Wait()
-	close(eventQueue)
+	// Shutdown the worker pool
+	pool.Shutdown()
+	fmt.Println("Worker pool shutdown complete.")
 }
