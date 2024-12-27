@@ -65,8 +65,5 @@ func main() {
 }
 
 func isInputInvalid(err error) bool {
-	if wrappedErr, ok := err.(*fmt.Error); ok {
-		return errors.Is(wrappedErr.Unwrap(), ErrInputInvalid) || isInputInvalid(wrappedErr.Unwrap())
-	}
-	return false
+	return errors.Is(err, ErrInputInvalid)
 }
