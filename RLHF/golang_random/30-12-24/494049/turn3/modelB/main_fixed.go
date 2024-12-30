@@ -11,20 +11,7 @@ type SliceOperation interface {
 	InitialResult() float64
 }
 
-type BaseOperation struct {
-}
-
-func (b *BaseOperation) Apply(slice []int) float64 {
-	result := b.InitialResult()
-	for _, element := range slice {
-		result = b.ProcessElement(element, result)
-	}
-	return result
-}
-
-type SumOperation struct {
-	BaseOperation
-}
+type SumOperation struct{}
 
 func (s *SumOperation) InitialResult() float64 {
 	return 0
@@ -34,9 +21,15 @@ func (s *SumOperation) ProcessElement(element int, result float64) float64 {
 	return result + float64(element)
 }
 
-type MaxOperation struct {
-	BaseOperation
+func (s *SumOperation) Apply(slice []int) float64 {
+	result := s.InitialResult()
+	for _, element := range slice {
+		result = s.ProcessElement(element, result)
+	}
+	return result
 }
+
+type MaxOperation struct{}
 
 func (m *MaxOperation) InitialResult() float64 {
 	return float64(math.MinInt64)
@@ -45,6 +38,14 @@ func (m *MaxOperation) InitialResult() float64 {
 func (m *MaxOperation) ProcessElement(element int, result float64) float64 {
 	if float64(element) > result {
 		return float64(element)
+	}
+	return result
+}
+
+func (m *MaxOperation) Apply(slice []int) float64 {
+	result := m.InitialResult()
+	for _, element := range slice {
+		result = m.ProcessElement(element, result)
 	}
 	return result
 }
@@ -60,6 +61,7 @@ func (m *MeanOperation) Apply(slice []int) float64 {
 
 func main() {
 	slice := []int{1, 2, 3, 4, 5}
+
 	sumOp := &SumOperation{}
 	fmt.Println("Sum:", sumOp.Apply(slice)) // Output: Sum: 15
 

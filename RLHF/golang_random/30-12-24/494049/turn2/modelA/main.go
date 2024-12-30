@@ -2,41 +2,69 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
 )
 
-func simulateWork(wg *sync.WaitGroup, id int) {
-	defer wg.Done() // Decrement the WaitGroup count once the function exits
+// SliceOperation defines the interface for slice operations.
+type SliceOperation interface {
+	Apply([]int) int
+	ProcessElement(int, int) int
+}
 
-	// Simulate some work by sleeping for a random duration
-	duration := time.Duration(rand.Intn(5)) * time.Second // Sleep between 0s and 4s
-	fmt.Printf("Worker %d is working for %v\n", id, duration)
-	time.Sleep(duration)
+// BaseOperation implements the basic template method for slice operations.
+type BaseOperation struct {
+}
 
-	fmt.Printf("Worker %d is done\n", id)
+// Apply is the template method that processes the slice using the custom element processing step.
+func (b *BaseOperation) Apply(slice []int) int {
+	result := 0
+	for _, element := range slice {
+		result = b.ProcessElement(result, element)
+	}
+	return result
+}
+
+// ProcessElement is the default element processing step (sum).
+func (b *BaseOperation) ProcessElement(result, element int) int {
+	return result + element
+}
+
+// SumOperation overrides the ProcessElement method to implement the sum operation.
+type SumOperation struct {
+	BaseOperation
+}
+
+// ProductOperation overrides the ProcessElement method to implement the product operation.
+type ProductOperation struct {
+	BaseOperation
+}
+
+// ProcessElement overrides the default sum to calculate the product.
+func (p *ProductOperation) ProcessElement(result, element int) int {
+	if result == 0 {
+		return element
+	}
+	return result * element
+}
+
+// CustomOperation demonstrates how to define a new custom operation.
+type CustomOperation struct {
+	BaseOperation
+}
+
+// ProcessElement overrides the default sum to implement a custom operation (e.g., sum of squares).
+func (c *CustomOperation) ProcessElement(result, element int) int {
+	return result + element*element
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	slice := []int{1, 2, 3, 4, 5}
 
-	// Create a WaitGroup
-	var wg sync.WaitGroup
+	sumOp := &SumOperation{}
+	fmt.Println("Sum:", sumOp.Apply(slice)) // Output: Sum: 15
 
-	// Set the number of goroutines
-	numGoroutines := 5
+	productOp := &ProductOperation{}
+	fmt.Println("Product:", productOp.Apply(slice)) // Output: Product: 120
 
-	// Add the number of goroutines to the WaitGroup
-	wg.Add(numGoroutines)
-
-	// Launch the goroutines
-	for i := 0; i < numGoroutines; i++ {
-		go simulateWork(&wg, i)
-	}
-
-	// Wait for all goroutines to complete
-	wg.Wait()
-
-	fmt.Println("All workers have finished. Main function exiting.")
+	customOp := &CustomOperation{}
+	fmt.Println("Sum of Squares:", customOp.Apply(slice)) // Output: Sum of Squares: 55
 }
