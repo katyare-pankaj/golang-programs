@@ -2,32 +2,52 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"sync"
-	"time"
 )
 
-func printMessage(wg *sync.WaitGroup, message string, delay time.Duration) {
-	defer wg.Done()
-	time.Sleep(delay)
-	fmt.Println(message)
-}
-
 func main() {
+	// Define a set of predefined keys
+	keys := []string{"key1", "key2", "key3", "key4", "key5"}
+
+	// Create a sync.Map to store counters for each key
+	var counters sync.Map
+
+	// Number of goroutines to increment the counters
+	const numGoroutines = 10
+
+	// Create a WaitGroup to synchronize the goroutines
 	var wg sync.WaitGroup
-
-	// Number of goroutines to synchronize
-	numGoroutines := 5
-
-	// Start multiple goroutines
 	wg.Add(numGoroutines)
-	for i := 1; i <= numGoroutines; i++ {
-		message := fmt.Sprintf("Message %d", i)
-		delay := time.Duration(i) * time.Second
-		go printMessage(&wg, message, delay)
+
+	// Start the goroutines to increment the counters concurrently
+	for i := 0; i < numGoroutines; i++ {
+		go incrementCounters(&counters, keys, &wg)
 	}
 
-	// Wait for all goroutines to complete their tasks
+	// Wait for all goroutines to complete their execution
 	wg.Wait()
 
-	fmt.Println("All goroutines have finished printing messages.")
+	// Display the final counts for each key
+	counters.Range(func(key, value interface{}) bool {
+		fmt.Printf("Count for %s: %d\n", key.(string), value.(int))
+		return true
+	})
+}
+
+func incrementCounters(counters *sync.Map, keys []string, wg *sync.WaitGroup) {
+	// Defer the WaitGroup Done function to signal that this goroutine is complete
+	defer wg.Done()
+
+	// Loop for a random number of times to increment the counters
+	for i := 0; i < rand.Intn(100); i++ {
+		// Select a random key from the set
+		key := keys[rand.Intn(len(keys))]
+
+		// Load the current count for the selected key using LoadOrStore
+		count, _ := counters.LoadOrStore(key, 0)
+
+		// Increment the count and store it back using Store
+		counters.Store(key, count.(int)+1)
+	}
 }
