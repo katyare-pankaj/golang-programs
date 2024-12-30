@@ -1,0 +1,13 @@
+[
+    {
+      "name": "Eiffel Tower",
+      "description": "An iron lattice tower in Paris, France.",
+      "country": "France"
+    },
+    {
+      "name": "Great Wall of China",
+      "description": "A series of fortifications in northern China.",
+      "country": "China"
+    }
+  ]
+  
