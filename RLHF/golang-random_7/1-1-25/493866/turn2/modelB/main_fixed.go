@@ -6,7 +6,7 @@ import (
 
 func main() {
 	var slice []int = nil
-	var array [3]int = nil
+	var array [3]int
 
 	fmt.Println(fmt.Sprintf("Slice: %v", slice)) // Output: Slice: <nil>
 	fmt.Println(fmt.Sprintf("Array: %v", array)) // Output: Array: <nil>

@@ -14,7 +14,7 @@ func main() {
 	fmt.Println(fmt.Sprintf("Non-nil slice: %v", slice2)) // Output: Non-nil slice: [1 2 3]
 
 	// Test case 3: Nil array
-	var arr1 [3]int = nil
+	var arr1 [3]int
 	fmt.Println(fmt.Sprintf("Nil array: %v", arr1)) // Output: Nil array: [0 0 0]
 
 	// Test case 4: Non-nil array
