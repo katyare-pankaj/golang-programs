@@ -2,66 +2,54 @@ package main
 
 import (
 	"fmt"
+	"html"
+	"log"
+	"strings"
 )
 
-// Product represents a product with a name and price.
-type Product struct {
-	Name  string
-	Price float64
+// User represents a user with personal details
+type User struct {
+	Name string `json:"name"`
+	Age  int    `json:"age"`
+}
+
+// sanitize sanitizes a string by escaping HTML special characters
+func sanitize(s string) string {
+	if s == "" {
+		return ""
+	}
+	return html.EscapeString(s)
+}
+
+// formatUsers formats a list of users with sanitized details
+func formatUsers(users []User) (string, error) {
+	var result strings.Builder
+	for _, user := range users {
+		// Sanitize name and age before appending to the result
+		sanitizedName := sanitize(user.Name)
+		sanitizedAge := sanitize(fmt.Sprintf("%d", user.Age)) // Convert int to string
+
+		// Append formatted user data to the result
+		result.WriteString(fmt.Sprintf("Name: %s, Age: %s\n", sanitizedName, sanitizedAge))
+	}
+
+	if result.Len() == 0 {
+		return "", fmt.Errorf("no users to display")
+	}
+
+	return result.String(), nil
 }
 
 func main() {
-	// Sample list of products
-	products := []Product{
-		{"Laptop", 1299.99},
-		{"Mouse", 24.99},
-		{"Keyboard", 49.99},
-		{"Monitor", 199.99},
-		{"Headphones", 89.99},
+	users := []User{
+		{Name: "Alice <script>alert(1)</script>", Age: 25},
+		{Name: "Bob", Age: 30},
 	}
 
-	// Filter function to check if the price is greater than 50
-	filterGreaterThanFifty := func(p Product) bool {
-		return p.Price > 50
+	formattedUsers, err := formatUsers(users)
+	if err != nil {
+		log.Fatalf("Error formatting users: %v", err)
 	}
 
-	// Filter the products manually
-	filteredProductsManually := filterProductsManually(products, filterGreaterThanFifty)
-	fmt.Println("Filtered products manually:")
-	printProducts(filteredProductsManually)
-
-	// Filter the products using Go's built-in filter function
-	filteredProductsBuiltin := filterProductsBuiltin(products, filterGreaterThanFifty)
-	fmt.Println("\nFiltered products using Go's built-in filter:")
-	printProducts(filteredProductsBuiltin)
-}
-
-// Filter the slice manually and return a new slice
-func filterProductsManually(products []Product, condition func(Product) bool) []Product {
-	filtered := []Product{}
-	for _, product := range products {
-		if condition(product) {
-			filtered = append(filtered, product)
-		}
-	}
-	return filtered
-}
-
-// Filter the slice using Go's built-in filter function
-func filterProductsBuiltin(products []Product, condition func(Product) bool) []Product {
-	return filter(products, condition)
-}
-
-// Filter function that uses a for loop to filter the slice
-func filter(products []Product, condition func(Product) bool) []Product {
-	return []Product{
-		product for product := range products if condition(product)
-	}
-}
-
-// Print the list of products
-func printProducts(products []Product) {
-	for _, product := range products {
-		fmt.Printf("%v ($%.2f)\n", product.Name, product.Price)
-	}
+	fmt.Println(formattedUsers)
 }
