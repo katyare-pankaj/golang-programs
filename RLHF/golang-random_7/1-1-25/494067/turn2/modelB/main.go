@@ -2,52 +2,46 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"sync"
 )
 
-func main() {
-	// Define a set of predefined keys
-	keys := []string{"key1", "key2", "key3", "key4", "key5"}
-
-	// Create a sync.Map to store counters for each key
-	var counters sync.Map
-
-	// Number of goroutines to increment the counters
-	const numGoroutines = 10
-
-	// Create a WaitGroup to synchronize the goroutines
-	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
-
-	// Start the goroutines to increment the counters concurrently
-	for i := 0; i < numGoroutines; i++ {
-		go incrementCounters(&counters, keys, &wg)
-	}
-
-	// Wait for all goroutines to complete their execution
-	wg.Wait()
-
-	// Display the final counts for each key
-	counters.Range(func(key, value interface{}) bool {
-		fmt.Printf("Count for %s: %d\n", key.(string), value.(int))
-		return true
-	})
+// Product struct
+type Product struct {
+	Name  string
+	Price float64
 }
 
-func incrementCounters(counters *sync.Map, keys []string, wg *sync.WaitGroup) {
-	// Defer the WaitGroup Done function to signal that this goroutine is complete
-	defer wg.Done()
-
-	// Loop for a random number of times to increment the counters
-	for i := 0; i < rand.Intn(100); i++ {
-		// Select a random key from the set
-		key := keys[rand.Intn(len(keys))]
-
-		// Load the current count for the selected key using LoadOrStore
-		count, _ := counters.LoadOrStore(key, 0)
-
-		// Increment the count and store it back using Store
-		counters.Store(key, count.(int)+1)
+func main() {
+	// Initialize a slice of Product structs
+	products := []Product{
+		{Name: "Apple", Price: 2.5},
+		{Name: "Banana", Price: 1.8},
+		{Name: "Orange", Price: 3.0},
+		{Name: "Grapes", Price: 4.0},
+		{Name: "Mango", Price: 2.0},
 	}
+
+	minPrice := 2.5 // Define the minimum price filter
+
+	// Filter the products slice to include only products with price greater than minPrice
+	filteredProducts := filterProducts(products, func(p Product) bool {
+		return p.Price > minPrice
+	})
+
+	// Print the filtered products
+	fmt.Println("Filtered Products:")
+	for _, product := range filteredProducts {
+		fmt.Printf("%s: %.2f\n", product.Name, product.Price)
+	}
+}
+
+// filterProducts function takes a slice of Product structs and a predicate function as input
+// and returns a new slice containing only those structs for which the predicate function returns true.
+func filterProducts(products []Product, predicate func(Product) bool) []Product {
+	var filtered []Product
+	for _, product := range products {
+		if predicate(product) {
+			filtered = append(filtered, product)
+		}
+	}
+	return filtered
 }
