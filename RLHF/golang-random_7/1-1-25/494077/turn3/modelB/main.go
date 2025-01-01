@@ -2,41 +2,51 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 )
 
-type Student struct {
-	Name  string
-	Grade float64
+// User represents a user with sensitive information.
+type User struct {
+	Username string `json:"username"`
+	Age      int    `json:"age"`
 }
 
-// This function takes a slice of Students and a grade threshold
-// as input and returns a new slice of students with grades greater than or equal to the threshold.
-func filterStudentsByGrade(students []Student, threshold float64) []Student {
-	var filteredStudents []Student
-	for _, student := range students {
-		if student.Grade >= threshold {
-			filteredStudents = append(filteredStudents, student)
-		}
+// SanitizedUsers is a slice of sanitized User.
+type SanitizedUsers []string
+
+// sanitizeUsername removes any special characters from the username.
+func sanitizeUsername(username string) string {
+	re := regexp.MustCompile(`[^a-zA-Z0-9]`)
+	return re.ReplaceAllString(username, "")
+}
+
+// sanitizeAge formats the age to display only the last two digits.
+func sanitizeAge(age int) string {
+	return fmt.Sprintf("%02d", age%100)
+}
+
+// FormatUsers safely formats a list of users with sanitized information.
+func FormatUsers(users []User) SanitizedUsers {
+	sanitizedUsers := make(SanitizedUsers, len(users))
+	for i, user := range users {
+		sanitizedUsername := sanitizeUsername(user.Username)
+		sanitizedAge := sanitizeAge(user.Age)
+		sanitizedUsers[i] = fmt.Sprintf("Username: %s, Age: %s", sanitizedUsername, sanitizedAge)
 	}
-	return filteredStudents
+	return sanitizedUsers
 }
 
 func main() {
-	students := []Student{
-		{Name: "Alice", Grade: 90.0},
-		{Name: "Bob", Grade: 75.0},
-		{Name: "Charlie", Grade: 88.0},
-		{Name: "David", Grade: 66.0},
-		{Name: "Eve", Grade: 92.0},
-		{Name: "Frank", Grade: 78.0},
+	users := []User{
+		{Username: "alice!@#$", Age: 25},
+		{Username: "bob123", Age: 30},
+		{Username: "charles_321", Age: -10},
+		{Username: "daisy-54", Age: 100},
 	}
 
-	minGrade := 80.0 // specify the threshold grade
+	sanitizedUsers := FormatUsers(users)
 
-	filteredStudents := filterStudentsByGrade(students, minGrade)
-
-	fmt.Println("Students with Grade >=", minGrade, ":")
-	for _, student := range filteredStudents {
-		fmt.Printf("%s: %.2f\n", student.Name, student.Grade)
+	for _, sanitizedUser := range sanitizedUsers {
+		fmt.Println(sanitizedUser)
 	}
 }
