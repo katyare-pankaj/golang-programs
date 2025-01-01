@@ -2,41 +2,18 @@ package main
 
 import (
 	"fmt"
+	"log"
 )
 
-type Student struct {
-	Name  string
-	Grade float64
-}
-
-// This function takes a slice of Students and a grade threshold
-// as input and returns a new slice of students with grades greater than or equal to the threshold.
-func filterStudentsByGrade(students []Student, threshold float64) []Student {
-	var filteredStudents []Student
-	for _, student := range students {
-		if student.Grade >= threshold {
-			filteredStudents = append(filteredStudents, student)
-		}
-	}
-	return filteredStudents
-}
-
 func main() {
-	students := []Student{
-		{Name: "Alice", Grade: 90.0},
-		{Name: "Bob", Grade: 75.0},
-		{Name: "Charlie", Grade: 88.0},
-		{Name: "David", Grade: 66.0},
-		{Name: "Eve", Grade: 92.0},
-		{Name: "Frank", Grade: 78.0},
-	}
+	var slice1 []int = nil
+	var slice2 = []int{1, 2, 3}
+	var arr1 [3]int = nil
+	var arr2 = [3]int{4, 5, 6}
 
-	minGrade := 80.0 // specify the threshold grade
-
-	filteredStudents := filterStudentsByGrade(students, minGrade)
-
-	fmt.Println("Students with Grade >=", minGrade, ":")
-	for _, student := range filteredStudents {
-		fmt.Printf("%s: %.2f\n", student.Name, student.Grade)
-	}
+	// Logging nil slice and array
+	log.Println(fmt.Sprintf("Nil slice: %v", slice1))
+	log.Println(fmt.Sprintf("Non-nil slice: %v", slice2))
+	log.Println(fmt.Sprintf("Nil array: %v", arr1))
+	log.Println(fmt.Sprintf("Non-nil array: %v", arr2))
 }

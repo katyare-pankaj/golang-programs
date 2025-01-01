@@ -1,47 +1,23 @@
 package main
 
 import (
-	"fmt"
+	"log"
 )
 
-// Student struct
-type Student struct {
-	Name  string
-	Grade float64
-}
-
 func main() {
-	// Initialize a slice of Student structs
-	students := []Student{
-		{Name: "Alice", Grade: 88.5},
-		{Name: "Bob", Grade: 76.2},
-		{Name: "Charlie", Grade: 92.0},
-		{Name: "David", Grade: 85.8},
-		{Name: "Eve", Grade: 67.9},
-	}
+	// Test case 1: Logging a nil slice
+	var slice1 []int = nil
+	log.Printf("Logging nil slice: %v\n", slice1) // Output: Logging nil slice: <nil>
 
-	minGrade := 80.0 // Define the minimum grade threshold
+	// Test case 2: Logging a non-nil slice
+	slice2 := []int{1, 2, 3}
+	log.Printf("Logging non-nil slice: %v\n", slice2) // Output: Logging non-nil slice: [1 2 3]
 
-	// Filter the students slice to include only students with grade greater than or equal to minGrade
-	filteredStudents := filterStudents(students, func(s Student) bool {
-		return s.Grade >= minGrade
-	})
+	// Test case 3: Logging an uninitialized array
+	var arr1 [3]int
+	log.Printf("Logging uninitialized array: %v\n", arr1) // Output: Logging uninitialized array: [0 0 0]
 
-	// Print the filtered students
-	fmt.Println("Filtered Students:")
-	for _, student := range filteredStudents {
-		fmt.Printf("%s: %.2f\n", student.Name, student.Grade)
-	}
-}
-
-// filterStudents function takes a slice of Student structs and a predicate function as input
-// and returns a new slice containing only those structs for which the predicate function returns true.
-func filterStudents(students []Student, predicate func(Student) bool) []Student {
-	var filtered []Student
-	for _, student := range students {
-		if predicate(student) {
-			filtered = append(filtered, student)
-		}
-	}
-	return filtered
+	// Test case 4: Logging an initialized array
+	arr2 := [3]int{4, 5, 6}
+	log.Printf("Logging initialized array: %v\n", arr2) // Output: Logging initialized array: [4 5 6]
 }
