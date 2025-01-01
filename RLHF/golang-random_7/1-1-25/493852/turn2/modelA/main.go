@@ -2,54 +2,33 @@ package main
 
 import (
 	"fmt"
-	"html"
-	"log"
-	"strings"
+	"testing"
 )
 
-// User represents a user with personal details
-type User struct {
-	Name string `json:"name"`
-	Age  int    `json:"age"`
+func concatenateStrings(count int) string {
+	s := ""
+	for i := 0; i < count; i++ {
+		s += "Hello, world!"
+	}
+	return s
 }
 
-// sanitize sanitizes a string by escaping HTML special characters
-func sanitize(s string) string {
-	if s == "" {
-		return ""
-	}
-	return html.EscapeString(s)
+func sprintfStrings(count int) string {
+	return fmt.Sprintf("%s", fmt.Sprintf("%s", "Hello, world!")+fmt.Sprintf("%s", "Hello, world!")+fmt.Sprintf("%s", "Hello, world!")+fmt.Sprintf("%s", "Hello, world!")+fmt.Sprintf("%s", "Hello, world!")+fmt.Sprintf("%s", "Hello, world!")+fmt.Sprintf("%s", "Hello, world!")+fmt.Sprintf("%s", "Hello, world!")+fmt.Sprintf("%s", "Hello, world!")+fmt.Sprintf("%s", "Hello, world!"))
 }
 
-// formatUsers formats a list of users with sanitized details
-func formatUsers(users []User) (string, error) {
-	var result strings.Builder
-	for _, user := range users {
-		// Sanitize name and age before appending to the result
-		sanitizedName := sanitize(user.Name)
-		sanitizedAge := sanitize(fmt.Sprintf("%d", user.Age)) // Convert int to string
-
-		// Append formatted user data to the result
-		result.WriteString(fmt.Sprintf("Name: %s, Age: %s\n", sanitizedName, sanitizedAge))
+func BenchmarkConcatenateStrings(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		concatenateStrings(1000)
 	}
+}
 
-	if result.Len() == 0 {
-		return "", fmt.Errorf("no users to display")
+func BenchmarkSprintfStrings(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		sprintfStrings(1000)
 	}
-
-	return result.String(), nil
 }
 
 func main() {
-	users := []User{
-		{Name: "Alice <script>alert(1)</script>", Age: 25},
-		{Name: "Bob", Age: 30},
-	}
-
-	formattedUsers, err := formatUsers(users)
-	if err != nil {
-		log.Fatalf("Error formatting users: %v", err)
-	}
-
-	fmt.Println(formattedUsers)
+	testing.Main()
 }
