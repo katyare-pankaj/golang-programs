@@ -2,60 +2,41 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
 )
 
-type inventory struct {
-	sync.Mutex
-	items map[string]int
+type Student struct {
+	Name  string
+	Grade float64
 }
 
-func (i *inventory) updateInventory(item string, count int) {
-	i.Lock()
-	defer i.Unlock()
-	i.items[item] += count
-}
-
-func (i *inventory) getInventory(item string) int {
-	i.Lock()
-	defer i.Unlock()
-	return i.items[item]
-}
-
-func (i *inventory) printInventory() {
-	i.Lock()
-	defer i.Unlock()
-	fmt.Println("Current Inventory:")
-	for item, count := range i.items {
-		fmt.Printf("%s: %d\n", item, count)
+// This function takes a slice of Students and a grade threshold
+// as input and returns a new slice of students with grades greater than or equal to the threshold.
+func filterStudentsByGrade(students []Student, threshold float64) []Student {
+	var filteredStudents []Student
+	for _, student := range students {
+		if student.Grade >= threshold {
+			filteredStudents = append(filteredStudents, student)
+		}
 	}
-}
-
-func simulateTransactions(inv *inventory) {
-	items := []string{"Apples", "Bananas", "Oranges", "Pineapples", "Mangoes"}
-	for {
-		item := items[rand.Intn(len(items))]
-		count := rand.Intn(10) - 5
-		inv.updateInventory(item, count)
-		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
-	}
+	return filteredStudents
 }
 
 func main() {
-	inv := &inventory{items: make(map[string]int)}
-	inv.updateInventory("Apples", 100)
-	inv.updateInventory("Bananas", 80)
-	inv.updateInventory("Oranges", 60)
-	inv.updateInventory("Pineapples", 40)
-	inv.updateInventory("Mangoes", 20)
-	inv.printInventory()
+	students := []Student{
+		{Name: "Alice", Grade: 90.0},
+		{Name: "Bob", Grade: 75.0},
+		{Name: "Charlie", Grade: 88.0},
+		{Name: "David", Grade: 66.0},
+		{Name: "Eve", Grade: 92.0},
+		{Name: "Frank", Grade: 78.0},
+	}
 
-	go simulateTransactions(inv)
-	go simulateTransactions(inv)
-	go simulateTransactions(inv)
+	minGrade := 80.0 // specify the threshold grade
 
-	time.Sleep(30 * time.Second)
-	inv.printInventory()
+	filteredStudents := filterStudentsByGrade(students, minGrade)
+
+	fmt.Println("Students with Grade >=", minGrade, ":")
+	for _, student := range filteredStudents {
+		fmt.Printf("%s: %.2f\n", student.Name, student.Grade)
+	}
 }
