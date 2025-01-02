@@ -7,45 +7,59 @@ import (
 	"time"
 )
 
-// Task represents a task to be processed.
-type Task struct {
-	ID int
+const numWorkers = 4
+const taskBuffer = 1000
+
+type task struct {
+	id   int
+	data string
+	done chan bool // received by caller when task is done
 }
 
-// ProcessTask processes a given task by sleeping for a random duration.
-func ProcessTask(task Task, wg *sync.WaitGroup) {
+func worker(workerID int, wg *sync.WaitGroup, taskChan chan<- task, quit <-chan struct{}) {
 	defer wg.Done()
-
-	// Simulate work by sleeping for a random duration
-	sleepDuration := time.Duration(rand.Intn(1000)+100) * time.Millisecond
-	time.Sleep(sleepDuration)
-
-	// Print task completion
-	fmt.Printf("Task %d completed after %s\n", task.ID, sleepDuration)
+	for {
+		select {
+		case t, ok := <-taskChan:
+			if !ok {
+				return // Channel closed, no more tasks
+			}
+			fmt.Printf("Worker %d: Processing task %d\n", workerID, t.id)
+			time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond) // Simulate work
+			close(t.done)                                                 // Signal the task is complete
+		case <-quit:
+			fmt.Printf("Worker %d: Received quit signal, shutting down\n", workerID)
+			return
+		}
+	}
 }
 
 func main() {
-	// Initialize a WaitGroup
 	var wg sync.WaitGroup
+	quit := make(chan struct{})
+	tasks := make(chan task, taskBuffer)
+	defer close(tasks) // Close the channel once all tasks are sent
+	defer close(quit)  // Close quit channel to shutdown workers
 
-	// Seed the random number generator
-	rand.Seed(time.Now().UnixNano())
-
-	// Create a list of tasks
-	tasks := make([]Task, 10)
-	for i := 0; i < len(tasks); i++ {
-		tasks[i] = Task{ID: i + 1}
+	// Start the worker goroutines
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go worker(i, &wg, tasks, quit)
 	}
 
-	// Start processing tasks in parallel
-	for _, task := range tasks {
-		wg.Add(1) // Increment the WaitGroup counter
-		go ProcessTask(task, &wg)
+	// Generate some dummy tasks
+	numTasks := 10000
+	for i := 0; i < numTasks; i++ {
+		done := make(chan bool)
+		tasks <- task{i, fmt.Sprintf("Task %d", i), done}
+
+		go func() {
+			<-done // Wait for the task to be completed
+			fmt.Printf("Task %d completed\n", i)
+		}()
 	}
 
-	// Wait for all tasks to complete
-	wg.Wait()
+	wg.Wait() // Wait for all workers to finish
 
-	// Print a completion message
-	fmt.Println("All tasks completed.")
+	fmt.Println("All tasks processed")
 }
