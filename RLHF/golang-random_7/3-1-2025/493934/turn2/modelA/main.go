@@ -1,39 +1,25 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
-	"strings"
-	"testing"
 )
 
-// ReverseStringUsingLoop reverses a string using a for loop.
-func ReverseStringUsingLoop(input string) string {
-	var reversed string
-	for i := len(input) - 1; i >= 0; i-- {
-		reversed += string(input[i])
-	}
-	return reversed
-}
-
-// ReverseStringUsingBuilder reverses a string using strings.Builder.
-func ReverseStringUsingBuilder(input string) string {
-	var builder strings.Builder
-	for i := len(input) - 1; i >= 0; i-- {
-		builder.WriteByte(input[i])
-	}
-	return builder.String()
-}
-
 func main() {
-	// Example usage
-	input := "Hello, World!"
-	reversedLoop := ReverseStringUsingLoop(input)
-	reversedBuilder := ReverseStringUsingBuilder(input)
+	// Large amount of data to concatenate
+	const dataSize = 1000000
+	data := make([]string, dataSize)
+	for i := 0; i < dataSize; i++ {
+		data[i] = fmt.Sprintf("data = %d ", i)
+	}
 
-	fmt.Println("Original:", input)
-	fmt.Println("Reversed using loop:", reversedLoop)
-	fmt.Println("Reversed using Builder:", reversedBuilder)
+	// Using bytes.Buffer for efficient concatenation
+	var buffer bytes.Buffer
+	for _, item := range data {
+		buffer.WriteString(item)
+	}
 
-	// Run the benchmarks
-	testing.Main()
+	// Convert the buffer to a string and print it
+	result := buffer.String()
+	fmt.Println(result)
 }
