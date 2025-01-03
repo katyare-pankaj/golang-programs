@@ -2,38 +2,38 @@ package main
 
 import (
 	"fmt"
-	"sync"
-	"time"
+	"strings"
+	"testing"
 )
 
-// Task represents a simple task to be performed
-type Task struct {
-	id int
+// ReverseStringUsingLoop reverses a string using a for loop.
+func ReverseStringUsingLoop(input string) string {
+	var reversed string
+	for i := len(input) - 1; i >= 0; i-- {
+		reversed += string(input[i])
+	}
+	return reversed
 }
 
-// PerformTask simulates some work done by the task
-func PerformTask(task Task, wg *sync.WaitGroup) {
-	defer wg.Done() // Decrement the WaitGroup counter when done
-	fmt.Printf("Running task %d...\n", task.id)
-	time.Sleep(time.Duration(task.id) * time.Second) // Simulate different execution times
-	fmt.Printf("Task %d completed.\n", task.id)
+// ReverseStringUsingBuilder reverses a string using strings.Builder.
+func ReverseStringUsingBuilder(input string) string {
+	var builder strings.Builder
+	for i := len(input) - 1; i >= 0; i-- {
+		builder.WriteByte(input[i])
+	}
+	return builder.String()
 }
 
 func main() {
-	// Number of tasks
-	numTasks := 5
+	// Example usage
+	input := "Hello, World!"
+	reversedLoop := ReverseStringUsingLoop(input)
+	reversedBuilder := ReverseStringUsingBuilder(input)
 
-	// Initialize a WaitGroup
-	var wg sync.WaitGroup
+	fmt.Println("Original:", input)
+	fmt.Println("Reversed using loop:", reversedLoop)
+	fmt.Println("Reversed using Builder:", reversedBuilder)
 
-	// Launch tasks in separate goroutines
-	for i := 0; i < numTasks; i++ {
-		wg.Add(1) // Increment the WaitGroup counter
-		go PerformTask(Task{id: i + 1}, &wg)
-	}
-
-	// Wait for all tasks to complete before proceeding
-	wg.Wait()
-
-	fmt.Println("All tasks completed.")
+	// Run the benchmarks
+	testing.Main()
 }
