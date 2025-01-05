@@ -80,7 +80,7 @@ func main() {
 
 	// Consume the prime numbers from the channel
 	var primeCount int
-	for prime := range primes {
+	for range primes { // Remove unused variable "prime"
 		primeCount++
 	}
 
