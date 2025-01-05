@@ -2,52 +2,33 @@ package main
 
 import (
 	"fmt"
-	"net/http"
-	"sync"
-	"time"
-
-	"golang.org/x/exp/rand"
 )
 
-// LogMiddleware is a middleware function that logs the request processing time.
-func LogMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
-		// Create a WaitGroup to ensure that the middleware waits for the handler to complete
-		var wg sync.WaitGroup
-
-		// Increment the wait counter
-		wg.Add(1)
-
-		go func() {
-			// Call the next handler
-			defer wg.Done()
-			next.ServeHTTP(w, r)
-		}()
-
-		// Wait for the handler to finish
-		wg.Wait()
-
-		// Log the duration of the request
-		duration := time.Since(start)
-		fmt.Printf("Request processed in %v\n", duration)
-	})
-}
-
 func main() {
-	// Example handler that simulates some processing time
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(time.Duration(rand.Intn(5)) * time.Second) // Simulate random processing time
-		w.Write([]byte("Hello, World!"))
-	})
+	// Create an array of integers
+	var numbers [5]int = {1, 2, 3, 4, 5}
 
-	// Chain the middleware with the handler
-	http.Handle("/", LogMiddleware(handler))
+	// Create a slice from the array
+	slice := numbers[:]
 
-	// Start the HTTP server
-	fmt.Println("Server listening on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		fmt.Println("Error starting server:", err)
+	// Print the slice's length and capacity
+	fmt.Println("Slice Length:", len(slice))
+	fmt.Println("Slice Capacity:", cap(slice))
+
+	// Iterate over the slice using a range loop
+	for _, num := range slice {
+		fmt.Println("Element:", num)
+	}
+
+	// Append new elements to the slice
+	slice = append(slice, 6, 7, 8)
+
+	// Print the slice again with updated elements
+	fmt.Println("Updated Slice Length:", len(slice))
+	fmt.Println("Updated Slice Capacity:", cap(slice))
+
+	// Iterate over the updated slice using a range loop
+	for _, num := range slice {
+		fmt.Println("Updated Element:", num)
 	}
 }

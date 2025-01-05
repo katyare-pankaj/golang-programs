@@ -2,41 +2,40 @@ package main
 
 import (
 	"fmt"
-	"net/http"
-	"sync"
-	"time"
 )
 
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			next.ServeHTTP(w, r)
-		}()
-		wg.Wait()
-		duration := time.Since(start)
-		fmt.Printf("%s\t%s\t%v\n", r.Method, r.URL.Path, duration)
-	})
-}
-
-func slowHandler(w http.ResponseWriter, r *http.Request) {
-	time.Sleep(2 * time.Second) // Simulate a slow request
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Slow handler responded!")
-}
-
-func fastHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Fast handler responded!")
-}
-
 func main() {
-	mux := http.NewServeMux()
-	mux.Handle("/slow", loggingMiddleware(http.HandlerFunc(slowHandler)))
-	mux.Handle("/fast", loggingMiddleware(http.HandlerFunc(fastHandler)))
-	fmt.Println("Server is running on :8080")
-	http.ListenAndServe(":8080", mux)
+	// Creating a slice of integers
+	// The length of the slice is initially 0, but it can be resized later.
+	var slice []int
+
+	// Appending elements to the slice using the append function
+	slice = append(slice, 1)
+	slice = append(slice, 2, 3, 4, 5)
+
+	// Iterating over the slice using a range loop
+	fmt.Println("Elements in the slice:")
+	for index, value := range slice {
+		fmt.Printf("Index %d: Value %d\n", index, value)
+	}
+
+	// Slice literal syntax
+	anotherSlice := []string{"apple", "banana", "cherry"}
+
+	// Iterating over the slice literal using a range loop
+	fmt.Println("\nElements in anotherSlice:")
+	for _, fruit := range anotherSlice {
+		fmt.Println(fruit)
+	}
+
+	// Slicing a slice
+	slicedSlice := slice[1:4] // Gets elements from index 1 to 3 (exclusive)
+	fmt.Println("\nElements in slicedSlice:")
+	for _, value := range slicedSlice {
+		fmt.Println(value)
+	}
+
+	// Resizing a slice
+	slice = slice[:cap(slice)] // Resizes the slice to its full capacity
+	fmt.Println("\nLength of slice after resizing:", len(slice))
 }
