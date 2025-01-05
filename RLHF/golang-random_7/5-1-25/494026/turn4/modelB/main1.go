@@ -1,3 +1,7 @@
+package main
+
+import "fmt"
+
 func sieveOfEratosthenes(n int, c chan<- int) {
 	if n < 2 {
 		return
@@ -24,4 +28,15 @@ func sieveOfEratosthenes(n int, c chan<- int) {
 		}
 	}
 	close(c)
-}  
+}
+
+func main() {
+	n := 30
+	c := make(chan int)
+
+	go sieveOfEratosthenes(n, c)
+
+	for prime := range c {
+		fmt.Println(prime)
+	}
+}
