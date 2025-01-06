@@ -1,60 +1,54 @@
 package main
 
-import (
-	"fmt"
-	"strings"
-	"time"
-)
+import "fmt"
 
-const numConcatenations = 1000000
-const stringLength = 20
-
-func concatenateWithPlus() string {
-	var result = ""
-	for i := 0; i < stringLength; i++ {
-		result += "h"
-	}
-	return result
+// Custom error type
+type AppError struct {
+	error   // Embed the built-in error type
+	Code    int
+	Message string
 }
 
-func concatenateWithBuilder() string {
-	var builder strings.Builder
-	for i := 0; i < stringLength; i++ {
-		builder.WriteString("h")
-	}
-	return builder.String()
+func (e *AppError) Error() string {
+	return fmt.Sprintf("Code: %d, Message: %s", e.Code, e.Message)
 }
 
-func concatenateWithFmtSprintf() string {
-	var result string
-	for i := 0; i < stringLength; i++ {
-		result = fmt.Sprintf("%s%s", result, "h")
+func Add(a, b int) (int, error) {
+	if a == 0 && b == 0 {
+		return 0, &AppError{Code: 1001, Message: "Division by zero not allowed"}
 	}
-	return result
+	return a + b, nil
+}
+
+func Divide(a, b int) (float64, error) {
+	if a == 0 && b == 0 {
+		return 0, &AppError{Code: 1001, Message: "Division by zero not allowed"}
+	}
+	return float64(a) / float64(b), nil
 }
 
 func main() {
-	// Benchmark using the + operator
-	var plusStart = time.Now()
-	for i := 0; i < numConcatenations; i++ {
-		_ = concatenateWithPlus()
+	// Attempt to add
+	sum, errAdd := Add(10, 0)
+	if errAdd != nil {
+		if appErr, ok := errAdd.(*AppError); ok {
+			fmt.Printf("Addition error: %d, %s\n", appErr.Code, appErr.Message)
+		} else {
+			fmt.Printf("Unexpected error: %v\n", errAdd)
+		}
+		return
 	}
-	var plusEnd = time.Now()
-	fmt.Printf("Time taken using + operator: %v\n", plusEnd.Sub(plusStart))
+	fmt.Printf("Sum: %d\n", sum)
 
-	// Benchmark using strings.Builder
-	var builderStart = time.Now()
-	for i := 0; i < numConcatenations; i++ {
-		_ = concatenateWithBuilder()
+	// Attempt to divide
+	result, errDivide := Divide(0, 10)
+	if errDivide != nil {
+		if appErr, ok := errDivide.(*AppError); ok {
+			fmt.Printf("Division error: %d, %s\n", appErr.Code, appErr.Message)
+		} else {
+			fmt.Printf("Unexpected error: %v\n", errDivide)
+		}
+		return
 	}
-	var builderEnd = time.Now()
-	fmt.Printf("Time taken using strings.Builder: %v\n", builderEnd.Sub(builderStart))
-
-	// Benchmark using fmt.Sprintf
-	var fmtStart = time.Now()
-	for i := 0; i < numConcatenations; i++ {
-		_ = concatenateWithFmtSprintf()
-	}
-	var fmtEnd = time.Now()
-	fmt.Printf("Time taken using fmt.Sprintf: %v\n", fmtEnd.Sub(fmtStart))
+	fmt.Printf("Result: %v\n", result)
 }
