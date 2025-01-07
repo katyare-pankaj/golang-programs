@@ -7,48 +7,71 @@ import (
 	"time"
 )
 
-const (
-	numWorkers = 5   // Number of worker goroutines
-	numTasks   = 100 // Number of tasks to process
-	taskBuffer = 10  // Buffer size for task channel
-)
-
 type Task struct {
-	ID    int
-	Delay time.Duration
+	Input  int
+	Result int
 }
 
-func worker(id int, tasks <-chan Task, wg *sync.WaitGroup) {
+type ResultAggregator struct {
+	mu      sync.Mutex
+	results []int
+}
+
+func (a *ResultAggregator) AddResult(result int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.results = append(a.results, result)
+}
+
+func (a *ResultAggregator) GetResults() []int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.results
+}
+
+func worker(wg *sync.WaitGroup, tasks chan Task, aggregator *ResultAggregator) {
 	defer wg.Done()
 	for task := range tasks {
-		fmt.Printf("Worker %d: Processing task %d with delay %v\n", id, task.ID, task.Delay)
-		time.Sleep(task.Delay)
+		// Simulate some work with a random delay
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+
+		result := task.Input * task.Input
+		aggregator.AddResult(result)
+		fmt.Printf("Task %d completed: %d * %d = %d\n", task.Input, task.Input, task.Input, result)
 	}
 }
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
-	tasks := make(chan Task, taskBuffer)
-	var wg sync.WaitGroup
+	numTasks := 20
+	tasks := make(chan Task, numTasks)
 
-	// Start worker goroutines
+	aggregator := &ResultAggregator{}
+
+	// Start workers
+	var wg sync.WaitGroup
+	numWorkers := 5 // Adjust the number of workers as needed
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go worker(i+1, tasks, &wg)
+		go worker(&wg, tasks, aggregator)
 	}
 
-	// Generate tasks and send them to the channel
+	// Send tasks to the worker pool
 	for i := 1; i <= numTasks; i++ {
-		delay := time.Duration(rand.Intn(1000)) * time.Millisecond
-		tasks <- Task{ID: i, Delay: delay}
+		tasks <- Task{Input: i}
 	}
-
-	// Close the task channel to signal workers to stop
 	close(tasks)
 
-	// Wait for all workers to complete
+	// Wait for all tasks to complete
 	wg.Wait()
 
-	fmt.Println("All tasks completed. Scheduler shutting down.")
+	// Summarize results
+	fmt.Println("\nAll tasks completed. Aggregating results:")
+	results := aggregator.GetResults()
+	var totalResult int
+	for _, result := range results {
+		totalResult += result
+	}
+	fmt.Printf("\nTotal sum of results: %d\n", totalResult)
 }

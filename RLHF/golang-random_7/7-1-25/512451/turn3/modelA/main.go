@@ -7,63 +7,72 @@ import (
 	"time"
 )
 
-// Task struct represents a task to be processed
-type Task struct {
-	ID    int
-	Delay time.Duration
+// Define the task struct which holds input, result, and a completion flag
+type task struct {
+	input     int
+	result    int
+	completed bool
 }
 
-// ProcessTask simulates processing a task by introducing a delay
-func ProcessTask(task Task, resultChan chan<- bool) {
-	// Simulate task processing with a delay
-	time.Sleep(task.Delay)
-	// Indicate that the task is completed
-	resultChan <- true
-}
-
-// Worker is a goroutine that processes tasks from the queue
-func Worker(taskQueue <-chan Task, wg *sync.WaitGroup, resultChan chan<- bool) {
+// Worker function processes tasks concurrently
+func worker(wg *sync.WaitGroup, taskCh chan task, resultCh chan int) {
 	defer wg.Done()
-	for task := range taskQueue {
-		// Start a new goroutine to process the task
-		go ProcessTask(task, resultChan)
+	for task := range taskCh {
+		// Simulate work with random delay
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+
+		// Process the task (in this case, square the input)
+		task.result = task.input * task.input
+		task.completed = true
+		fmt.Printf("Worker: Completed task %d: %d * %d = %d\n", task.input, task.input, task.input, task.result)
+
+		// Send the result back to the result channel
+		resultCh <- task.result
 	}
 }
 
 func main() {
-	// Initialize a channel for task communication
-	taskQueue := make(chan Task)
+	rand.Seed(time.Now().UnixNano())
 
-	// Initialize a channel to receive task completion results
-	resultChan := make(chan bool)
+	// Number of tasks
+	numTasks := 10
+	// Number of worker goroutines
+	numWorkers := 3
 
-	// Initialize a WaitGroup to wait for all workers
+	// Channels for sending tasks and receiving results
+	taskCh := make(chan task, numTasks)
+	resultCh := make(chan int)
+
+	// Wait group for workers
 	var wg sync.WaitGroup
-	const numWorkers = 5 // Number of worker goroutines
 
 	// Start worker goroutines
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go Worker(taskQueue, &wg, resultChan)
+		go worker(&wg, taskCh, resultCh)
 	}
 
-	// Generate a list of tasks
-	numTasks := 20 // Number of tasks to generate
+	// Enqueue tasks
 	for i := 1; i <= numTasks; i++ {
-		// Generate random delay for each task
-		delay := time.Duration(rand.Intn(1000)) * time.Millisecond
-		taskQueue <- Task{ID: i, Delay: delay}
+		task := task{input: i}
+		taskCh <- task
 	}
+	// Close the task channel to indicate no more tasks will be sent
+	close(taskCh)
 
-	// Wait for all tasks to be completed
-	for i := 0; i < numTasks; i++ {
-		// Wait for a task completion signal
-		<-resultChan
-	}
-
-	// Gracefully terminate worker goroutines
-	close(taskQueue)
+	// Wait for all worker goroutines to finish
 	wg.Wait()
 
-	fmt.Println("All tasks completed.")
+	// Aggregate results
+	totalResult := 0
+	for result := range resultCh {
+		totalResult += result
+		fmt.Printf("Collected result: %d\n", result)
+	}
+	// Close the result channel
+	close(resultCh)
+
+	// Summarize results
+	fmt.Println("\nAll tasks completed. Summarizing results:")
+	fmt.Printf("Total sum of results: %d\n", totalResult)
 }
