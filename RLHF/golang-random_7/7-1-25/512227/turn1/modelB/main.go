@@ -2,84 +2,60 @@ package main
 
 import (
 	"fmt"
-	"reflect"
+	"math/rand"
+	"sync"
 	"time"
 )
 
-type WeatherData struct {
-	City        string
-	Temperature float32
-	Humidity    float32
-	Pressure    float32
-	Timestamp   time.Time
+const (
+	numWorkers = 10
+	numEvents  = 1_000
+	maxDelay   = 1 * time.Millisecond
+)
+
+type event struct {
+	ID int
+}
+
+func worker(wg *sync.WaitGroup, eventChannel chan event) {
+	defer wg.Done()
+	for e := range eventChannel {
+		processEvent(e)
+	}
+}
+
+func processEvent(e event) {
+	// Simulate random processing time
+	time.Sleep(time.Duration(rand.Int63n(int64(maxDelay))))
 }
 
 func main() {
-	weatherData := []WeatherData{
-		{City: "New York", Temperature: 25.6, Humidity: 68.4, Pressure: 1012.0, Timestamp: time.Now()},
-		{City: "London", Temperature: 18.2, Humidity: 79.0, Pressure: 1010.0, Timestamp: time.Now().Add(-time.Hour)},
-		{City: "Paris", Temperature: 22.0, Humidity: 65.3, Pressure: 1013.0, Timestamp: time.Now().Add(-2 * time.Hour)},
+	rand.Seed(time.Now().UnixNano())
+
+	eventChannel := make(chan event, numEvents)
+
+	var wg sync.WaitGroup
+
+	// Start workers
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go worker(&wg, eventChannel)
 	}
 
-	//Example of updating data dynamically using reflection
-	updateWeatherData(weatherData, "London", 20.0, 70.0, 1011.0)
-
-	//Example of generating a report dynamically using reflection
-	generateWeatherReport(weatherData)
-}
-
-// Function to update weather data dynamically using reflection
-func updateWeatherData(data interface{}, city string, temperature float32, humidity float32, pressure float32) {
-	v := reflect.ValueOf(data)
-	if v.Kind() != reflect.Slice {
-		panic("data must be a slice")
+	// Generate and send events
+	startTime := time.Now()
+	for i := 0; i < numEvents; i++ {
+		eventChannel <- event{ID: i}
 	}
 
-	for i := 0; i < v.Len(); i++ {
-		elem := v.Index(i)
-		fmt.Println("Elem: ", elem)
-		cityField := elem.FieldByName("City")
-		if cityField.Kind() == reflect.String && cityField.String() == city {
-			temperatureField := elem.FieldByName("Temperature")
-			temperatureField.SetFloat(float64(temperature))
+	// Wait for all workers to finish
+	wg.Wait()
+	close(eventChannel)
 
-			humidityField := elem.FieldByName("Humidity")
-			humidityField.SetFloat(float64(humidity))
+	endTime := time.Now()
 
-			pressureField := elem.FieldByName("Pressure")
-			pressureField.SetFloat(float64(pressure))
+	elapsedTime := endTime.Sub(startTime)
 
-			timestampField := elem.FieldByName("Timestamp")
-			timestampField.Set(reflect.ValueOf(time.Now()))
-
-			fmt.Println("Weather data updated for", city)
-			return
-		}
-	}
-	fmt.Println("City not found in weather data.")
-}
-
-// Function to generate a weather report dynamically using reflection
-func generateWeatherReport(data interface{}) {
-	v := reflect.ValueOf(data)
-	if v.Kind() != reflect.Slice {
-		panic("data must be a slice")
-	}
-
-	fmt.Println("Weather Report:")
-	fmt.Println("----------------")
-	for i := 0; i < v.Len(); i++ {
-		elem := v.Index(i)
-		city := elem.FieldByName("City").String()
-		temperature := elem.FieldByName("Temperature").Float()
-		humidity := elem.FieldByName("Humidity").Float()
-		pressure := elem.FieldByName("Pressure").Float()
-		timestamp := elem.FieldByName("Timestamp").Interface().(time.Time)
-
-		fmt.Printf("City: %s\n", city)
-		fmt.Printf("Temperature: %.1f°C\n", temperature)
-		fmt.Printf("Humidity: %.1f%%\n", humidity)
-		fmt.Printf("Pressure: %.1f hPa\n", pressure)
-		fmt.Printf("Timestamp: %s\n\n", timestamp.Format(time.RFC3339))
-	}
+	fmt.Printf("Elapsed time: %s\n", elapsedTime)
+	fmt.Printf("Throughput: %.2f events/second\n", float64(numEvents)/elapsedTime.Seconds())
 }
