@@ -7,37 +7,58 @@ import (
 	"time"
 )
 
-const (
-	numGenerators = 5
-	logBufferSize = 100
-	logInterval   = 100 * time.Millisecond
-)
+type task struct {
+	input     int
+	result    int
+	completed bool
+}
 
-func generateLogs(wg *sync.WaitGroup, logCh chan string) {
+func worker(wg *sync.WaitGroup, tasks chan task) {
 	defer wg.Done()
-	for {
-		log := fmt.Sprintf("Log message generated at %v", time.Now())
-		logCh <- log
+	for task := range tasks {
+		// Simulate some work with a random delay
 		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+
+		task.result = task.input * task.input
+		task.completed = true
+		fmt.Printf("Task %d completed: %d * %d = %d\n", task.input, task.input, task.input, task.result)
 	}
 }
-func processLogs(wg *sync.WaitGroup, logCh chan string) {
-	defer wg.Done()
-	for log := range logCh {
-		fmt.Println(log)
-		// Simulate processing time
-		time.Sleep(logInterval)
-	}
-}
+
 func main() {
+	rand.Seed(time.Now().UnixNano())
+
+	numTasks := 10
+	tasks := make(chan task, numTasks)
+
+	// Start workers
 	var wg sync.WaitGroup
-	logCh := make(chan string, logBufferSize)
-	wg.Add(numGenerators + 1)
-	// Start generating log messages
-	for i := 0; i < numGenerators; i++ {
-		go generateLogs(&wg, logCh)
+	numWorkers := 3 // Adjust the number of workers as needed
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go worker(&wg, tasks)
 	}
-	// Start processing log messages
-	go processLogs(&wg, logCh)
+
+	// Send tasks to the worker pool
+	for i := 1; i <= numTasks; i++ {
+		tasks <- task{input: i}
+	}
+	close(tasks)
+
+	// Wait for all tasks to complete
 	wg.Wait()
+
+	// Summarize results
+	fmt.Println("\nAll tasks completed. Summarizing results:")
+	var totalResult int
+	for i := 1; i <= numTasks; i++ {
+		task := task{input: i}
+		tasks <- task
+		for !task.completed {
+			time.Sleep(10 * time.Millisecond)
+		}
+		totalResult += task.result
+		fmt.Printf("Result for task %d: %d\n", task.input, task.result)
+	}
+	fmt.Printf("\nTotal sum of results: %d\n", totalResult)
 }

@@ -2,63 +2,82 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 )
 
-// LogMessage struct holds log message data
-type LogMessage struct {
-	Level   string
-	Message string
+// Define a task struct to hold task identifiers and results
+type task struct {
+	id     int
+	result string
 }
 
-// GenerateLogs creates a goroutine to generate log messages
-func GenerateLogs(msgChan chan LogMessage, wg *sync.WaitGroup) {
-	defer wg.Done()
+// RunTask simulates performing some work and returns a result
+func RunTask(taskID int, duration time.Duration) string {
+	time.Sleep(duration) // Simulate work taking time
+	return fmt.Sprintf("Task %d finished with result: result%d", taskID, taskID)
+}
 
-	logLevels := []string{"INFO", "WARNING", "ERROR", "DEBUG"}
+// Worker function picks tasks from the channel, processes them, and sends results back
+func Worker(taskCh chan<- task, resultCh chan<- task) {
 	for {
-		// Generate random log level and message
-		level := logLevels[rand.Intn(len(logLevels))]
-		msg := fmt.Sprintf("Log %d: %s - %s", rand.Intn(1000), level, fmt.Sprintf("Random message %d", rand.Intn(1000)))
-		// Send the log message to the channel
-		msgChan <- LogMessage{Level: level, Message: msg}
-		// Simulate a random interval between log messages
-		time.Sleep(time.Duration(rand.Intn(1000)+50) * time.Millisecond)
+		// Get a task from the channel
+		taskToProcess, ok := <-taskCh
+		if !ok {
+			// Channel closed, break out of loop
+			break
+		}
+		// Simulate work and generate result
+		result := RunTask(taskToProcess.id, time.Duration(taskToProcess.id)*time.Second)
+		// Send result back through result channel
+		resultCh <- task{taskToProcess.id, result}
 	}
 }
 
-// ProcessLogs is the worker goroutine that processes incoming log messages
-func ProcessLogs(msgChan chan LogMessage) {
-	for msg := range msgChan {
-		fmt.Printf("Processed log: %s: %s\n", msg.Level, msg.Message)
-	}
-}
-
+// Main function sets up the worker pool, processes tasks, and summarizes results
 func main() {
-	// Initialize random number generator
-	rand.Seed(time.Now().UnixNano())
-
-	// Create a channel to pass log messages
-	msgChan := make(chan LogMessage)
-
-	// WaitGroup to ensure all generator goroutines are completed
 	var wg sync.WaitGroup
-	const numGenerators = 5 // Number of generator goroutines
+	// Number of worker threads
+	numWorkers := 5
 
-	// Start generator goroutines
-	for i := 0; i < numGenerators; i++ {
+	// Channels for task distribution and result collection
+	taskCh := make(chan<- task, numWorkers)
+	resultCh := make(chan task, numWorkers)
+
+	// Start worker threads
+	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go GenerateLogs(msgChan, &wg)
+		go func() {
+			Worker(taskCh, resultCh)
+			wg.Done()
+		}()
 	}
 
-	// Start the worker goroutine
-	go ProcessLogs(msgChan)
+	// Add independent tasks
+	tasks := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	for _, taskID := range tasks {
+		taskCh <- task{taskID, ""}
+	}
 
-	// Wait for all generators to complete
+	// Close the task channel to signal all tasks have been distributed
+	close(taskCh)
+
+	// Collect results from all workers
+	results := make([]task, len(tasks))
+	for i, _ := range tasks {
+		wg.Add(1)
+		go func(i int) {
+			results[i] = <-resultCh
+			wg.Done()
+		}(i)
+	}
+
+	// Wait for all workers to finish and collect results
 	wg.Wait()
 
-	// Gracefully terminate the worker by closing the channel
-	close(msgChan)
+	// Summarize results
+	fmt.Println("Task results:")
+	for _, result := range results {
+		fmt.Println(result)
+	}
 }
