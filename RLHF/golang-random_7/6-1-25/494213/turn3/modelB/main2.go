@@ -9,17 +9,21 @@ type User struct {
 	Age  int
 }
 
+type UserDataError struct {
+	Code    int
+	Message string
+}
+
+func (e *UserDataError) Error() string {
+	return fmt.Sprintf("UserDataError: Code: %d, Message: %s", e.Code, e.Message)
+}
+
 func GetUserData() (user *User, age int, err error) {
 	// Some complex logic that might fail
 	// ...
 
-	// If everything goes well
-	user = &User{Name: "Alice", Age: 25}
-	age = 30
-	return
-
 	// If an error occurs
-	// return nil, 0, errors.New("Failed to fetch user data")
+	return nil, 0, &UserDataError{Code: 1001, Message: "Failed to fetch user data"}
 }
 
 func main() {
@@ -27,6 +31,9 @@ func main() {
 	if err != nil {
 		// Handle error
 		fmt.Println("Error:", err)
+		if ude, ok := err.(*UserDataError); ok {
+			fmt.Println("Error Code:", ude.Code)
+		}
 		return
 	}
 	fmt.Println("User:", user.Name)
