@@ -9,8 +9,8 @@ import (
 
 const (
 	numWorkers = 10
-	numEvents  = 1_000
-	maxDelay   = 1 * time.Millisecond
+	numEvents  = 1_000_000
+	maxDelay   = 10 * time.Millisecond
 )
 
 type event struct {
