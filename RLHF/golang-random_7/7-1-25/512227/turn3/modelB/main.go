@@ -2,53 +2,59 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 )
 
 const (
-	numWorkers = 5   // Number of worker goroutines
-	numTasks   = 100 // Number of tasks to process
-	taskBuffer = 10  // Buffer size for task channel
+	numEvents  = 100000 // Number of events to generate
+	numWorkers = 10     // Number of goroutines to process events
+	eventRate  = 100    // Events per second
 )
 
-type Task struct {
-	ID    int
-	Delay time.Duration
+var wg sync.WaitGroup
+
+// Event struct represents a simple event
+type Event struct {
+	ID int
 }
 
-func worker(id int, tasks <-chan Task, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for task := range tasks {
-		fmt.Printf("Worker %d: Processing task %d with delay %v\n", id, task.ID, task.Delay)
-		time.Sleep(task.Delay)
+// ProcessEvent simulates processing an event
+func ProcessEvent(event Event) {
+	// Simulate processing time
+	time.Sleep(time.Millisecond * time.Duration(10))
+	// Log event processed
+	fmt.Printf("Processed event %d\n", event.ID)
+	wg.Done()
+}
+
+// GenerateEvents generates events at the specified rate
+func GenerateEvents() {
+	for i := 1; i <= numEvents; i++ {
+		event := Event{ID: i}
+		// Schedule event for processing
+		wg.Add(1)
+		go ProcessEvent(event)
+
+		// Wait for the specified interval before generating the next event
+		time.Sleep(time.Duration(1000/eventRate) * time.Millisecond)
 	}
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	startTime := time.Now()
 
-	tasks := make(chan Task, taskBuffer)
-	var wg sync.WaitGroup
+	// Start generating events
+	go GenerateEvents()
 
-	// Start worker goroutines
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go worker(i+1, tasks, &wg)
-	}
-
-	// Generate tasks and send them to the channel
-	for i := 1; i <= numTasks; i++ {
-		delay := time.Duration(rand.Intn(1000)) * time.Millisecond
-		tasks <- Task{ID: i, Delay: delay}
-	}
-
-	// Close the task channel to signal workers to stop
-	close(tasks)
-
-	// Wait for all workers to complete
+	// Wait for all events to be processed
 	wg.Wait()
 
-	fmt.Println("All tasks completed. Scheduler shutting down.")
+	// Calculate elapsed time and throughput
+	elapsedTime := time.Since(startTime)
+	throughput := float64(numEvents) / elapsedTime.Seconds()
+
+	// Output results
+	fmt.Printf("\nProcessed %d events in %.2f seconds\n", numEvents, elapsedTime.Seconds())
+	fmt.Printf("Throughput: %.2f events per second\n", throughput)
 }
