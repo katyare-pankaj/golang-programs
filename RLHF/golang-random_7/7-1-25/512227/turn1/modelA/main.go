@@ -1,60 +1,59 @@
-package main
+package weather_app
 
 import (
 	"fmt"
-	"sync"
-	"time"
+	"reflect"
 )
 
-const (
-	numEvents  = 100000 // Number of events to generate
-	numWorkers = 10     // Number of goroutines to process events
-	eventRate  = 100    // Events per second
-)
-
-var wg sync.WaitGroup
-
-// Event struct represents a simple event
-type Event struct {
-	ID int
+// WeatherData is a base interface to hold various weather information.
+type WeatherData interface {
+	Description() string
 }
 
-// ProcessEvent simulates processing an event
-func ProcessEvent(event Event) {
-	// Simulate processing time
-	time.Sleep(time.Millisecond * time.Duration(10))
-	// Log event processed
-	fmt.Printf("Processed event %d\n", event.ID)
-	wg.Done()
+// TemperatureData represents temperature data.
+type TemperatureData struct {
+	Degrees float32 `json:"degrees"`
+	Unit    string  `json:"unit"`
 }
 
-// GenerateEvents generates events at the specified rate
-func GenerateEvents() {
-	for i := 1; i <= numEvents; i++ {
-		event := Event{ID: i}
-		// Schedule event for processing
-		wg.Add(1)
-		go ProcessEvent(event)
+func (t *TemperatureData) Description() string {
+	return fmt.Sprintf("Temperature: %.2f %s", t.Degrees, t.Unit)
+}
 
-		// Wait for the specified interval before generating the next event
-		time.Sleep(time.Duration(1000/eventRate) * time.Millisecond)
+// HumidityData represents humidity data.
+type HumidityData struct {
+	Value float32 `json:"value"`
+}
+
+func (h *HumidityData) Description() string {
+	return fmt.Sprintf("Humidity: %.2f%%", h.Value)
+}
+
+// ProcessWeatherData uses reflection to process and display weather data dynamically.
+func ProcessWeatherData(data []WeatherData) {
+	for _, entry := range data {
+		value := reflect.ValueOf(entry)
+		typeOf := value.Type()
+
+		for i := 0; i < typeOf.NumField(); i++ {
+			field := typeOf.Field(i)
+			tag := field.Tag
+			key := tag.Get("json")
+			if key != "" {
+				fmt.Printf("%s: %s\n", key, value.Field(i).String())
+			}
+		}
+
+		fmt.Println(entry.Description())
+		fmt.Println("-----")
 	}
 }
 
 func main() {
-	startTime := time.Now()
+	weatherData := []WeatherData{
+		&TemperatureData{Degrees: 25.0, Unit: "°C"},
+		&HumidityData{Value: 60.0},
+	}
 
-	// Start generating events
-	go GenerateEvents()
-
-	// Wait for all events to be processed
-	wg.Wait()
-
-	// Calculate elapsed time and throughput
-	elapsedTime := time.Since(startTime)
-	throughput := float64(numEvents) / elapsedTime.Seconds()
-
-	// Output results
-	fmt.Printf("\nProcessed %d events in %.2f seconds\n", numEvents, elapsedTime.Seconds())
-	fmt.Printf("Throughput: %.2f events per second\n", throughput)
+	ProcessWeatherData(weatherData)
 }
