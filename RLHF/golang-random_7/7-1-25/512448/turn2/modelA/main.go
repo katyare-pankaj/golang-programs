@@ -2,82 +2,82 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 )
 
-// Define a task struct to hold task identifiers and results
-type task struct {
-	id     int
-	result string
+// StockData holds stock price data
+type StockData struct {
+	Symbol string
+	Price  float64
+	Time   time.Time
 }
 
-// RunTask simulates performing some work and returns a result
-func RunTask(taskID int, duration time.Duration) string {
-	time.Sleep(duration) // Simulate work taking time
-	return fmt.Sprintf("Task %d finished with result: result%d", taskID, taskID)
-}
-
-// Worker function picks tasks from the channel, processes them, and sends results back
-func Worker(taskCh chan<- task, resultCh chan<- task) {
-	for {
-		// Get a task from the channel
-		taskToProcess, ok := <-taskCh
-		if !ok {
-			// Channel closed, break out of loop
-			break
-		}
-		// Simulate work and generate result
-		result := RunTask(taskToProcess.id, time.Duration(taskToProcess.id)*time.Second)
-		// Send result back through result channel
-		resultCh <- task{taskToProcess.id, result}
+// fetchStockData simulates fetching stock data streams
+func fetchStockData(stockDataCh chan<- StockData, symbol string, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for i := 0; i < 10; i++ {
+		price := rand.Float64()*100.0 + 10.0 // between 10 and 110
+		data := StockData{Symbol: symbol, Price: price, Time: time.Now()}
+		stockDataCh <- data
+		time.Sleep(time.Second) // Simulate delay in data arrival
 	}
+	close(stockDataCh)
 }
 
-// Main function sets up the worker pool, processes tasks, and summarizes results
+// calculateSignal calculates trading signal based on price
+func calculateSignal(data ChannelOfStockData) <-chan string {
+	signalCh := make(chan string)
+
+	go func() {
+		for data := range data {
+			// Implement real logic here (e.g., moving averages, indicators)
+			if data.Price > 105 {
+				signalCh <- "SELL"
+			} else {
+				signalCh <- "BUY"
+			}
+		}
+		close(signalCh)
+	}()
+
+	return signalCh
+}
+
+type ChannelOfStockData <-chan StockData
+
 func main() {
 	var wg sync.WaitGroup
-	// Number of worker threads
-	numWorkers := 5
 
-	// Channels for task distribution and result collection
-	taskCh := make(chan<- task, numWorkers)
-	resultCh := make(chan task, numWorkers)
+	// Symbol channels for multiple stocks
+	symbols := []string{"AAPL", "GOOGL", "MSFT"}
+	stockDataChannels := make([]ChannelOfStockData, len(symbols))
 
-	// Start worker threads
-	for i := 0; i < numWorkers; i++ {
+	// Initialize channels and start data fetching goroutines
+	for i, symbol := range symbols {
+		stockDataCh := make(chan StockData)
+		stockDataChannels[i] = stockDataCh
+
 		wg.Add(1)
-		go func() {
-			Worker(taskCh, resultCh)
-			wg.Done()
-		}()
+		go fetchStockData(stockDataCh, symbol, &wg)
 	}
 
-	// Add independent tasks
-	tasks := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
-	for _, taskID := range tasks {
-		taskCh <- task{taskID, ""}
+	// Signal channels for calculated signals
+	signalChannels := make([]chan string, len(symbols))
+
+	for i, dataCh := range stockDataChannels {
+		signalChannels[i] = calculateSignal(dataCh)
 	}
 
-	// Close the task channel to signal all tasks have been distributed
-	close(taskCh)
-
-	// Collect results from all workers
-	results := make([]task, len(tasks))
-	for i, _ := range tasks {
-		wg.Add(1)
-		go func(i int) {
-			results[i] = <-resultCh
-			wg.Done()
-		}(i)
+	// Monitor signals
+	for i, signalCh := range signalChannels {
+		fmt.Printf("Monitoring stock %s:\n", symbols[i])
+		for signal := range signalCh {
+			fmt.Println(signal)
+		}
 	}
 
-	// Wait for all workers to finish and collect results
 	wg.Wait()
-
-	// Summarize results
-	fmt.Println("Task results:")
-	for _, result := range results {
-		fmt.Println(result)
-	}
+	fmt.Println("All goroutines completed.")
 }
