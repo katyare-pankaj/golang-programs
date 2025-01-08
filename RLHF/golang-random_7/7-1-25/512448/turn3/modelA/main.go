@@ -7,72 +7,97 @@ import (
 	"time"
 )
 
-// Define the task struct which holds input, result, and a completion flag
-type task struct {
-	input     int
-	result    int
-	completed bool
+// StockPrice struct for storing stock prices
+type StockPrice struct {
+	Ticker string
+	Price  float64
+	Time   time.Time
 }
 
-// Worker function processes tasks concurrently
-func worker(wg *sync.WaitGroup, taskCh chan task, resultCh chan int) {
+// FetchData simulates fetching stock prices from a ticker
+func fetchData(priceCh chan<- StockPrice, ticker string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for task := range taskCh {
-		// Simulate work with random delay
-		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
-
-		// Process the task (in this case, square the input)
-		task.result = task.input * task.input
-		task.completed = true
-		fmt.Printf("Worker: Completed task %d: %d * %d = %d\n", task.input, task.input, task.input, task.result)
-
-		// Send the result back to the result channel
-		resultCh <- task.result
+	for i := 0; i < 10; i++ {
+		price := rand.Float64()*100.0 + float64(ticker[0]-'A')*100.0 // Sample price based on ticker
+		data := StockPrice{Ticker: ticker, Price: price, Time: time.Now()}
+		priceCh <- data
+		time.Sleep(time.Second) // Simulate fetch interval
 	}
+	close(priceCh)
+}
+
+// CalculateMovingAverage calculates a simple moving average
+func calculateMovingAverage(priceCh <-chan StockPrice, maCh chan<- float64, ticker string, window int) {
+	var prices []float64
+	for price := range priceCh {
+		if price.Ticker != ticker {
+			continue
+		}
+		prices = append(prices, price.Price)
+		if len(prices) > window {
+			prices = prices[1:]
+		}
+		if len(prices) >= window {
+			maCh <- sum(prices) / float64(window)
+		}
+	}
+	close(maCh)
+}
+
+// Sum calculates the sum of a slice of floats
+func sum(nums []float64) float64 {
+	var total float64
+	for _, num := range nums {
+		total += num
+	}
+	return total
+}
+
+// DetectPriceChange detects significant price changes
+func detectPriceChange(maCh <-chan float64, changeCh chan<- string, threshold float64) {
+	var previous float64
+	for ma := range maCh {
+		if ma < previous-threshold || ma > previous+threshold {
+			changeCh <- fmt.Sprintf("Significant change: %.2f", ma)
+		}
+		previous = ma
+	}
+	close(changeCh)
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-
-	// Number of tasks
-	numTasks := 10
-	// Number of worker goroutines
-	numWorkers := 3
-
-	// Channels for sending tasks and receiving results
-	taskCh := make(chan task, numTasks)
-	resultCh := make(chan int)
-
-	// Wait group for workers
 	var wg sync.WaitGroup
 
-	// Start worker goroutines
-	for i := 0; i < numWorkers; i++ {
+	tickers := []string{"AAPL", "GOOGL", "MSFT"}
+	priceChannels := make([]chan StockPrice, len(tickers))
+	maChannels := make([]chan float64, len(tickers))
+	changeChannels := make([]chan string, len(tickers))
+
+	// Set up channels and start fetching data
+	for i, ticker := range tickers {
+		priceChannels[i] = make(chan StockPrice)
+		maChannels[i] = make(chan float64)
+		changeChannels[i] = make(chan string)
+
 		wg.Add(1)
-		go worker(&wg, taskCh, resultCh)
+		go fetchData(priceChannels[i], ticker, &wg)
+
+		wg.Add(1)
+		go calculateMovingAverage(priceChannels[i], maChannels[i], ticker, 10)
+
+		wg.Add(1)
+		go detectPriceChange(maChannels[i], changeChannels[i], 5.0)
 	}
 
-	// Enqueue tasks
-	for i := 1; i <= numTasks; i++ {
-		task := task{input: i}
-		taskCh <- task
+	// Monitor change notifications
+	for _, changeCh := range changeChannels {
+		go func(ch <-chan string) {
+			for change := range ch {
+				fmt.Println(change)
+			}
+		}(changeCh)
 	}
-	// Close the task channel to indicate no more tasks will be sent
-	close(taskCh)
 
-	// Wait for all worker goroutines to finish
 	wg.Wait()
-
-	// Aggregate results
-	totalResult := 0
-	for result := range resultCh {
-		totalResult += result
-		fmt.Printf("Collected result: %d\n", result)
-	}
-	// Close the result channel
-	close(resultCh)
-
-	// Summarize results
-	fmt.Println("\nAll tasks completed. Summarizing results:")
-	fmt.Printf("Total sum of results: %d\n", totalResult)
+	fmt.Println("System terminated.")
 }
