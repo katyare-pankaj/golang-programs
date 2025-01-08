@@ -1,77 +1,132 @@
 package main
 
 import (
-	"fmt"
-	"math/rand"
-	"sync"
-	"time"
+    "fmt"
+    "math/rand"
+    "sync"
+    "time"
 )
 
-type Task struct {
-	Input  int
-	Result int
+// MarketData represents stock price data
+type MarketData struct {
+    Symbol string
+    Price  float64
+    Time   time.Time
 }
 
-type ResultAggregator struct {
-	mu      sync.Mutex
-	results []int
+// MarketMonitor monitors real-time market data and generates insights
+type MarketMonitor struct {
+    dataCh     chan MarketData
+    signalCh   chan string
+    stopCh     chan struct{}
+    wg         sync.WaitGroup
+    ticker     *time.Ticker
+    priceThreshold float64
 }
 
-func (a *ResultAggregator) AddResult(result int) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.results = append(a.results, result)
+// NewMarketMonitor creates a new MarketMonitor instance
+func NewMarketMonitor(priceThreshold float64) *MarketMonitor {
+    return &MarketMonitor{
+        dataCh:     make(chan MarketData, 100),
+        signalCh:   make(chan string, 100),
+        stopCh:     make(chan struct{}),
+        ticker:     time.NewTicker(5 * time.Second),
+        priceThreshold: priceThreshold,
+    }
 }
 
-func (a *ResultAggregator) GetResults() []int {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.results
+// Start starts the monitoring system
+func (m *MarketMonitor) Start() {
+    m.wg.Add(1)
+    go m.monitor()
 }
 
-func worker(wg *sync.WaitGroup, tasks chan Task, aggregator *ResultAggregator) {
-	defer wg.Done()
-	for task := range tasks {
-		// Simulate some work with a random delay
-		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
-
-		result := task.Input * task.Input
-		aggregator.AddResult(result)
-		fmt.Printf("Task %d completed: %d * %d = %d\n", task.Input, task.Input, task.Input, result)
-	}
+// Stop stops the monitoring system
+func (m *MarketMonitor) Stop() {
+    close(m.stopCh)
+    m.wg.Wait()
 }
 
-func main() {
-	rand.Seed(time.Now().UnixNano())
-
-	numTasks := 20
-	tasks := make(chan Task, numTasks)
-
-	aggregator := &ResultAggregator{}
-
-	// Start workers
-	var wg sync.WaitGroup
-	numWorkers := 5 // Adjust the number of workers as needed
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go worker(&wg, tasks, aggregator)
-	}
-
-	// Send tasks to the worker pool
-	for i := 1; i <= numTasks; i++ {
-		tasks <- Task{Input: i}
-	}
-	close(tasks)
-
-	// Wait for all tasks to complete
-	wg.Wait()
-
-	// Summarize results
-	fmt.Println("\nAll tasks completed. Aggregating results:")
-	results := aggregator.GetResults()
-	var totalResult int
-	for _, result := range results {
-		totalResult += result
-	}
-	fmt.Printf("\nTotal sum of results: %d\n", totalResult)
+// IngestData ingests market data into the monitoring system
+func (m *MarketMonitor) IngestData(data MarketData) {
+    m.dataCh <- data
 }
+
+// GetSignalChannel returns the channel to receive signals
+func (m *MarketMonitor) GetSignalChannel() <-chan string {
+    return m.signalCh
+}
+
+func (m *MarketMonitor) monitor() {
+    defer m.wg.Done()
+
+    for {
+        select {
+        case data := <-m.dataCh:
+            m.handleData(data)
+        case <-m.ticker.C:
+            m.generateInsights()
+        case <-m.stopCh:
+            m.ticker.Stop()
+            close(m.signalCh)
+            return
+        }
+    }
+}
+
+func (m *MarketMonitor) handleData(data MarketData) {
+    // Perform any necessary data processing and store it if required
+    // For simplicity, we'll just print the received data
+    fmt.Printf("Received data: %+v\n", data)
+}
+
+func (m *MarketMonitor) generateInsights() {
+    // Generate insights based on the processed data
+    // In this example, we'll just generate a random signal
+    if rand.Float64() > 0.5 {
+        m.signalCh <- "BUY"
+    } else {
+        m.signalCh <- "SELL"
+    }
+}
+
+// DataFetcher simulates fetching market data
+type DataFetcher struct {
+    symbols     []string
+    dataCh      chan MarketData
+    stopCh      chan struct{}
+    wg          sync.WaitGroup
+    fetchInterval time.Duration
+}
+
+// NewDataFetcher creates a new DataFetcher instance
+func NewDataFetcher(symbols []string, fetchInterval time.Duration) *DataFetcher {
+    return &DataFetcher{
+        symbols:     symbols,
+        dataCh:      make(chan MarketData, 100),
+        stopCh:      make(chan struct{}),
+        fetchInterval: fetchInterval,
+    }
+}
+
+// Start starts the data fetching system
+func (f *DataFetcher) Start() {
+    f.wg.Add(1)
+    go f.fetchData()
+}
+
+// Stop stops the data fetching system
+func (f *DataFetcher) Stop() {
+    close(f.stopCh)
+    f.wg.Wait()
+}
+
+// GetDataChannel returns the channel to receive market data
+func (f *DataFetcher) GetDataChannel() <-chan MarketData {
+    return f.dataCh
+}
+
+func (f *DataFetcher) fetchData() {
+    defer f.wg.Done()
+
+    ticker := time.NewTicker(f.fetchInterval)

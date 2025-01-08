@@ -7,58 +7,92 @@ import (
 	"time"
 )
 
-type task struct {
-	input     int
-	result    int
-	completed bool
+// MarketData represents a single price update from a financial data source.
+type MarketData struct {
+	Symbol string
+	Price  float64
+	Time   time.Time
+	Volume int
 }
 
-func worker(wg *sync.WaitGroup, tasks chan task) {
+// dataStreamGenerator generates a continuous stream of market data.
+func dataStreamGenerator(symbol string, dataCh chan<- MarketData, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for task := range tasks {
-		// Simulate some work with a random delay
-		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+	for {
+		// Generate random market data with a slight delay
+		price := rand.Float64() * 100.0
+		volume := rand.Intn(1000)
+		dataCh <- MarketData{Symbol: symbol, Price: price, Time: time.Now(), Volume: volume}
+		time.Sleep(time.Millisecond * 100)
+	}
+}
 
-		task.result = task.input * task.input
-		task.completed = true
-		fmt.Printf("Task %d completed: %d * %d = %d\n", task.input, task.input, task.input, task.result)
+// simpleMovingAverage calculates the simple moving average for a given window size.
+func simpleMovingAverage(symbol string, windowSize int, dataCh <-chan MarketData, avgCh chan<- float64, wg *sync.WaitGroup) {
+	defer wg.Done()
+	window := make([]float64, windowSize)
+	var sum float64
+
+	for data := range dataCh {
+		if len(window) == windowSize {
+			// Calculate the average and remove the oldest value from the window
+			sum -= window[0]
+			window = window[1:]
+		}
+		window = append(window, data.Price)
+		sum += data.Price
+		avgCh <- sum / float64(len(window))
+	}
+}
+
+// trader makes decisions based on the moving average and executes trades.
+func trader(symbol string, avgCh <-chan float64, tradeCh chan<- string, wg *sync.WaitGroup) {
+	defer wg.Done()
+	const (
+		buyingThreshold  = 80.0
+		sellingThreshold = 20.0
+	)
+	for avg := range avgCh {
+		if avg >= buyingThreshold {
+			tradeCh <- fmt.Sprintf("%s: Buy at %.2f", symbol, avg)
+		} else if avg <= sellingThreshold {
+			tradeCh <- fmt.Sprintf("%s: Sell at %.2f", symbol, avg)
+		}
 	}
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-
-	numTasks := 10
-	tasks := make(chan task, numTasks)
-
-	// Start workers
 	var wg sync.WaitGroup
-	numWorkers := 3 // Adjust the number of workers as needed
-	for i := 0; i < numWorkers; i++ {
+	dataCh := make(chan MarketData)
+	avgCh := make(chan float64)
+	tradeCh := make(chan string)
+
+	// Generate data stream for multiple symbols
+	symbols := []string{"GOOG", "AAPL", "MSFT"}
+	for _, symbol := range symbols {
 		wg.Add(1)
-		go worker(&wg, tasks)
+		go dataStreamGenerator(symbol, dataCh, &wg)
 	}
 
-	// Send tasks to the worker pool
-	for i := 1; i <= numTasks; i++ {
-		tasks <- task{input: i}
+	// Calculate moving average for each symbol concurrently
+	for _, symbol := range symbols {
+		wg.Add(1)
+		go simpleMovingAverage(symbol, 20, dataCh, avgCh, &wg)
 	}
-	close(tasks)
 
-	// Wait for all tasks to complete
-	wg.Wait()
+	// Execute trades based on the moving average for each symbol concurrently
+	for _, symbol := range symbols {
+		wg.Add(1)
+		go trader(symbol, avgCh, tradeCh, &wg)
+	}
 
-	// Summarize results
-	fmt.Println("\nAll tasks completed. Summarizing results:")
-	var totalResult int
-	for i := 1; i <= numTasks; i++ {
-		task := task{input: i}
-		tasks <- task
-		for !task.completed {
-			time.Sleep(10 * time.Millisecond)
+	// Receive and display trades
+	go func() {
+		for trade := range tradeCh {
+			fmt.Println(trade)
 		}
-		totalResult += task.result
-		fmt.Printf("Result for task %d: %d\n", task.input, task.result)
-	}
-	fmt.Printf("\nTotal sum of results: %d\n", totalResult)
+	}()
+
+	wg.Wait()
+	fmt.Println("Algorithm execution completed.")
 }
