@@ -37,16 +37,20 @@ func NewBankAccount(balance int) *BankAccount {
 // Start starts the actor's processing loop.
 func (a *BankAccount) Start() {
 	a.wg.Add(1)
-	defer a.wg.Done()
 
-	for {
-		select {
-		case msg := <-a.inbox:
-			a.processMessage(msg)
-		case <-a.quit:
-			return
+	// Start a new goroutine to process messages
+	go func() {
+		defer a.wg.Done()
+
+		for {
+			select {
+			case msg := <-a.inbox:
+				a.processMessage(msg)
+			case <-a.quit:
+				return
+			}
 		}
-	}
+	}()
 }
 
 // Stop stops the actor's processing loop.
@@ -123,9 +127,11 @@ func main() {
 	account.Send(WithdrawMessage{Amount: 120})
 	account.Send(DepositMessage{Amount: 70})
 
+	// Stop the actor after all messages are sent
+	account.Stop()
+
 	// Wait for the actor to complete
 	account.Wait()
 
-	// Stop the actor
-	account.Stop()
+	// Program finishes
 }
