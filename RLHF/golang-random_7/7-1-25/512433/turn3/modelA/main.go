@@ -2,102 +2,58 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 )
 
-// StockPrice struct for storing stock prices
-type StockPrice struct {
-	Ticker string
-	Price  float64
-	Time   time.Time
-}
-
-// FetchData simulates fetching stock prices from a ticker
-func fetchData(priceCh chan<- StockPrice, ticker string, wg *sync.WaitGroup) {
+func simulateWork(id int, wg *sync.WaitGroup, errorCh chan error, workDuration time.Duration) {
 	defer wg.Done()
-	for i := 0; i < 10; i++ {
-		price := rand.Float64()*100.0 + float64(ticker[0]-'A')*100.0 // Sample price based on ticker
-		data := StockPrice{Ticker: ticker, Price: price, Time: time.Now()}
-		priceCh <- data
-		time.Sleep(time.Second) // Simulate fetch interval
-	}
-	close(priceCh)
-}
+	fmt.Printf("Worker %d is starting and will work for %s\n", id, workDuration)
+	time.Sleep(workDuration) // Simulate work by sleeping
 
-// CalculateMovingAverage calculates a simple moving average
-func calculateMovingAverage(priceCh <-chan StockPrice, maCh chan<- float64, ticker string, window int) {
-	var prices []float64
-	for price := range priceCh {
-		if price.Ticker != ticker {
-			continue
-		}
-		prices = append(prices, price.Price)
-		if len(prices) > window {
-			prices = prices[1:]
-		}
-		if len(prices) >= window {
-			maCh <- sum(prices) / float64(window)
-		}
+	// Introduce a random error for demonstration purposes
+	if workDuration%2 == 0 {
+		errorCh <- fmt.Errorf("worker %d encountered an error", id)
 	}
-	close(maCh)
-}
 
-// Sum calculates the sum of a slice of floats
-func sum(nums []float64) float64 {
-	var total float64
-	for _, num := range nums {
-		total += num
-	}
-	return total
-}
-
-// DetectPriceChange detects significant price changes
-func detectPriceChange(maCh <-chan float64, changeCh chan<- string, threshold float64) {
-	var previous float64
-	for ma := range maCh {
-		if ma < previous-threshold || ma > previous+threshold {
-			changeCh <- fmt.Sprintf("Significant change: %.2f", ma)
-		}
-		previous = ma
-	}
-	close(changeCh)
+	fmt.Printf("Worker %d is done\n", id)
 }
 
 func main() {
-	var wg sync.WaitGroup
+	var wg sync.WaitGroup           // Initialize the wait group
+	errorCh := make(chan error, 10) // Create a channel to pass errors
 
-	tickers := []string{"AAPL", "GOOGL", "MSFT"}
-	priceChannels := make([]chan StockPrice, len(tickers))
-	maChannels := make([]chan float64, len(tickers))
-	changeChannels := make([]chan string, len(tickers))
-
-	// Set up channels and start fetching data
-	for i, ticker := range tickers {
-		priceChannels[i] = make(chan StockPrice)
-		maChannels[i] = make(chan float64)
-		changeChannels[i] = make(chan string)
-
-		wg.Add(1)
-		go fetchData(priceChannels[i], ticker, &wg)
-
-		wg.Add(1)
-		go calculateMovingAverage(priceChannels[i], maChannels[i], ticker, 10)
-
-		wg.Add(1)
-		go detectPriceChange(maChannels[i], changeChannels[i], 5.0)
+	workDurations := []time.Duration{
+		time.Second * 1,
+		time.Second * 2,
+		time.Second * 3,
+		time.Second * 4,
+		time.Second * 5,
 	}
 
-	// Monitor change notifications
-	for _, changeCh := range changeChannels {
-		go func(ch <-chan string) {
-			for change := range ch {
-				fmt.Println(change)
-			}
-		}(changeCh)
+	// Add workers to the wait group
+	for i, duration := range workDurations {
+		wg.Add(1)                                  // Increment the wait count for each worker
+		go simulateWork(i, &wg, errorCh, duration) // Start the worker goroutine
 	}
 
-	wg.Wait()
-	fmt.Println("System terminated.")
+	// Wait for all workers to finish
+	fmt.Println("Main goroutine is waiting for workers...")
+	wg.Wait() // Block until the wait count reaches zero
+
+	// Collect and print errors
+	close(errorCh) // Close the channel after all workers have finished
+	var errors []error
+	for err := range errorCh {
+		errors = append(errors, err)
+	}
+
+	if len(errors) > 0 {
+		fmt.Println("Errors encountered:")
+		for _, err := range errors {
+			fmt.Printf("- %v\n", err)
+		}
+	} else {
+		fmt.Println("All workers completed without errors.")
+	}
 }
