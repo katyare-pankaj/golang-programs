@@ -2,43 +2,49 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"sync"
-	"time"
 )
 
-func checkStatus(url string, wg *sync.WaitGroup) {
-	defer wg.Done()
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Printf("Error fetching %s: %v\n", url, err)
-		return
+func sumWorker(start int, end int, c chan int) {
+	total := 0
+	for i := start; i <= end; i++ {
+		total += i
 	}
-	defer resp.Body.Close()
-	fmt.Printf("%s: %d\n", url, resp.StatusCode)
+	c <- total
 }
 
 func main() {
-	urls := []string{
-		"https://www.example.com",
-		"https://www.google.com",
-		"https://www.youtube.com",
-		"https://www.facebook.com",
-		"https://www.wikipedia.org",
-		"https://www.non-existing-website.com",
-	}
-
 	var wg sync.WaitGroup
+	c := make(chan int)
+	n := 100000
+	fmt.Printf("Calculating sum of integers from 1 to %d using concurrency:\n", n)
 
-	startTime := time.Now()
+	numWorkers := 4 // You can adjust the number of workers as you like
+	chunkSize := n/numWorkers + 1
 
-	for _, url := range urls {
+	for i := 0; i < numWorkers; i++ {
+		start := i*chunkSize + 1
+		end := min((i+1)*chunkSize, n)
 		wg.Add(1)
-		go checkStatus(url, &wg)
+		go sumWorker(start, end, c)
 	}
 
-	wg.Wait()
+	go func() {
+		wg.Wait()
+		close(c)
+	}()
 
-	totalTime := time.Since(startTime)
-	fmt.Printf("\nTotal processing time: %s\n", totalTime)
+	total := 0
+	for sum := range c {
+		total += sum
+	}
+
+	fmt.Println("Result:", total)
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

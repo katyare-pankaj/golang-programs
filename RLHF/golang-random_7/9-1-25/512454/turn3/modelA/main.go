@@ -2,57 +2,54 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"sync"
-	"time"
 )
 
-func checkStatusCode(url string, wg *sync.WaitGroup, results chan<- string) {
-	defer wg.Done()
-	req, err := http.NewRequest("HEAD", url, nil)
-	if err != nil {
-		results <- fmt.Sprintf("Error creating request for %s: %v\n", url, err)
-		return
+const chunkSize = 100
+
+func calculatePartialSum(start, end int, partialSums chan int) {
+	partialSum := 0
+	for i := start; i <= end; i++ {
+		partialSum += i
 	}
-
-	start := time.Now()
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		results <- fmt.Sprintf("Error fetching %s: %v\n", url, err)
-		return
-	}
-
-	statusCode := resp.StatusCode
-	defer resp.Body.Close()
-
-	duration := time.Since(start)
-	result := fmt.Sprintf("URL: %s, Status Code: %d, Duration: %s\n", url, statusCode, duration)
-	results <- result
+	partialSums <- partialSum
 }
 
 func main() {
-	urls := []string{
-		"https://www.example.com",
-		"https://www.google.com",
-		"https://www.youtube.com",
-		"https://www.facebook.com",
-		"https://www.wikipedia.org",
-	}
-
 	var wg sync.WaitGroup
-	results := make(chan<- string)
+	partialSums := make(chan int)
 
-	for _, url := range urls {
+	n := 10000 // The upper limit for the sum
+	numChunks := (n / chunkSize) + 1
+
+	fmt.Printf("Calculating sum of integers from 1 to %d using concurrency:\n", n)
+
+	for chunk := 0; chunk < numChunks; chunk++ {
+		start := chunk*chunkSize + 1
+		end := min((chunk+1)*chunkSize, n)
 		wg.Add(1)
-		go checkStatusCode(url, &wg, results)
+		go func() {
+			defer wg.Done()
+			calculatePartialSum(start, end, partialSums)
+		}()
 	}
 
+	var totalSum int
 	go func() {
-		for result := range results {
-			fmt.Print(result)
-		}
+		wg.Wait()
+		close(partialSums)
 	}()
 
-	wg.Wait()
-	close(results)
+	for partial := range partialSums {
+		totalSum += partial
+	}
+
+	fmt.Println("Total sum:", totalSum)
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
