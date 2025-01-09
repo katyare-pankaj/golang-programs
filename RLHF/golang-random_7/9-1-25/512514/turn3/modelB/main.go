@@ -3,48 +3,60 @@ package main
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
-func sumWorker(start int, end int, c chan int) {
-	total := 0
-	for i := start; i <= end; i++ {
-		total += i
+// Define the task type
+type Task struct {
+	// Define your task structure here
+	ID   int
+	Data string
+}
+
+// function to simulate processing a task
+func processTask(task Task) {
+	fmt.Printf("Worker %d is processing task %d\n", task.ID, task.Data)
+	// Simulate processing time
+	time.Sleep(time.Second * 2)
+}
+
+// worker function: receives tasks from channel and processes them
+func worker(id int, tasks chan Task, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for task := range tasks {
+		processTask(task)
 	}
-	c <- total
 }
 
 func main() {
-	var wg sync.WaitGroup
-	c := make(chan int)
-	n := 100000
-	fmt.Printf("Calculating sum of integers from 1 to %d using concurrency:\n", n)
+	const numWorkers = 5 // Number of worker goroutines
+	var tasks chan Task
 
-	numWorkers := 4 // You can adjust the number of workers as you like
-	chunkSize := n/numWorkers + 1
+	// Create a channel to regulate the number of tasks in flight
+	semaphore := make(chan struct{}, numWorkers)
 
+	// Create a wait group to track active workers
+	wg := &sync.WaitGroup{}
+
+	// Start worker goroutines
 	for i := 0; i < numWorkers; i++ {
-		start := i*chunkSize + 1
-		end := min((i+1)*chunkSize, n)
 		wg.Add(1)
-		go sumWorker(start, end, c)
+		go worker(i, tasks, wg)
 	}
 
+	// Function to generate tasks
 	go func() {
-		wg.Wait()
-		close(c)
+		for i := 1; i <= 20; i++ {
+			// Acquire semaphore to limit tasks in flight
+			semaphore <- struct{}{}
+			task := Task{ID: i, Data: fmt.Sprintf("Task %d", i)}
+			tasks <- task
+			<-semaphore // Release semaphore once task is sent
+		}
+		close(tasks)
 	}()
 
-	total := 0
-	for sum := range c {
-		total += sum
-	}
-
-	fmt.Println("Result:", total)
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	// Wait for all workers to finish
+	wg.Wait()
+	fmt.Println("All tasks processed.")
 }

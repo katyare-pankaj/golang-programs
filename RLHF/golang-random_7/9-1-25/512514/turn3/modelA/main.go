@@ -3,53 +3,61 @@ package main
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
-const chunkSize = 100
+// Task represents a task to be processed.
+type Task struct {
+	ID   int
+	Data string
+}
 
-func calculatePartialSum(start, end int, partialSums chan int) {
-	partialSum := 0
-	for i := start; i <= end; i++ {
-		partialSum += i
+// processTask simulates processing a task.
+func processTask(task Task) {
+	fmt.Printf("Processing task: ID=%d, Data=%s\n", task.ID, task.Data)
+	// Simulate processing time
+	time.Sleep(time.Duration(task.ID%100) * time.Millisecond)
+}
+
+// producer generates tasks and sends them to the channel.
+func producer(taskChannel chan<- Task, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for i := 0; i < 1000; i++ {
+		task := Task{ID: i, Data: fmt.Sprintf("Data %d", i)}
+		taskChannel <- task
+		time.Sleep(time.Millisecond * 10)
 	}
-	partialSums <- partialSum
+}
+
+// consumer receives tasks from the channel and processes them.
+func consumer(taskChannel <-chan Task, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for task := range taskChannel {
+		processTask(task)
+	}
 }
 
 func main() {
+	const numProducers = 3 // Number of producer goroutines
+	const numConsumers = 5 // Number of consumer goroutines
+	const bufferSize = 100 // Buffer size for the task channel
+
+	taskChannel := make(chan Task, bufferSize)
 	var wg sync.WaitGroup
-	partialSums := make(chan int)
 
-	n := 10000 // The upper limit for the sum
-	numChunks := (n / chunkSize) + 1
-
-	fmt.Printf("Calculating sum of integers from 1 to %d using concurrency:\n", n)
-
-	for chunk := 0; chunk < numChunks; chunk++ {
-		start := chunk*chunkSize + 1
-		end := min((chunk+1)*chunkSize, n)
+	// Create producer goroutines
+	for i := 0; i < numProducers; i++ {
 		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			calculatePartialSum(start, end, partialSums)
-		}()
+		go producer(taskChannel, &wg)
 	}
 
-	var totalSum int
-	go func() {
-		wg.Wait()
-		close(partialSums)
-	}()
-
-	for partial := range partialSums {
-		totalSum += partial
+	// Create consumer goroutines
+	for i := 0; i < numConsumers; i++ {
+		wg.Add(1)
+		go consumer(taskChannel, &wg)
 	}
 
-	fmt.Println("Total sum:", totalSum)
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	// Wait for all producers and consumers to finish
+	wg.Wait()
+	fmt.Println("All tasks processed.")
 }
