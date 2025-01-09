@@ -2,44 +2,62 @@ package main
 
 import (
 	"fmt"
-	"net/http"
+	"math/rand"
 	"sync"
-	"time"
 )
 
-func fetchContent(url string, wg *sync.WaitGroup) {
-	defer wg.Done()
-	start := time.Now()
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Printf("Error fetching %s: %v\n", url, err)
-		return
-	}
-	defer resp.Body.Close()
-	duration := time.Since(start)
-	fmt.Printf("Fetched %s in %s\n", url, duration)
-}
-
-func main() {
-	urls := []string{
-		"https://www.example.com",
-		"https://www.google.com",
-		"https://www.youtube.com",
-		"https://www.facebook.com",
-		"https://www.wikipedia.org",
-	}
-
+// Calculate the factorial of a number using concurrency.
+func factorialConcurrently(n int) int {
+	// Initialize a wait group for the worker goroutines
 	var wg sync.WaitGroup
 
-	startTime := time.Now()
+	// Create a channel to receive the results of partial products
+	resultChannel := make(chan int)
 
-	for _, url := range urls {
+	// Calculate the segment size
+	segmentSize := 1000
+
+	// Function to calculate the partial product for a given range
+	func partialProduct(start, end int) {
+		var product int
+		for i := start; i <= end; i++ {
+			product *= i
+		}
+		resultChannel <- product
+	}
+
+	// Start worker goroutines for each segment
+	for start := 1; start <= n; start += segmentSize {
+		end := min(start+segmentSize-1, n)
 		wg.Add(1)
-		go fetchContent(url, &wg)
+		go func() {
+			defer wg.Done()
+			partialProduct(start, end)
+		}()
+	}
+
+	// Aggregate the results from the worker goroutines
+	var totalProduct int
+	for i := 0; i < (n/segmentSize)+1; i++ {
+		totalProduct *= <-resultChannel
 	}
 
 	wg.Wait()
 
-	totalTime := time.Since(startTime)
-	fmt.Printf("\nTotal processing time for all requests: %s\n", totalTime)
+	return totalProduct
+}
+
+// Helper function to ensure end does not exceed n
+func min(end, n int) int {
+	if end > n {
+		return n
+	}
+	return end
+}
+
+func main() {
+	// Example usage
+	n := 100
+	result := factorialConcurrently(n)
+	fmt.Printf("Factorial of %d is: %d\n", n, result)
 }
