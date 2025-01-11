@@ -18,11 +18,11 @@ type dataStream struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	dataCh   <-chan DataPoint
-	updateCh chan<- DataPoint
+	updateCh chan DataPoint
 	rate     time.Duration
 }
 
-func createDataStream(id int, dataCh <-chan DataPoint, updateCh chan<- DataPoint, rate time.Duration) *dataStream {
+func createDataStream(id int, dataCh <-chan DataPoint, updateCh chan DataPoint, rate time.Duration) *dataStream {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &dataStream{
 		id:       id,
@@ -57,7 +57,7 @@ func (ds *dataStream) start() {
 	}()
 }
 
-func generateData(ctx context.Context, dataCh chan<- DataPoint) {
+func generateData(ctx context.Context, dataCh chan DataPoint) {
 	defer close(dataCh)
 	for {
 		select {
@@ -73,13 +73,13 @@ func generateData(ctx context.Context, dataCh chan<- DataPoint) {
 	}
 }
 
-func updateVisualization(updateCh chan<- DataPoint) {
+func updateVisualization(updateCh chan DataPoint) {
 	var wg sync.WaitGroup
 	numStreams := 3
 	updateCh = make(chan DataPoint, numStreams*10)
 
 	// Start data streams
-	dataChannels := make([]<-chan DataPoint, numStreams)
+	dataChannels := make([]chan DataPoint, numStreams) // change <-chan DataPoint to chan DataPoint
 	for i := 0; i < numStreams; i++ {
 		dataChannels[i] = make(chan DataPoint, 100)
 		go generateData(context.Background(), dataChannels[i])
