@@ -27,9 +27,7 @@ func (msgs Messages) AnalyzeWordFrequency() map[string]int {
 	for _, msg := range msgs {
 		words := strings.Fields(msg.Content)
 		if len(words) > 1 {
-			for _, word := range words {
-				wordCount[msg.User] += len(words)
-			}
+			wordCount[msg.User] += len(words) // Add the total number of words in the message to the user's count
 		}
 	}
 
