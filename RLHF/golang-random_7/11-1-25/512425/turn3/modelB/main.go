@@ -1,54 +1,114 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
+	"time"
 )
 
-// Shared resource: A slice of integers that will be accessed by multiple goroutines.
-var sharedResource = make([]int, 100)
+type DataSource struct {
+	Name    string
+	GetData func(string) (int, error)
+}
 
-// Worker function: This function will read and write to the shared resource.
-func worker(id int, wg *sync.WaitGroup, ch chan int) {
+func retrieveData(location string, source DataSource, results chan<- map[string]int, errors chan<- error, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for i := 0; i < 1000; i++ {
-		// Generate a random index to access the shared resource
-		index := rand.Intn(len(sharedResource))
-
-		// Request access to the shared resource by sending an index on the channel
-		ch <- index
-
-		// Read and modify the value at the requested index
-		sharedResource[index]++
-
-		// Release the shared resource by receiving from the channel
-		<-ch
+	data, err := source.GetData(location)
+	if err != nil {
+		errors <- fmt.Errorf("error fetching data from %s for %s: %w", source.Name, location, err)
+		return
 	}
+	results <- map[string]int{location: data}
 }
 
 func main() {
-	var wg sync.WaitGroup
-	ch := make(chan int, 1) // Buffered channel with a capacity of 1 to limit resource contention
-
-	// Start multiple workers
-	wg.Add(10)
-	for i := 0; i < 10; i++ {
-		go worker(i, &wg, ch)
+	locations := []string{"Place A", "Place B", "Place C"}
+	dataSources := []DataSource{
+		{
+			Name: "cache",
+			GetData: func(location string) (int, error) {
+				// Simulate delay for different sources
+				time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+				// Return cache data or simulate error
+				if location == "Place A" {
+					return 100, nil
+				}
+				return 0, errors.New("cache not found")
+			},
+		},
+		{
+			Name: "db",
+			GetData: func(location string) (int, error) {
+				// Simulate delay for different sources
+				time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+				// Return db data or simulate error
+				if location == "Place B" {
+					return 200, nil
+				}
+				return 0, errors.New("db not found")
+			},
+		},
+		{
+			Name: "secondaryDb",
+			GetData: func(location string) (int, error) {
+				// Simulate delay for different sources
+				time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+				// Return secondaryDb data or simulate error
+				if location == "Place C" {
+					return 300, nil
+				}
+				return 0, errors.New("secondaryDb not found")
+			},
+		},
 	}
 
-	// Wait for all workers to complete
+	wg := sync.WaitGroup{}
+	wg.Add(len(locations) * len(dataSources))
+
+	results := make(chan map[string]int, len(locations)*len(dataSources))
+	errors := make(chan error)
+
+	// Launch goroutines to retrieve data from each source
+	for _, location := range locations {
+		for _, source := range dataSources {
+			go retrieveData(location, source, results, errors, &wg)
+		}
+	}
+
+	// Wait for all goroutines to finish
 	wg.Wait()
+	close(results)
+	close(errors)
 
-	// Check for race conditions by verifying that the sum of the shared resource is correct
-	sum := 0
-	for _, value := range sharedResource {
-		sum += value
+	// Aggregate results
+	finalResults := make(map[string]map[string]int)
+	for result := range results {
+		for location, value := range result {
+			if _, ok := finalResults[location]; !ok {
+				finalResults[location] = make(map[string]int)
+			}
+			finalResults[location]["value"] = value
+		}
 	}
-	fmt.Println("Sum of the shared resource:", sum)
 
-	// If the sum is not correct, it indicates a race condition
-	if sum != 10000 {
-		fmt.Println("Race condition detected!")
+	// Check for any errors in the channel
+	var hasError bool
+	for err := range errors {
+		if err != nil {
+			fmt.Println("Error:", err)
+			hasError = true
+		}
+	}
+
+	if hasError {
+		fmt.Println("Data retrieval failed for some sources.")
+	} else {
+		// Print final result
+		fmt.Println("Final Results:")
+		for location, result := range finalResults {
+			fmt.Printf("%s: %v\n", location, result)
+		}
 	}
 }
