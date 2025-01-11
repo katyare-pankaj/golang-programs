@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors" // Importing the errors package
 	"fmt"
 	"math/rand"
 	"sync"
@@ -15,7 +16,7 @@ var (
 )
 
 // function to retrieve data from a single source
-func retrieveDataFromSource(location string, source string, results chan<- map[string]int, errors chan<- error, wg *sync.WaitGroup) {
+func retrieveDataFromSource(location string, source string, results chan<- map[string]int, errChan chan<- error, wg *sync.WaitGroup) {
 	defer wg.Done()
 	var data map[string]int
 	var err error
@@ -36,11 +37,11 @@ func retrieveDataFromSource(location string, source string, results chan<- map[s
 	}
 
 	if err != nil {
-		errors <- err
+		errChan <- err // Send error to the channel
 		return
 	}
 
-	results <- data
+	results <- data // Send results to the channel
 }
 
 func main() {
@@ -51,12 +52,12 @@ func main() {
 	wg.Add(len(locations) * len(sources))
 
 	results := make(chan map[string]int, len(locations)*len(sources))
-	errors := make(chan error, len(locations)*len(sources))
+	errChan := make(chan error, len(locations)*len(sources)) // Renamed to errChan to avoid conflict
 
 	// Launch goroutines to retrieve data from each source
 	for _, location := range locations {
 		for _, source := range sources {
-			go retrieveDataFromSource(location, source, results, errors, &wg)
+			go retrieveDataFromSource(location, source, results, errChan, &wg)
 		}
 	}
 
@@ -64,7 +65,7 @@ func main() {
 	go func() {
 		wg.Wait()
 		close(results)
-		close(errors)
+		close(errChan)
 	}()
 
 	// Aggregate results and handle errors
@@ -75,11 +76,13 @@ func main() {
 			if _, ok := finalResults[location]; !ok {
 				finalResults[location] = make(map[string]int)
 			}
-			finalResults[location]["value"] = value
+			// Instead of using "value" under "value", just assign the actual value
+			finalResults[location] = map[string]int{"value": value}
 		}
 	}
 
-	for err := range errors {
+	// Check for errors and report
+	for err := range errChan {
 		if err != nil {
 			fmt.Println("Error:", err)
 			hasError = true

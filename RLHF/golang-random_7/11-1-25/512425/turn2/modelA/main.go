@@ -1,57 +1,90 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 )
 
-// Simulate two shared resources
-var resource1 = &sync.RWMutex{}
-var resource2 = &sync.RWMutex{}
+// Mock data retrieval function for a single source
+func fetchData(ctx context.Context, source string, location string, results chan<- map[string]int, errors chan<- error) {
+	var data map[string]int
 
-// Function to access resource1
-func accessResource1() {
-	resource1.RLock()         // Acquire read lock on resource1
-	defer resource1.RUnlock() // Release read lock on resource1
+	// Simulate fetching data with a delay and possible error
+	select {
+	case <-ctx.Done():
+		errors <- ctx.Err()
+		return
+	case <-time.After(time.Duration(rand.Intn(1000)) * time.Millisecond):
+		data = map[string]int{location: sourceValue[source][location]}
+	default:
+		// Simulate an error
+		errors <- fmt.Errorf("error fetching data from %s for %s", source, location)
+		return
+	}
 
-	// Simulate work
-	fmt.Println("Accessing resource1...")
-	time.Sleep(time.Second)
-}
-
-// Function to access resource2
-func accessResource2() {
-	resource2.RLock()         // Acquire read lock on resource2
-	defer resource2.RUnlock() // Release read lock on resource2
-
-	// Simulate work
-	fmt.Println("Accessing resource2...")
-	time.Sleep(time.Second)
-}
-
-// Function to access both resources in a consistent order
-func accessResourcesConsistently() {
-	resource1.RLock()         // Acquire read lock on resource1
-	defer resource1.RUnlock() // Release read lock on resource1
-
-	resource2.RLock()         // Acquire read lock on resource2
-	defer resource2.RUnlock() // Release read lock on resource2
-
-	// Simulate work
-	fmt.Println("Accessing resource1 and resource2...")
-	time.Sleep(time.Second)
+	results <- data
 }
 
 func main() {
-	// Create multiple goroutines to access resources
-	for i := 0; i < 5; i++ {
-		go accessResourcesConsistently()
-		go accessResourcesConsistently()
-		go accessResource1()
-		go accessResource2()
+	locations := []string{"Place A", "Place B", "Place C"}
+	sources := []string{"source1", "source2", "source3"}
+
+	// Create channels for results and errors
+	results := make(chan map[string]int, len(locations)*len(sources))
+	errors := make(chan error)
+
+	var wg sync.WaitGroup
+
+	// Initialize context with a timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Launch goroutines for data retrieval
+	for _, location := range locations {
+		for _, source := range sources {
+			wg.Add(1)
+			go func(loc, src string) {
+				defer wg.Done()
+				fetchData(ctx, src, loc, results, errors)
+			}(location, source)
+		}
 	}
 
-	// Wait for all goroutines to complete
-	time.Sleep(10 * time.Second)
+	// Wait for all goroutines to finish
+	wg.Wait()
+	close(results)
+	close(errors)
+
+	// Aggregate results and handle errors
+	finalResults := make(map[string]map[string]int)
+	for result := range results {
+		for location, value := range result {
+			if _, ok := finalResults[location]; !ok {
+				finalResults[location] = make(map[string]int)
+			}
+			finalResults[location][value] = value
+		}
+	}
+
+	// Check for any errors
+	var hasError bool
+	for err := range errors {
+		if err != nil {
+			fmt.Println("Error:", err)
+			hasError = true
+		}
+	}
+
+	if hasError {
+		fmt.Println("Data retrieval failed for some sources.")
+	} else {
+		// Print final results
+		fmt.Println("Final Results:")
+		for location, result := range finalResults {
+			fmt.Printf("%s: %v\n", location, result)
+		}
+	}
 }
