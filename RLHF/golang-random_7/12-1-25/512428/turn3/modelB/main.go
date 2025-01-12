@@ -2,58 +2,38 @@ package main
 
 import (
 	"fmt"
-	"net/http"
-	"sync"
-	"time"
 )
 
-const (
-	numRequests    = 10
-	maxConcurrency = 3
-)
+func generateIDStrings(start int, end int, batchSize int) [][]string {
+	var results [][]string
 
-func makeRequest(wg *sync.WaitGroup, url string) {
-	defer wg.Done()
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Printf("Error making request to %s: %v\n", url, err)
-		return
+	for i := start; i <= end; i += batchSize {
+		endBatch := i + batchSize - 1
+		if endBatch > end {
+			endBatch = end
+		}
+		var batch []string
+		for j := i; j <= endBatch; j++ {
+			str := fmt.Sprintf("ID%06d", j)
+			batch = append(batch, str)
+		}
+		results = append(results, batch)
 	}
-	defer resp.Body.Close()
-	// Simulate processing the response
-	time.Sleep(1 * time.Second)
-	fmt.Printf("Request to %s completed with status: %d\n", url, resp.StatusCode)
+	return results
 }
 
 func main() {
-	var wg sync.WaitGroup
-	urls := []string{
-		"https://example.com/api/1",
-		"https://example.com/api/2",
-		"https://example.com/api/3",
-		"https://example.com/api/4",
-		"https://example.com/api/5",
-		"https://example.com/api/6",
-		"https://example.com/api/7",
-		"https://example.com/api/8",
-		"https://example.com/api/9",
-		"https://example.com/api/10",
+	start := 1
+	end := 100
+	batchSize := 10
+
+	batches := generateIDStrings(start, end, batchSize)
+
+	for i, batch := range batches {
+		fmt.Println("Batch", i+1, ":")
+		for _, str := range batch {
+			fmt.Print(str, " ")
+		}
+		fmt.Println()
 	}
-
-	// Create a channel to limit the concurrency
-	concurrencyChan := make(chan struct{}, maxConcurrency)
-
-	for _, url := range urls {
-		wg.Add(1)
-		concurrencyChan <- struct{}{}
-		go func(url string) {
-			defer func() {
-				<-concurrencyChan
-			}()
-			makeRequest(&wg, url)
-		}(url)
-	}
-
-	wg.Wait()
-	fmt.Println("All requests completed.")
 }
