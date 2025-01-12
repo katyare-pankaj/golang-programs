@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -26,7 +25,7 @@ func (c *APIClient) makeAPIRequest(endpoint string) (data []byte, err error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	data, err = io.ReadAll(resp.Body)
+	data, err = http.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
