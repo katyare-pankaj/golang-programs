@@ -10,72 +10,68 @@ type Data struct {
 	Value string
 }
 
+// Global cache variables
+var cache1 = make(map[int]*Data)
+var cache2 = make(map[int]*Data)
+var cache3 = make(map[int]*Data)
+
+var wg sync.WaitGroup
+
 func main() {
-	// Simulate some data
-	data := []Data{
-		{1, "value1"},
-		{2, "value2"},
-		{3, "value3"},
-		{4, "value4"},
-		{5, "value5"},
+	keys := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	wg.Add(len(keys))
+
+	// Create a channel to receive data from the function
+	dataCh := make(chan *Data)
+
+	go retrieveData(keys, dataCh)
+
+	for data := range dataCh {
+		fmt.Printf("Key: %d, Value: %s\n", data.Key, data.Value)
 	}
 
-	// Create multi-level caches
-	level1Cache := make(map[int]string)
-	level2Cache := make(map[int]*sync.Mutex)
-
-	var wg sync.WaitGroup
-	wg.Add(len(data))
-
-	// Go routine to populate level 1 cache with initial data
-	go func() {
-		for _, d := range data {
-			level1Cache[d.Key] = d.Value
-			level2Cache[d.Key] = new(sync.Mutex)
-			wg.Done()
-		}
-	}()
 	wg.Wait()
+}
 
-	fmt.Println("Level 1 Cache:", level1Cache)
+func retrieveData(keys []int, dataCh chan *Data) {
+	defer close(dataCh)
 
-	// Function to retrieve data from multi-level cache
-	getData := func(key int) string {
-		// First check the level 1 cache
-		if value, ok := level1Cache[key]; ok {
-			return value
+	// Range loop over the keys
+	for _, key := range keys {
+		// Check if the data is in the first-level cache
+		if data, found := cache1[key]; found {
+			fmt.Println("Data found in cache1.")
+			dataCh <- data
+			wg.Done()
+			continue
 		}
 
-		// If not in level 1, check level 2
-		mutex, ok := level2Cache[key]
-		if !ok {
-			return "" // Key not found
+		// Check if the data is in the second-level cache
+		if data, found := cache2[key]; found {
+			fmt.Println("Data found in cache2.")
+			cache1[key] = data // Move the data to the first-level cache
+			dataCh <- data
+			wg.Done()
+			continue
 		}
 
-		// Lock the level 2 cache for this key to avoid race conditions
-		mutex.Lock()
-		defer mutex.Unlock()
-
-		// Check level 2 cache again after acquiring the lock
-		if value, ok := level1Cache[key]; ok {
-			return value
+		// Check if the data is in the third-level cache
+		if data, found := cache3[key]; found {
+			fmt.Println("Data found in cache3.")
+			cache1[key] = data // Move the data to the first-level cache
+			cache2[key] = data // Move the data to the second-level cache
+			dataCh <- data
+			wg.Done()
+			continue
 		}
 
-		// Simulate retrieving data from a slow source (e.g., database)
-		// In this example, we'll just simulate it by adding a delay
-		// For demonstration purposes only.
-		value := fmt.Sprintf("value-from-slow-source-for-key-%d", key)
-
-		// Update level 1 cache
-		level1Cache[key] = value
-
-		return value
-	}
-
-	// Use the multi-level cache in a range loop
-	for _, key := range []int{1, 2, 3, 4, 5, 6, 7} {
-		// Retrieve data using the getData function
-		value, _ := getData(key)
-		fmt.Println("Data for key", key, ":", value)
+		// If the data is not found in any cache, retrieve it from the database (simulated here)
+		fmt.Println("Data not found in any cache. Retrieving from database...")
+		data := &Data{Key: key, Value: fmt.Sprintf("Value for key %d", key)}
+		cache1[key] = data // Move the data to the first-level cache
+		cache2[key] = data // Move the data to the second-level cache
+		cache3[key] = data // Move the data to the third-level cache
+		dataCh <- data
+		wg.Done()
 	}
 }
