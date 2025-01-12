@@ -62,12 +62,32 @@ func main() {
 			for key := goroutineID * dataRange; key < (goroutineID+1)*dataRange; key++ {
 				// Check in L1 cache first
 				if value, found := l1Cache.get(key); found {
+					// If found in L1 cache, use the value
+					fmt.Println("Found in L1 cache:", value)
 					continue
 				}
 
-				// Rest of the caching logic remains the same
-				// ...
-				// ...
+				// Check in L2 cache if not found in L1
+				if value, found := l2Cache.get(key); found {
+					// If found in L2 cache, promote to L1 and use the value
+					fmt.Println("Found in L2 cache:", value)
+					l1Cache.set(key, value) // Promote to L1 cache
+					continue
+				}
+
+				// Check in L3 cache if not found in L2
+				if value, found := l3Cache.get(key); found {
+					// If found in L3 cache, promote to L2 and L1
+					fmt.Println("Found in L3 cache:", value)
+					l2Cache.set(key, value) // Promote to L2 cache
+					l1Cache.set(key, value) // Promote to L1 cache
+					continue
+				}
+
+				// Fetch from external source and update all caches
+				value := fetchFromExternal(key)
+				updateCacheLevels(key, value, l1Cache, l2Cache, l3Cache)
+				fmt.Println("Fetched from external source:", value)
 			}
 		}(i)
 	}
