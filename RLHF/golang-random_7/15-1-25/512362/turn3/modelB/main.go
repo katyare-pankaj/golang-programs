@@ -2,19 +2,44 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 )
 
 func main() {
-	name := "James"
-	planet := "Mars"
-	time := "22:15"
+	// Define the nested directory structure to create
+	rootDir := "my_dir"
+	subDir1 := "subdir1"
+	subDir2 := "subdir2"
+	nestedDirPath := filepath.Join(rootDir, subDir1, subDir2)
 
-	// Using fmt.Sprintf to format a string with multiple variables and store it in a variable
-	formattedString := fmt.Sprintf("Greetings, %s! It's currently %s on %s.", name, time, planet)
+	// Create the nested directory structure
+	err := os.MkdirAll(nestedDirPath, 0755)
+	if err != nil {
+		fmt.Printf("Error creating nested directory: %v\n", err)
+		return
+	}
+	fmt.Println("Nested directory structure created successfully!")
 
-	// Modifying the formatted string by appending additional information
-	modifiedString := fmt.Sprintf("%s I hope you are doing well. I just completed a mission to %s.", formattedString, planet)
+	// Define the old path of the subdirectory to rename
+	oldSubDirPath := filepath.Join(rootDir, subDir1)
 
-	// Printing the modified string using fmt.Println
-	fmt.Println(modifiedString)
+	// Define the new path of the subdirectory after renaming
+	newSubDirPath := filepath.Join(rootDir, "renamed_subdir1")
+
+	// Rename the subdirectory
+	err = os.Rename(oldSubDirPath, newSubDirPath)
+	if err != nil {
+		fmt.Printf("Error renaming subdirectory: %v\n", err)
+		return
+	}
+	fmt.Println("Subdirectory renamed successfully!")
+
+	// Remove the entire directory structure
+	err = os.RemoveAll(rootDir)
+	if err != nil {
+		fmt.Printf("Error removing directory structure: %v\n", err)
+		return
+	}
+	fmt.Println("Directory structure removed successfully!")
 }
