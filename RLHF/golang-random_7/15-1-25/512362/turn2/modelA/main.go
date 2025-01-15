@@ -2,22 +2,37 @@ package main
 
 import (
 	"fmt"
+	"os"
 )
 
 func main() {
-	// Initialize variables
-	name := "Alice"
-	age := 30
+	// Define a path for the new directory
+	dirPath := "newdir"
 
-	// Format a string using fmt.Sprintf and store it in a variable
-	formattedString := fmt.Sprintf("Hello, my name is %s and I am %d years old.", name, age)
+	// Create a directory
+	err := os.Mkdir(dirPath, 0755)
+	if err != nil {
+		fmt.Printf("Error creating directory: %v\n", err)
+		return
+	}
+	fmt.Println("Directory created successfully!")
 
-	// Modify the stored formatted string
-	formattedString += " How are you today?"
+	// Define a new path for renaming the directory
+	newDirPath := "updateddir"
 
-	// Print the modified string
-	fmt.Println(formattedString)
+	// Rename the directory
+	err = os.Rename(dirPath, newDirPath)
+	if err != nil {
+		fmt.Printf("Error renaming directory: %v\n", err)
+		return
+	}
+	fmt.Println("Directory renamed successfully!")
 
-	// Use fmt.Printf to directly print a formatted message
-	fmt.Printf("Directly using fmt.Printf: Hello, my name is %s and I am %d years old.", name, age)
+	// Remove the directory
+	err = os.RemoveAll(newDirPath)
+	if err != nil {
+		fmt.Printf("Error removing directory: %v\n", err)
+		return
+	}
+	fmt.Println("Directory removed successfully!")
 }

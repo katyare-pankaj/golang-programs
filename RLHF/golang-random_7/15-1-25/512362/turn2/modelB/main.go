@@ -2,18 +2,41 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 )
 
 func main() {
-	// Format a string using fmt.Sprintf and store it in a variable
-	name := "Alice"
-	age := 25
-	formattedString := fmt.Sprintf("Hello, my name is %s and I am %d years old.", name, age)
+	baseDir := "example_dir"
 
-	// Modify the formatted string and print the modified result
-	modifiedString := fmt.Sprintf("%s I am a software engineer.", formattedString)
-	fmt.Println(modifiedString)
+	// Create a new directory using filepath.Join to build the path
+	newDirPath := filepath.Join(baseDir, "newdir")
+	err := os.MkdirAll(newDirPath, 0755)
+	if err != nil {
+		fmt.Printf("Error creating directory: %v\n", err)
+		return
+	}
+	fmt.Println("Directory created successfully!")
 
-	// Use fmt.Printf to directly print a formatted message without storing it
-	fmt.Printf("Today is %s, and the weather is %s.\n", "Wednesday", "sunny")
+	// Rename the directory using filepath.Base to extract the base name
+	oldDirPath := newDirPath
+	newDirBase := filepath.Base(newDirPath) + "_updated"
+	newDirPath = filepath.Join(filepath.Dir(oldDirPath), newDirBase)
+	err = os.Rename(oldDirPath, newDirPath)
+	if err != nil {
+		fmt.Printf("Error renaming directory: %v\n", err)
+		return
+	}
+	fmt.Println("Directory renamed successfully!")
+
+	// Remove the directory using filepath.Join to build the path (ignoring walkErr if not nil)
+	defer os.RemoveAll(newDirPath)
+	err = filepath.Walk(newDirPath, func(path string, info os.FileInfo, walkErr error) error {
+		return nil
+	})
+	if err != nil {
+		fmt.Printf("Error removing directory: %v\n", err)
+	} else {
+		fmt.Println("Directory removed successfully!")
+	}
 }
