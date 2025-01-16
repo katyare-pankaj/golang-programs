@@ -1,67 +1,63 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"strings"
 )
 
-// Define a struct to hold the details of an API endpoint
-type Endpoint struct {
-	Method     string
-	Path       string
-	Parameters string
-	Response   string
+// Custom error type for more context
+type fileError struct {
+	err  error
+	file string
 }
 
-// Function to generate markdown documentation for a given endpoint
-func generateEndpointDoc(endpoint Endpoint) string {
-	doc := fmt.Sprintf("### %s %s\n", endpoint.Method, endpoint.Path)
-	doc += fmt.Sprintf("**Parameters:**\n  %s\n\n", endpoint.Parameters)
-	doc += fmt.Sprintf("**Response:**\n  %s\n\n", endpoint.Response)
-	doc += fmt.Sprintf("```json\n%s\n```\n\n", endpoint.Response)
-	return doc
+func (e fileError) Error() string {
+	return fmt.Sprintf("error processing file '%s': %v", e.file, e.err)
+}
+
+// OpenFile safely opens a file and returns a handle and an error.
+func OpenFile(filename string) (*os.File, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fileError{err, filename}
+	}
+	return file, nil
+}
+
+// CloseFile safely closes a file handle.
+func CloseFile(file *os.File) {
+	if err := file.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "error closing file: %v\n", err)
+	}
+}
+
+// ReadFile reads a file and prints each line.
+func ReadFile(filename string) error {
+	file, err := OpenFile(filename)
+	if err != nil {
+		return err
+	}
+	defer CloseFile(file)
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		fmt.Println(line)
+	}
+	return scanner.Err()
 }
 
 func main() {
-	// List of endpoints
-	endpoints := []Endpoint{
-		{
-			Method:     "GET",
-			Path:       "/users",
-			Parameters: "user_id: integer (optional), limit: integer (default=10), page: integer (default=1)",
-			Response:   `{"users": [{"user_id": 1, "name": "Alice"}, {"user_id": 2, "name": "Bob"}]}`,
-		},
-		{
-			Method:     "POST",
-			Path:       "/users",
-			Parameters: "user_name: string, email: string, password: string",
-			Response:   `{"status": "success", "user_id": 3}`,
-		},
-		{
-			Method:     "GET",
-			Path:       "/users/{user_id}",
-			Parameters: "",
-			Response:   `{"user": {"user_id": 1, "name": "Alice", "email": "alice@example.com"}}`,
-		},
-		{
-			Method:     "PUT",
-			Path:       "/users/{user_id}",
-			Parameters: "user_name: string, email: string, password: string",
-			Response:   `{"status": "updated", "user_id": 1}`,
-		},
-		{
-			Method:     "DELETE",
-			Path:       "/users/{user_id}",
-			Parameters: "",
-			Response:   `{"status": "deleted"}`,
-		},
+	if len(os.Args) != 2 {
+		fmt.Fprintf(os.Stderr, "Usage: %s <filename>\n", os.Args[0])
+		os.Exit(1)
 	}
+	filename := os.Args[1]
 
-	// Title of the API documentation
-	fmt.Printf("# API Documentation\n")
-	fmt.Println("---")
-
-	// Generate and print documentation for each endpoint
-	for _, endpoint := range endpoints {
-		fmt.Println(generateEndpointDoc(endpoint))
+	if err := ReadFile(filename); err != nil {
+		fmt.Fprintf(os.Stderr, "Error processing file: %v\n", err)
+		os.Exit(1)
 	}
 }

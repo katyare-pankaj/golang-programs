@@ -1,64 +1,52 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"strings"
 )
 
-type Endpoint struct {
-	Method         string
-	Path           string
-	Parameters     string
-	SampleResponse string
+type FileProcessor struct {
+	Filename string
 }
 
-func generateEndpointDoc(apiVersion string, endpoint Endpoint) string {
-	doc := fmt.Sprintf("### %s %s\n", endpoint.Method, endpoint.Path)
-	doc += fmt.Sprintf("**Parameters:**\n  %s\n\n", endpoint.Parameters)
-	doc += fmt.Sprintf("**Sample Response:**\n  %s\n\n", endpoint.SampleResponse)
-	doc += fmt.Sprintf("```json\n%s\n```", endpoint.SampleResponse)
-	return doc
+// NewFileProcessor creates a new FileProcessor
+func NewFileProcessor(filename string) *FileProcessor {
+	return &FileProcessor{Filename: filename}
+}
+
+// ProcessFile reads lines from the file and outputs them to the console.
+func (fp *FileProcessor) ProcessFile() error {
+	file, err := os.Open(fp.Filename)
+	if err != nil {
+		return fmt.Errorf("error opening file: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		fmt.Println(line)
+	}
+	return scanner.Err()
 }
 
 func main() {
-	apiVersion := "v1"
-	fmt.Printf("# API Documentation: Version %s\n", apiVersion)
-	fmt.Println("---")
-
-	// Sample endpoints data
-	endpoints := []Endpoint{
-		{
-			Method:         "GET",
-			Path:           "/users",
-			Parameters:     "user_id: integer (optional), limit: integer (default=10), page: integer (default=1)",
-			SampleResponse: `{"users": [{"user_id": 1, "name": "Alice", "email": "alice@example.com"}, {"user_id": 2, "name": "Bob", "email": "bob@example.com"}]}`,
-		},
-		{
-			Method:         "POST",
-			Path:           "/users",
-			Parameters:     "user_name: string, email: string, password: string",
-			SampleResponse: `{"status": "success", "user_id": 3}`,
-		},
-		{
-			Method:         "GET",
-			Path:           "/users/{user_id}",
-			Parameters:     "user_id: integer (required)",
-			SampleResponse: `{"user": {"user_id": 1, "name": "Alice", "email": "alice@example.com"}}`,
-		},
-		{
-			Method:         "PUT",
-			Path:           "/users/{user_id}",
-			Parameters:     "user_id: integer (required), user_data: {name: string, email: string}",
-			SampleResponse: `{"status": "success", "message": "User updated successfully"}`,
-		},
-		{
-			Method:         "DELETE",
-			Path:           "/users/{user_id}",
-			Parameters:     "user_id: integer (required)",
-			SampleResponse: `{"status": "success", "message": "User deleted successfully"}`,
-		},
+	if len(os.Args) != 2 {
+		fmt.Fprintf(os.Stderr, "Usage: %s <filename>\n", os.Args[0])
+		os.Exit(1)
 	}
 
-	for _, endpoint := range endpoints {
-		fmt.Println(generateEndpointDoc(apiVersion, endpoint))
+	filename := os.Args[1]
+	fp := NewFileProcessor(filename)
+	if err := fp.ProcessFile(); err != nil {
+		handleError(err)
 	}
+}
+
+// handleError prints the error message to stderr and exits with a non-zero status.
+func handleError(err error) {
+	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	os.Exit(1)
 }
