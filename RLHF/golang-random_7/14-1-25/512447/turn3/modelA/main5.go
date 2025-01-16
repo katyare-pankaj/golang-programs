@@ -44,6 +44,12 @@ func main() {
 		go consumer(msgChan, &wg)
 	}
 
+	// Close the channel after all producers are done
+	go func() {
+		wg.Wait()      // Wait for all producers and consumers to finish
+		close(msgChan) // Close the channel after producers are done
+	}()
+
 	// Wait for all goroutines to finish
 	wg.Wait()
 
@@ -69,6 +75,11 @@ func producer(id int, msgChan chan<- message, wg *sync.WaitGroup) {
 
 		// Send the message to the channel
 		msgChan <- *msg
+
+		// Print memory usage after sending a certain number of messages
+		if i%1000 == 0 {
+			fmt.Printf("Producer %d: Sent %d messages, current memory usage: %v bytes\n", id, i, atomic.LoadUint64(&totalMemoryUsage))
+		}
 	}
 }
 
@@ -80,9 +91,7 @@ func consumer(msgChan <-chan message, wg *sync.WaitGroup) {
 		// Simulate some work with a sleep
 		time.Sleep(time.Millisecond * 10)
 
-		// Process the received message
+		// Process the received message (dummy processing)
 		_ = msg.data
-
-		// Check if the message struct needs to be cleaned up manually.
 	}
 }

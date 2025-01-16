@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	numGoroutines = 100
-	numMessages   = 1_000_000
+	numGoroutines = 10
+	numMessages   = 100
 	latencyTime   = 100 * time.Millisecond // Simulate 100ms latency
-	bufferSize    = 100
+	bufferSize    = 10
 )
 
 type message struct {
@@ -21,39 +21,37 @@ type message struct {
 
 var totalMemoryUsage uint64
 var msgChan chan message
-var doneChan chan struct{}
 var wg sync.WaitGroup
 
 func init() {
 	// Initialize the message channel with a buffer size
 	msgChan = make(chan message, bufferSize)
-	doneChan = make(chan struct{})
 }
 
 func main() {
-	// Start the timer to track execution time
 	start := time.Now()
 
-	// Launch the producer goroutines
+	// Launch producer goroutines
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go producer(i)
 	}
 
-	// Launch the consumer goroutines
+	// Launch consumer goroutines
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go consumer(i)
 	}
 
-	// Wait for all goroutines to finish
+	// Wait for all producers to finish before closing the channel
 	wg.Wait()
-	close(doneChan)
+	close(msgChan)
 
-	// Print total time taken
+	// Wait for all consumers to finish processing after channel is closed
+	wg.Wait()
+
+	// Print execution time and memory usage
 	fmt.Printf("Total time taken: %s\n", time.Since(start))
-
-	// Print total memory usage
 	fmt.Printf("Total memory usage: %v bytes\n", totalMemoryUsage)
 }
 
@@ -65,30 +63,24 @@ func producer(id int) {
 
 		// Generate a random message data
 		data := fmt.Sprintf("Producer %d: Message %d", id, i)
+		msg := message{data: data}
 
-		// Create a new message struct, tracking the allocation size
-		msg := new(message)
-		msg.data = data
+		// Track memory usage
 		atomic.AddUint64(&totalMemoryUsage, uint64(len(data)))
 
 		// Send the message to the channel
-		msgChan <- *msg
+		msgChan <- msg
+		fmt.Printf("Producer %d sent: %s\n", id, msg.data)
 	}
 }
 
 func consumer(id int) {
 	defer wg.Done()
-	for {
-		select {
-		case msg := <-msgChan:
-			// Simulate some work with a sleep
-			time.Sleep(time.Millisecond * 10)
+	for msg := range msgChan {
+		// Simulate some work with a sleep
+		time.Sleep(time.Millisecond * 10)
 
-			// Process the received message
-			_ = msg.data
-		case <-doneChan:
-			// Check for the done signal from the main goroutine
-			return
-		}
+		// Process the received message
+		fmt.Printf("Consumer %d received: %s\n", id, msg.data)
 	}
 }
