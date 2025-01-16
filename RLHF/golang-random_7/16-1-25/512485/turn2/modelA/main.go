@@ -1,54 +1,70 @@
 package main
 
-import "fmt"
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+)
 
-// Endpoint represents the details of an API endpoint
-type Endpoint struct {
-	Method     string
-	Path       string
-	Parameters string
-	Response   string
+// Define a basic response structure
+type Response struct {
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
+// Example handler function
+func handleRequest(w http.ResponseWriter, r *http.Request) {
+	// Example dynamic data
+	var userData map[string]interface{}
+	switch r.Method {
+	case http.MethodGet:
+		// Simulate fetching data from a database or API
+		userData = map[string]interface{}{
+			"id":    1,
+			"name":  "John Doe",
+			"email": "john@example.com",
+		}
+	case http.MethodPost:
+		// Simulate processing a POST request
+		userData = map[string]interface{}{
+			"id":    2,
+			"name":  "Jane Doe",
+			"email": "jane@example.com",
+		}
+	default:
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Create a Response instance
+	response := Response{
+		Status:  "success",
+		Message: "Request processed successfully.",
+		Data:    userData,
+	}
+
+	// Encode the struct to JSON
+	jsonResponse, err := json.Marshal(response)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Error marshalling JSON: %v", err)
+		return
+	}
+
+	// Set the Content-Type header
+	w.Header().Set("Content-Type", "application/json")
+
+	// Write the JSON response
+	_, err = w.Write(jsonResponse)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Error writing JSON response: %v", err)
+		return
+	}
 }
 
 func main() {
-	// Define a list of endpoints
-	endpoints := []Endpoint{
-		{
-			Method:     "GET",
-			Path:       "/users",
-			Parameters: "user_id: integer (optional)",
-			Response:   "user_list: [user object]",
-		},
-		{
-			Method:     "GET",
-			Path:       "/users/{user_id}",
-			Parameters: "",
-			Response:   "user_object: {user details}",
-		},
-		{
-			Method:     "POST",
-			Path:       "/users/{user_id}",
-			Parameters: "user_data: {user object}",
-			Response:   "updated_user_object: {updated user details}",
-		},
-		{
-			Method:     "DELETE",
-			Path:       "/users/{user_id}",
-			Parameters: "",
-			Response:   "message: User deleted successfully",
-		},
-	}
-
-	// Create a title for the API documentation
-	apiVersion := "v1"
-	fmt.Printf("# API Documentation: Version %s\n", apiVersion)
-	fmt.Println("---")
-
-	// Iterate over each endpoint and print its details
-	for _, endpoint := range endpoints {
-		endpointString := fmt.Sprintf("### %s %s\n", endpoint.Method, endpoint.Path)
-		endpointString += fmt.Sprintf("**Parameters:**\n  %s\n\n", endpoint.Parameters)
-		endpointString += fmt.Sprintf("**Response:**\n  %s\n\n", endpoint.Response)
-		fmt.Println(endpointString)
-	}
+	http.HandleFunc("/api/example", handleRequest)
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
