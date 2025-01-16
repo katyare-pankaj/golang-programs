@@ -11,10 +11,17 @@ import (
 const (
 	numProducers      = 10
 	numConsumers      = 20
+<<<<<<< HEAD
 	numMessages       = 100000
 	latencyMin        = 10 * time.Millisecond
 	latencyMax        = 100 * time.Millisecond
 	channelBufferSize = 10000
+=======
+	numMessages       = 1000
+	latencyMin        = 10 * time.Microsecond
+	latencyMax        = 100 * time.Microsecond
+	channelBufferSize = 1000
+>>>>>>> 82712e93aac8380b9aa86d34cef523dbc7c4af75
 )
 
 type message struct {
