@@ -5,22 +5,26 @@ import (
 	"time"
 )
 
+var frenchDays = []string{
+	"", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche",
+}
+var frenchMonths = []string{
+	"", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+	"Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+}
+
+func frenchDateFormat(t time.Time) string {
+	day := frenchDays[int(t.Weekday())+1]
+	month := frenchMonths[t.Month()]
+	year := fmt.Sprintf("%04d", t.Year())
+	return fmt.Sprintf("%s, %d %s %s", day, t.Day(), month, year)
+}
+
 func main() {
-	// Get the current date
+	// Example time
 	now := time.Now()
 
-	// Format the date in a way that can be easily understood and adapted for French
-	dateStr := fmt.Sprintf("%2d %v %d", now.Day(), now.Month(), now.Year())
-
-	// Map the months to their French names
-	months := []string{"", "janvier", "février", "mars", "avril", "mai", "juin",
-		"juillet", "août", "septembre", "octobre", "novembre", "décembre"}
-
-	// Replace the English month name with its French equivalent
-	dateStr = fmt.Sprintf("%s %s %d", dateStr[:5], months[now.Month()], now.Year())
-
-	// Ensure proper punctuation
-	dateStr = dateStr[:len(dateStr)-1] + "."
-
-	fmt.Println("Date in French:", dateStr)
+	// Format the time to a French date
+	frenchDate := frenchDateFormat(now)
+	fmt.Println("Today's date in French:", frenchDate)
 }
