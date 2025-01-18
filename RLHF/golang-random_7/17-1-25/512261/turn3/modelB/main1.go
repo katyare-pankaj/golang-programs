@@ -19,6 +19,7 @@ func unsafeThirdPartyFunction(url string) (string, error) {
 	}
 	return string(data), nil
 }
+
 func safeThirdPartyFunction(url string) (string, error) {
 	res, err := http.Get(url)
 	if err != nil {
@@ -33,6 +34,14 @@ func safeThirdPartyFunction(url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// Recover from panic and ensure to return an error
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered from panic: %v", r)
+		}
+	}()
+
 	// Simulate a panic
 	panic("Oh no! A panic occurred!")
 	return string(data), nil
@@ -52,6 +61,7 @@ func main() {
 		} else {
 			fmt.Println("Result:", result)
 		}
+
 		fmt.Println("Calling safeThirdPartyFunction with URL:", url)
 		result, err = safeThirdPartyFunction(url)
 		if err != nil {
