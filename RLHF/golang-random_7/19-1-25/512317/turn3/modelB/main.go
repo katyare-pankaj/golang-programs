@@ -1,181 +1,103 @@
-package main  
-import (  
-    "context"
-    "crypto/aes"
-    "crypto/cipher"
-    "crypto/rand"
-    "encoding/base64"
-    "fmt"
-    "io"
-    "log"
-    "net/http"
-    "sync"
-    "time"
+package main
 
-    "github.com/gorilla/mux"
-    "github.com/juju/ratelimit"
+import (
+	"fmt"
+	"net/http"
+	"sync/atomic"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
-var (
-    // Define privacy levels
-    Public   PrivacyLevel = iota
-    Private
-    Sensitive
-
-    // Store encryption keys for each privacy level
-    encryptionKeys = map[PrivacyLevel][]byte{
-        Public:   []byte("publickey123456"),
-        Private:  []byte("privatekey123456"),
-        Sensitive: []byte("sensitivekey123456"),
-    }
-
-    // Create a sync.Pool to manage AES cipher blocks
-    cipherBlockPool = sync.Pool{
-        New: func() interface{} {
-            block, err := aes.NewCipher([]byte(encryptionKeys[Sensitive]))
-            if err != nil {
-                log.Fatalf("Error creating cipher block: %v", err)
-            }
-            return block
-        },
-    }
-
-    // Create rate limiters for encryption and decryption operations
-    encryptRateLimiter = ratelimit.NewBucketWithRate(100, 100)
-    decryptRateLimiter = ratelimit.NewBucketWithRate(100, 100)
-)
-
-// PrivacyLevel is an enumeration for privacy levels
-type PrivacyLevel int
-
-// Encrypt encrypts sensitive data
-func encrypt(data string) (string, error) {
-    // Acquire a cipher block from the pool
-    block := cipherBlockPool.Get().(cipher.Block)
-    defer cipherBlockPool.Put(block)
-
-    // Acquire a rate limit token
-    if err := encryptRateLimiter.Wait(context.Background()); err != nil {
-        return "", err
-    }
-
-    gcm, err := cipher.NewGCM(block)
-    if err != nil {
-        return "", err
-    }
-
-    nonce := make([]byte, gcm.NonceSize())
-    if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-        return "", err
-    }
-
-    encryptedData := gcm.Seal(nonce, nonce, []byte(data), nil)
-    return base64.StdEncoding.EncodeToString(encryptedData), nil
+// MutableCounter using an atomic int64 for concurrency-safe updates
+type MutableCounter struct {
+	count int64
 }
 
-// Decrypt decrypts sensitive data
-func decrypt(encryptedData string) (string, error) {
-    // Acquire a cipher block from the pool
-    block := cipherBlockPool.Get().(cipher.Block)
-    defer cipherBlockPool.Put(block)
-    
-    // Acquire a rate limit token
-    if err := decryptRateLimiter.Wait(context.Background()); err != nil {
-        return "", err
-    }
-
-    data, err := base64.StdEncoding.DecodeString(encryptedData)
-    if err != nil {
-        return "", err
-    }
-
-    gcm, err := cipher.NewGCM(block)
-    if err != nil {
-        return "", err
-    }
-
-    nonceSize := gcm.NonceSize()
-    if len(data) < nonceSize {
-        return "", fmt.Errorf("invalid data size")
-    }
-
-    nonce, ciphertext := data[:nonceSize], data[nonceSize:]
-    decryptedData, err := gcm.Open(nil, nonce, ciphertext, nil)
-    if err != nil {
-        return "", err
-    }
-
-    return string(decryptedData), nil
+func (c *MutableCounter) Increment() {
+	atomic.AddInt64(&c.count, 1)
 }
 
-// Handle query parameters with respect to their privacy level
-func queryParamHandler(w http.ResponseWriter, r *http.Request) {
-    queryParams := r.URL.Query()
+func (c *MutableCounter) GetCount() int64 {
+	return atomic.LoadInt64(&c.count)
+}
 
-    // Get the privacy level from the request context
-    privacyLevel, ok := r.Context().Value("privacyLevel").(PrivacyLevel)
-    if !ok {
-        http.Error(w, "Invalid privacy level", http.StatusBadRequest)
-        return
-    }
+// ImmutableCounter using an atomic pointer for concurrency-safe updates
+type ImmutableCounter struct {
+	count *int
+}
 
-    for key, value := range queryParams {
-        if len(value) == 0 {
-            continue
-        }
+func (c *ImmutableCounter) Increment() *ImmutableCounter {
+	newCount := *c.count + 1
+	return &ImmutableCounter{&newCount}
+}
 
-        var processedValue string
-
-        switch privacyLevel {
-        case Public:
-            processedValue = value[0] // Direct usage
-            fmt.Fprintf(w, "Public %s: %s\n", key, processedValue)
-        case Private, Sensitive:
-            // Encrypt the value
-            encryptedValue, err := encrypt(value[0])
-            if err != nil {
-                log.Printf("Encryption error: %v", err)
-                http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-                return
-            }
-            processedValue = encryptedValue
-            fmt.Fprintf(w, "%s %s (Encrypted): %s\n", privacyLevel, key, processedValue)
-        }
-    }
+func (c *ImmutableCounter) GetCount() int {
+	return *c.count
 }
 
 func main() {
-    r := mux.NewRouter()
+	e := echo.New()
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
 
-    // Middleware to set the privacy level based on the route
-    privacyLevelMiddleware := func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            vars := mux.Vars(r)
-            privacyLevelStr := vars["privacyLevel"]
+	// Initialize mutable and immutable counters
+	mutableCounter := &MutableCounter{}
+	immutableCounter := &ImmutableCounter{count: new(int)}
 
-            var privacyLevel PrivacyLevel
-            switch privacyLevelStr {
-            case "public":
-                privacyLevel = Public
-            case "private":
-                privacyLevel = Private
-            case "sensitive":
-                privacyLevel = Sensitive
-            default:
-                http.Error(w, "Invalid privacy level", http.StatusBadRequest)
-                return
-            }
+	// Mutable counter endpoint
+	e.GET("/mutable-increment", func(c echo.Context) error {
+		mutableCounter.Increment()
+		return c.String(http.StatusOK, "Mutable counter incremented")
+	})
 
-            // Set the privacy level in the request context
-            ctx := context.WithValue(r.Context(), "privacyLevel", privacyLevel)
-            next.ServeHTTP(w, r.WithContext(ctx))
-        })
-    }
+	e.GET("/mutable-count", func(c echo.Context) error {
+		count := mutableCounter.GetCount()
+		return c.String(http.StatusOK, fmt.Sprintf("Mutable counter: %d", count))
+	})
 
-    r.HandleFunc("/query/{privacyLevel}", privacyLevelMiddleware(queryParamHandler))
+	// Immutable counter endpoint
+	e.GET("/immutable-increment", func(c echo.Context) error {
+		immutableCounter = immutableCounter.Increment()
+		return c.String(http.StatusOK, "Immutable counter incremented")
+	})
 
-    fmt.Println("Server is listening on :8080")
-    if err := http.ListenAndServe(":8080", r); err != nil {
-        log.Fatal(err)
-    }
+	e.GET("/immutable-count", func(c echo.Context) error {
+		count := immutableCounter.GetCount()
+		return c.String(http.StatusOK, fmt.Sprintf("Immutable counter: %d", count))
+	})
+
+	// Start the server
+	go func() {
+		if err := e.Start(":1323"); err != nil {
+			e.Logger.Info("shutting down the server")
+		}
+	}()
+
+	// benchmarking
+	benchmarkResults := make(chan time.Duration)
+	go benchmarkMutable(mutableCounter, benchmarkResults)
+	go benchmarkImmutable(immutableCounter, benchmarkResults)
+
+	for i := 0; i < 2; i++ {
+		duration := <-benchmarkResults
+		fmt.Printf("Benchmark Result %d: %s\n", i+1, duration)
+	}
+}
+
+func benchmarkMutable(counter *MutableCounter, result chan<- time.Duration) {
+	start := time.Now()
+	for i := 0; i < 1000000; i++ {
+		counter.Increment()
+	}
+	result <- time.Since(start)
+}
+
+func benchmarkImmutable(counter *ImmutableCounter, result chan<- time.Duration) {
+	start := time.Now()
+	for i := 0; i < 1000000; i++ {
+		counter = counter.Increment()
+	}
+	result <- time.Since(start)
 }
