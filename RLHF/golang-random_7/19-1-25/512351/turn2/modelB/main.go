@@ -1,116 +1,86 @@
-package main  
-import (  
-    "crypto/aes"  
-    "crypto/cipher"  
-    "crypto/rand"  
-    "encoding/base64"  
-    "errors"  
-    "fmt"  
-    "io"  
-    "log"  
-    "net/http"  
-    "strings"  
-    "sync"  
-)  
-  
-type PrivacyLevel int  
-const (  
-    Public PrivacyLevel = iota  
-    Private  
-    Sensitive  
-)  
-  
-var privacyLevels = map[string]PrivacyLevel{  
-    "user_id":      Sensitive,  
-    "email":        Private,  
-    "query":       Public,  
-    "custom_param": Sensitive,  
-}  
-  
-var encryptionKey = "your-32-byte-encryption-key-here" // Replace this with a secure key
+package main
 
-var mu sync.Mutex // To protect concurrent access to the encryption/decryption
+import (
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+)
 
-func init() {
-    if len(encryptionKey) != 32 {
-        log.Fatal("Encryption key must be 32 bytes long")
-    }
+const (
+	// The directory to monitor for retention policy enforcement.
+	dataDir = "./data"
+	// The duration after which files should be deleted.
+	retentionDuration = 30 * 24 * time.Hour
+	// The number of goroutines to use for parallel file processing.
+	concurrency = 10
+	// The log file path for deletion errors.
+	errorLogFile = "deletion_errors.log"
+)
+
+// enforceDataRetention iterates through files in the directory and deletes those older than the specified duration.
+func enforceDataRetention(dir string, duration time.Duration, errorLog *log.Logger) {
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	fileChan := make(chan string, concurrency)
+
+	go func() {
+		wg.Wait()
+		close(fileChan)
+	}()
+
+	// Start worker goroutines
+	for i := 0; i < concurrency; i++ {
+		go worker(fileChan, duration, errorLog)
+	}
+
+	// Recursively walk through the directory and send file paths to the worker goroutines
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return fmt.Errorf("error accessing file %s: %v", path, err)
+		}
+
+		if !info.IsDir() && time.Since(info.ModTime()) > duration {
+			wg.Done()
+			fileChan <- path
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.Fatalf("Error while walking directory: %v", err)
+	}
 }
 
-// Encrypt data for privacy
-func encrypt(data string) (string, error) {
-    mu.Lock()
-    defer mu.Unlock()
-    block, err := aes.NewCipher([]byte(encryptionKey))
-    if err != nil {
-        return "", err
-    }
-
-    gcm, err := cipher.NewGCM(block)
-    if err != nil {
-        return "", err
-    }
-
-    nonce := make([]byte, gcm.NonceSize())
-    if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-        return "", err
-    }
-
-    encryptedData := gcm.Seal(nonce, nonce, []byte(data), nil)
-    return base64.URLEncoding.EncodeToString(encryptedData), nil
+func worker(fileChan chan string, duration time.Duration, errorLog *log.Logger) {
+	for filePath := range fileChan {
+		if err := os.Remove(filePath); err != nil {
+			errorLog.Printf("Error deleting file %s: %v", filePath, err)
+		} else {
+			log.Printf("Deleted file: %s (older than %v)\n", filePath, duration)
+		}
+	}
 }
-  
-// Decrypt data 
-func decrypt(encryptedData string) (string, error) {  
-    mu.Lock()
-    defer mu.Unlock()
-    data, err := base64.URLEncoding.DecodeString(encryptedData)  
-    if err != nil {  
-        return "", err  
-    }  
-  
-    block, err := aes.NewCipher([]byte(encryptionKey))  
-    if err != nil {  
-        return "", err  
-    }  
-  
-    gcm, err := cipher.NewGCM(block)  
-    if err != nil {  
-        return "", err  
-    }  
-  
-    nonceSize := gcm.NonceSize()  
-    if len(data) < nonceSize {  
-        return "", errors.New("invalid data size")  
-    }  
-  
-    nonce, ciphertext := data[:nonceSize], data[nonceSize:]  
-    decryptedData, err := gcm.Open(nil, nonce, ciphertext, nil)  
-    if err != nil {  
-        return "", err  
-    }  
-  
-    return string(decryptedData), nil  
-}  
-  
-func getPrivacyLevel(param string) PrivacyLevel {  
-    if privacyLevel, ok := privacyLevels[strings.ToLower(param)]; ok {  
-        return privacyLevel  
-    }  
-    return Public // Default privacy level for unknown parameters  
-}  
-  
-func isSensitive(privacyLevel PrivacyLevel) bool {  
-    return privacyLevel >= Sensitive  
-}  
-  
-func handleQueryParams(w http.ResponseWriter, r *http.Request) {  
-    params := r.URL.Query()  
-    for key, value := range params {  
-        privacyLevel := getPrivacyLevel(key)  
-        encryptedValue, err := encrypt(value[0])  
-        if err != nil {  
-            log.Printf("Error encrypting value for %s: %v", key, err)  
-            http.Error(w, "Internal Server Error", http.StatusInternalServerError)  
-            return  
-        }
+
+func main() {
+	// Create a logger for deletion errors
+	errorLogFile, err := os.OpenFile(errorLogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("Error opening error log file: %v", err)
+	}
+	defer errorLogFile.Close()
+	errorLog := log.New(errorLogFile, "", log.LstdFlags)
+
+	// Check if the data directory exists
+	if _, err := os.Stat(dataDir); err != nil {
+		log.Fatalf("Error accessing data directory: %v", err)
+	}
+
+	enforceDataRetention(dataDir, retentionDuration, errorLog)
+
+	log.Println("Data retention enforcement complete.")
+}

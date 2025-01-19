@@ -1,98 +1,59 @@
 package main
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
+	"os"
+	"path/filepath"
+	"time"
 )
 
-// Defined privacy levels
-type PrivacyLevel int
-
-const (
-	Public PrivacyLevel = iota
-	Private
-	Sensitive
-)
-
-const encryptionKey = "examplekey123456" // AES key for encryption (16 bytes)
-
-var paramPrivacyLevels = map[string]PrivacyLevel{
-	"username": Public,
-	"email":    Private,
-	"ssn":      Sensitive,
+// RetentionPolicy defines the rules for file retention
+type RetentionPolicy struct {
+	MaxAge time.Duration // Maximum age a file can have before it should be deleted
 }
 
-// Encrypt sensitive data
-func encrypt(data string) (string, error) {
-	block, err := aes.NewCipher([]byte(encryptionKey))
-	if err != nil {
-		return "", err
-	}
+// enforceDataRetention deletes files older than MaxAge in the given directory
+func enforceDataRetention(directory string, policy RetentionPolicy) error {
+	now := time.Now()
 
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", err
-	}
-
-	encryptedData := gcm.Seal(nonce, nonce, []byte(data), nil)
-	return base64.StdEncoding.EncodeToString(encryptedData), nil
-}
-
-// Handle query parameters with respect to their privacy level
-func queryParamHandler(w http.ResponseWriter, r *http.Request) {
-	queryParams := r.URL.Query()
-
-	for key, value := range queryParams {
-		if len(value) == 0 {
-			continue
+	// Walk through the directory
+	err := filepath.Walk(directory, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return fmt.Errorf("error accessing file %s: %v", path, err)
 		}
 
-		var processedValue string
+		// Skip directories
+		if info.IsDir() {
+			return nil
+		}
 
-		switch paramPrivacyLevels[key] {
-		case Public:
-			processedValue = value[0] // Direct usage
-			fmt.Fprintf(w, "Public %s: %s\n", key, processedValue)
-
-		case Private:
-			// Hash the value using HMAC-SHA256
-			h := hmac.New(sha256.New, []byte(encryptionKey))
-			h.Write([]byte(value[0]))
-			processedValue = base64.StdEncoding.EncodeToString(h.Sum(nil))
-			fmt.Fprintf(w, "Private %s (Hashed): %s\n", key, processedValue)
-
-		case Sensitive:
-			// Encrypt the value
-			encryptedValue, err := encrypt(value[0])
+		// Calculate file age
+		fileAge := now.Sub(info.ModTime())
+		if fileAge > policy.MaxAge {
+			log.Printf("Deleting file: %s, Age: %v\n", path, fileAge)
+			err := os.Remove(path)
 			if err != nil {
-				log.Printf("Encryption error: %v", err)
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-				return
+				return fmt.Errorf("unable to delete file %s: %v", path, err)
 			}
-			processedValue = encryptedValue
-			fmt.Fprintf(w, "Sensitive %s (Encrypted): %s\n", key, processedValue)
 		}
-	}
+		return nil
+	})
+
+	return err
 }
 
 func main() {
-	http.HandleFunc("/query", queryParamHandler)
-
-	fmt.Println("Server is listening on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatal(err)
+	directory := "./data" // Update this path to the target directory
+	policy := RetentionPolicy{
+		MaxAge: 30 * 24 * time.Hour, // 30 days retention policy
 	}
+
+	// Enforce data retention policy
+	err := enforceDataRetention(directory, policy)
+	if err != nil {
+		log.Fatalf("Error enforcing data retention: %v", err)
+	}
+
+	log.Println("Data retention enforcement complete.")
 }
