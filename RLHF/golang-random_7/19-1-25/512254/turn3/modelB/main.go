@@ -1,88 +1,181 @@
-package main
+package main  
+import (  
+    "context"
+    "crypto/aes"
+    "crypto/cipher"
+    "crypto/rand"
+    "encoding/base64"
+    "fmt"
+    "io"
+    "log"
+    "net/http"
+    "sync"
+    "time"
 
-import (
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"time"
-
-	"github.com/sony/gobreaker"
+    "github.com/gorilla/mux"
+    "github.com/juju/ratelimit"
 )
 
-// Define a function to perform HTTP requests with retries and circuit breaker
-func executeRequestWithRetry(url string, retries int, backoff time.Duration, cb *gobreaker.CircuitBreaker) (*http.Response, error) {
-	var response *http.Response
-	var err error
+var (
+    // Define privacy levels
+    Public   PrivacyLevel = iota
+    Private
+    Sensitive
 
-	for i := 0; i < retries; i++ {
-		log.Printf("Attempt %d for %s\n", i+1, url)
+    // Store encryption keys for each privacy level
+    encryptionKeys = map[PrivacyLevel][]byte{
+        Public:   []byte("publickey123456"),
+        Private:  []byte("privatekey123456"),
+        Sensitive: []byte("sensitivekey123456"),
+    }
 
-		// Execute using the circuit breaker
-		result, err := cb.Execute(func() (interface{}, error) {
-			return makeRequest(url)
-		})
+    // Create a sync.Pool to manage AES cipher blocks
+    cipherBlockPool = sync.Pool{
+        New: func() interface{} {
+            block, err := aes.NewCipher([]byte(encryptionKeys[Sensitive]))
+            if err != nil {
+                log.Fatalf("Error creating cipher block: %v", err)
+            }
+            return block
+        },
+    }
 
-		if err == nil {
-			response = result.(*http.Response)
-			return response, nil
-		}
+    // Create rate limiters for encryption and decryption operations
+    encryptRateLimiter = ratelimit.NewBucketWithRate(100, 100)
+    decryptRateLimiter = ratelimit.NewBucketWithRate(100, 100)
+)
 
-		log.Printf("Error: %v\n", err)
-		time.Sleep(backoff)
+// PrivacyLevel is an enumeration for privacy levels
+type PrivacyLevel int
 
-		// Increase backoff interval exponentially
-		backoff *= 2
-	}
+// Encrypt encrypts sensitive data
+func encrypt(data string) (string, error) {
+    // Acquire a cipher block from the pool
+    block := cipherBlockPool.Get().(cipher.Block)
+    defer cipherBlockPool.Put(block)
 
-	return response, err
+    // Acquire a rate limit token
+    if err := encryptRateLimiter.Wait(context.Background()); err != nil {
+        return "", err
+    }
+
+    gcm, err := cipher.NewGCM(block)
+    if err != nil {
+        return "", err
+    }
+
+    nonce := make([]byte, gcm.NonceSize())
+    if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+        return "", err
+    }
+
+    encryptedData := gcm.Seal(nonce, nonce, []byte(data), nil)
+    return base64.StdEncoding.EncodeToString(encryptedData), nil
 }
 
-// makeRequest performs the actual HTTP GET request
-func makeRequest(url string) (*http.Response, error) {
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
+// Decrypt decrypts sensitive data
+func decrypt(encryptedData string) (string, error) {
+    // Acquire a cipher block from the pool
+    block := cipherBlockPool.Get().(cipher.Block)
+    defer cipherBlockPool.Put(block)
+    
+    // Acquire a rate limit token
+    if err := decryptRateLimiter.Wait(context.Background()); err != nil {
+        return "", err
+    }
+
+    data, err := base64.StdEncoding.DecodeString(encryptedData)
+    if err != nil {
+        return "", err
+    }
+
+    gcm, err := cipher.NewGCM(block)
+    if err != nil {
+        return "", err
+    }
+
+    nonceSize := gcm.NonceSize()
+    if len(data) < nonceSize {
+        return "", fmt.Errorf("invalid data size")
+    }
+
+    nonce, ciphertext := data[:nonceSize], data[nonceSize:]
+    decryptedData, err := gcm.Open(nil, nonce, ciphertext, nil)
+    if err != nil {
+        return "", err
+    }
+
+    return string(decryptedData), nil
+}
+
+// Handle query parameters with respect to their privacy level
+func queryParamHandler(w http.ResponseWriter, r *http.Request) {
+    queryParams := r.URL.Query()
+
+    // Get the privacy level from the request context
+    privacyLevel, ok := r.Context().Value("privacyLevel").(PrivacyLevel)
+    if !ok {
+        http.Error(w, "Invalid privacy level", http.StatusBadRequest)
+        return
+    }
+
+    for key, value := range queryParams {
+        if len(value) == 0 {
+            continue
+        }
+
+        var processedValue string
+
+        switch privacyLevel {
+        case Public:
+            processedValue = value[0] // Direct usage
+            fmt.Fprintf(w, "Public %s: %s\n", key, processedValue)
+        case Private, Sensitive:
+            // Encrypt the value
+            encryptedValue, err := encrypt(value[0])
+            if err != nil {
+                log.Printf("Encryption error: %v", err)
+                http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+                return
+            }
+            processedValue = encryptedValue
+            fmt.Fprintf(w, "%s %s (Encrypted): %s\n", privacyLevel, key, processedValue)
+        }
+    }
 }
 
 func main() {
-	// Configure the circuit breaker settings
-	cbSettings := gobreaker.Settings{
-		Name:        "HTTP GET Circuit Breaker",
-		MaxRequests: 5,
-		Interval:    5 * time.Second,
-		Timeout:     30 * time.Second,
-		ReadyToTrip: func(counts gobreaker.Counts) bool {
-			return counts.ConsecutiveFailures > 3
-		},
-		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
-			log.Printf("State changed in %s from %s to %s", name, from, to)
-		},
-	}
-	cb := gobreaker.NewCircuitBreaker(cbSettings)
+    r := mux.NewRouter()
 
-	url := "http://example.com"
-	retries := 3
-	initialBackoff := 2 * time.Second
+    // Middleware to set the privacy level based on the route
+    privacyLevelMiddleware := func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            vars := mux.Vars(r)
+            privacyLevelStr := vars["privacyLevel"]
 
-	resp, err := executeRequestWithRetry(url, retries, initialBackoff, cb)
-	if err != nil {
-		log.Fatalf("Failed to get response: %v\n", err)
-		return
-	}
-	defer resp.Body.Close()
+            var privacyLevel PrivacyLevel
+            switch privacyLevelStr {
+            case "public":
+                privacyLevel = Public
+            case "private":
+                privacyLevel = Private
+            case "sensitive":
+                privacyLevel = Sensitive
+            default:
+                http.Error(w, "Invalid privacy level", http.StatusBadRequest)
+                return
+            }
 
-	// Read the response body using io.ReadAll
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("Failed to read response body: %v\n", err)
-	}
+            // Set the privacy level in the request context
+            ctx := context.WithValue(r.Context(), "privacyLevel", privacyLevel)
+            next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
 
-	log.Printf("Successfully fetched: %s\n", resp.Status)
-	fmt.Println("Response Body:", string(body))
+    r.HandleFunc("/query/{privacyLevel}", privacyLevelMiddleware(queryParamHandler))
+
+    fmt.Println("Server is listening on :8080")
+    if err := http.ListenAndServe(":8080", r); err != nil {
+        log.Fatal(err)
+    }
 }
