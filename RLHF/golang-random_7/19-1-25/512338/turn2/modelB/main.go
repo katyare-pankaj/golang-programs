@@ -1,116 +1,71 @@
-package main  
-import (  
-    "crypto/aes"  
-    "crypto/cipher"  
-    "crypto/rand"  
-    "encoding/base64"  
-    "errors"  
-    "fmt"  
-    "io"  
-    "log"  
-    "net/http"  
-    "strings"  
-    "sync"  
-)  
-  
-type PrivacyLevel int  
-const (  
-    Public PrivacyLevel = iota  
-    Private  
-    Sensitive  
-)  
-  
-var privacyLevels = map[string]PrivacyLevel{  
-    "user_id":      Sensitive,  
-    "email":        Private,  
-    "query":       Public,  
-    "custom_param": Sensitive,  
-}  
-  
-var encryptionKey = "your-32-byte-encryption-key-here" // Replace this with a secure key
+package main
 
-var mu sync.Mutex // To protect concurrent access to the encryption/decryption
+import (
+	"fmt"
+	"runtime"
+	"sync"
+)
 
-func init() {
-    if len(encryptionKey) != 32 {
-        log.Fatal("Encryption key must be 32 bytes long")
-    }
+const (
+	numWorkers    = 10
+	numIterations = 1000000
+)
+
+// WorkerResult stores the result of a worker's task
+type WorkerResult struct {
+	Index int
+	Value int
 }
 
-// Encrypt data for privacy
-func encrypt(data string) (string, error) {
-    mu.Lock()
-    defer mu.Unlock()
-    block, err := aes.NewCipher([]byte(encryptionKey))
-    if err != nil {
-        return "", err
-    }
+func worker(wg *sync.WaitGroup, input chan int, output chan WorkerResult) {
+	defer wg.Done()
 
-    gcm, err := cipher.NewGCM(block)
-    if err != nil {
-        return "", err
-    }
+	for index := range input {
+		// Simulate work
+		result := WorkerResult{
+			Index: index,
+			Value: index * index,
+		}
 
-    nonce := make([]byte, gcm.NonceSize())
-    if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-        return "", err
-    }
-
-    encryptedData := gcm.Seal(nonce, nonce, []byte(data), nil)
-    return base64.URLEncoding.EncodeToString(encryptedData), nil
+		output <- result
+	}
 }
-  
-// Decrypt data 
-func decrypt(encryptedData string) (string, error) {  
-    mu.Lock()
-    defer mu.Unlock()
-    data, err := base64.URLEncoding.DecodeString(encryptedData)  
-    if err != nil {  
-        return "", err  
-    }  
-  
-    block, err := aes.NewCipher([]byte(encryptionKey))  
-    if err != nil {  
-        return "", err  
-    }  
-  
-    gcm, err := cipher.NewGCM(block)  
-    if err != nil {  
-        return "", err  
-    }  
-  
-    nonceSize := gcm.NonceSize()  
-    if len(data) < nonceSize {  
-        return "", errors.New("invalid data size")  
-    }  
-  
-    nonce, ciphertext := data[:nonceSize], data[nonceSize:]  
-    decryptedData, err := gcm.Open(nil, nonce, ciphertext, nil)  
-    if err != nil {  
-        return "", err  
-    }  
-  
-    return string(decryptedData), nil  
-}  
-  
-func getPrivacyLevel(param string) PrivacyLevel {  
-    if privacyLevel, ok := privacyLevels[strings.ToLower(param)]; ok {  
-        return privacyLevel  
-    }  
-    return Public // Default privacy level for unknown parameters  
-}  
-  
-func isSensitive(privacyLevel PrivacyLevel) bool {  
-    return privacyLevel >= Sensitive  
-}  
-  
-func handleQueryParams(w http.ResponseWriter, r *http.Request) {  
-    params := r.URL.Query()  
-    for key, value := range params {  
-        privacyLevel := getPrivacyLevel(key)  
-        encryptedValue, err := encrypt(value[0])  
-        if err != nil {  
-            log.Printf("Error encrypting value for %s: %v", key, err)  
-            http.Error(w, "Internal Server Error", http.StatusInternalServerError)  
-            return  
-        }
+
+func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	wg := &sync.WaitGroup{}
+	input := make(chan int, numWorkers)
+	output := make(chan WorkerResult, numWorkers)
+
+	wg.Add(numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		go worker(wg, input, output)
+	}
+
+	go func() {
+		for i := 0; i < numIterations; i++ {
+			input <- i
+		}
+		close(input)
+	}()
+
+	results := make([]WorkerResult, numIterations)
+
+	for i := 0; i < numIterations; i++ {
+		result := <-output
+		results[result.Index] = result
+	}
+
+	wg.Wait()
+
+	// Verify results
+	for i := 0; i < numIterations; i++ {
+		if results[i].Index != i || results[i].Value != i*i {
+			fmt.Println("Invalid result:", results[i])
+			return
+		}
+	}
+
+	fmt.Println("All results are correct!")
+}
