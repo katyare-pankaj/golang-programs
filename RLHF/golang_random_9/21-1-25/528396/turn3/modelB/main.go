@@ -2,53 +2,79 @@ package main
 
 import (
 	"fmt"
-	"sort"
+	"math/rand"
+	"sync"
+	"time"
 )
 
-func mode(data []int) int {
-	// Create a copy of the original slice to preserve it
-	copyData := append([]int(nil), data...)
-	sort.Ints(copyData)
+// Transaction represents a single financial transaction.
+type Transaction struct {
+	ID     int
+	Amount float64
+}
 
-	if len(copyData) == 0 {
-		return 0
+// simulateTransactionProcessing simulates the processing of a single Transaction.
+// It returns an error if the processing fails.
+func simulateTransactionProcessing(transaction Transaction) error {
+	// Simulate a random processing time (0 to 500 milliseconds)
+	time.Sleep(time.Millisecond * time.Duration(rand.Intn(500)))
+
+	// Simulate a 10% chance of failure
+	if rand.Intn(10) == 0 {
+		return fmt.Errorf("transaction ID %d processing failed", transaction.ID)
 	}
 
-	count := 1
-	maxCount := 1
-	mode := copyData[0]
-
-	for i := 1; i < len(copyData); i++ {
-		if copyData[i] == copyData[i-1] {
-			count++
-		} else {
-			if count > maxCount {
-				maxCount = count
-				mode = copyData[i-1]
-			}
-			count = 1
-		}
-	}
-
-	// Check for the last run of elements
-	if count > maxCount {
-		mode = copyData[len(copyData)-1]
-	}
-
-	return mode
+	return nil
 }
 
 func main() {
-	// Original data slice (immutable)
-	originalData := []int{1, 3, 5, 3, 7, 3, 5, 8, 1}
+	rand.Seed(time.Now().UnixNano()) // Seed the random number generator
 
-	fmt.Println("Original data:", originalData)
+	// Define a slice of transactions to process
+	transactions := []Transaction{
+		{ID: 1, Amount: 100.00},
+		{ID: 2, Amount: 50.00},
+		{ID: 3, Amount: 75.00},
+		{ID: 4, Amount: 20.00},
+		{ID: 5, Amount: 90.00},
+		// Add more transactions as needed
+	}
 
-	// Calculate the mode of the data
-	modeValue := mode(originalData)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	totalProcessed := 0.0
+	errors := make([]error, 0)
 
-	fmt.Println("Mode:", modeValue)
+	// Launch goroutines to process each transaction concurrently
+	for _, transaction := range transactions {
+		wg.Add(1)
 
-	// Confirm that the original data remains unchanged
-	fmt.Println("Original data after mode calculation:", originalData)
+		go func(transaction Transaction) {
+			defer wg.Done()
+
+			if err := simulateTransactionProcessing(transaction); err != nil {
+				mu.Lock()
+				errors = append(errors, err)
+				mu.Unlock()
+			} else {
+				mu.Lock()
+				totalProcessed += transaction.Amount
+				mu.Unlock()
+			}
+		}(transaction)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Report any errors encountered during processing
+	if len(errors) > 0 {
+		fmt.Println("The following errors occurred during transaction processing:")
+		for _, err := range errors {
+			fmt.Println(err)
+		}
+	}
+
+	// Display the total amount processed
+	fmt.Printf("Total amount processed: %.2f\n", totalProcessed)
 }
