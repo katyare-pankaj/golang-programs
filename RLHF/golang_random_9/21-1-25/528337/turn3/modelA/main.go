@@ -2,31 +2,45 @@ package main
 
 import (
 	"fmt"
-	"sync"
 )
 
-func processData(data []int, wg *sync.WaitGroup, id int) {
-	defer wg.Done()
+// Function to calculate the mode
+func mode(data []float64) []float64 {
+	// Create a frequency map to count occurrences of each number
+	frequencyMap := make(map[float64]int)
 	for _, value := range data {
-		fmt.Printf("Goroutine %d processing: %d\n", id, value)
+		frequencyMap[value]++
 	}
+
+	// Determine the maximum frequency
+	maxFrequency := 0
+	for _, frequency := range frequencyMap {
+		if frequency > maxFrequency {
+			maxFrequency = frequency
+		}
+	}
+
+	// Collect all numbers with the maximum frequency
+	var modes []float64
+	for number, frequency := range frequencyMap {
+		if frequency == maxFrequency {
+			modes = append(modes, number)
+		}
+	}
+
+	return modes
 }
 
 func main() {
-	var wg sync.WaitGroup
+	// Original data slice (immutable)
+	originalData := []float64{4.2, 2.7, 4.2, 8.1, 2.7, 4.2, 3.9}
 
-	dataSlices := [][]int{
-		{1, 2, 3},
-		{4, 5, 6},
-		{7, 8, 9},
-		{10, 11, 12},
-	}
+	// Calculate the mode
+	modes := mode(originalData)
 
-	for id, data := range dataSlices {
-		wg.Add(1)
-		go processData(data, &wg, id+1) // id+1 to make identifiers start from 1
-	}
+	fmt.Println("Original data:", originalData)
+	fmt.Println("Mode(s):", modes)
 
-	wg.Wait()
-	fmt.Println("All data processed.")
+	// Confirm that the original data remains unchanged
+	fmt.Println("Original data after calculations:", originalData)
 }

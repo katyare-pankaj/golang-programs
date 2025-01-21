@@ -2,30 +2,53 @@ package main
 
 import (
 	"fmt"
-	"sync"
+	"sort"
 )
 
-func processData(data []int, wg *sync.WaitGroup, id int) {
-	defer wg.Done()
-	for _, value := range data {
-		fmt.Printf("Goroutine %d processing: %d\n", id, value)
+func mode(data []int) int {
+	// Create a copy of the original slice to preserve it
+	copyData := append([]int(nil), data...)
+	sort.Ints(copyData)
+
+	if len(copyData) == 0 {
+		return 0
 	}
+
+	count := 1
+	maxCount := 1
+	mode := copyData[0]
+
+	for i := 1; i < len(copyData); i++ {
+		if copyData[i] == copyData[i-1] {
+			count++
+		} else {
+			if count > maxCount {
+				maxCount = count
+				mode = copyData[i-1]
+			}
+			count = 1
+		}
+	}
+
+	// Check for the last run of elements
+	if count > maxCount {
+		mode = copyData[len(copyData)-1]
+	}
+
+	return mode
 }
 
 func main() {
-	var wg sync.WaitGroup
-	dataSlices := [][]int{
-		{1, 2, 3},
-		{4, 5, 6},
-		{7, 8, 9},
-		{10, 11, 12},
-	}
+	// Original data slice (immutable)
+	originalData := []int{1, 3, 5, 3, 7, 3, 5, 8, 1}
 
-	for id, data := range dataSlices {
-		wg.Add(1)
-		go processData(data, &wg, id+1) // Add +1 to make id start from 1
-	}
+	fmt.Println("Original data:", originalData)
 
-	wg.Wait()
-	fmt.Println("All data processed.")
+	// Calculate the mode of the data
+	modeValue := mode(originalData)
+
+	fmt.Println("Mode:", modeValue)
+
+	// Confirm that the original data remains unchanged
+	fmt.Println("Original data after mode calculation:", originalData)
 }
