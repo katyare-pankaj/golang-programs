@@ -1,60 +1,79 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"math"
-	"sort"
+	"math/rand"
+	"sync"
+	"time"
 )
 
-func mean(data []float64) float64 {
-	sum := 0.0
-	for _, v := range data {
-		sum += v
-	}
-	return sum / float64(len(data))
+type DataItem struct {
+	ID    int
+	Value string
 }
 
-func median(data []float64) float64 {
-	sortedData := append([]float64(nil), data...) // Create a copy of the slice
-	sort.Float64s(sortedData)
-	n := len(sortedData)
-	if n == 0 {
-		return 0
-	}
-	if n%2 == 0 {
-		midIndex1 := n/2 - 1
-		midIndex2 := n / 2
-		return (sortedData[midIndex1] + sortedData[midIndex2]) / 2
-	} else {
-		midIndex := n / 2
-		return sortedData[midIndex]
-	}
+type MigrationResult struct {
+	Item DataItem
+	Err  error
 }
 
-func standardDeviation(data []float64) float64 {
-	avg := mean(data)
-	var sumSquaredDifferences float64
-	for _, v := range data {
-		sumSquaredDifferences += (v - avg) * (v - avg)
+func migrateData(item DataItem, resultChan chan<- MigrationResult) {
+	defer close(resultChan)
+	err := SimulateMigration(item)
+	resultChan <- MigrationResult{Item: item, Err: err}
+}
+
+func SimulateMigration(item DataItem) error {
+	time.Sleep(time.Millisecond * time.Duration(rand.Intn(1000)))
+	if rand.Intn(100) < 10 {
+		return errors.New("migration failed")
 	}
-	return math.Sqrt(sumSquaredDifferences / float64(len(data)))
+	return nil
 }
 
 func main() {
-	// Original data slice (immutable)
-	originalData := []float64{2.3, 4.5, 7.8, 1.2, 3.6, 5.4}
+	rand.Seed(time.Now().UnixNano())
+	dataItems := []DataItem{
+		{ID: 1, Value: "Data1"},
+		{ID: 2, Value: "Data2"},
+		// Add more data items as needed
+	}
 
-	fmt.Println("Original data:", originalData)
+	var wg sync.WaitGroup
+	numGoroutines := 10 // Adjust the number of goroutines as needed for concurrency
+	resultChan := make(chan MigrationResult)
 
-	// Calculate mean, median, and standard deviation
-	meanValue := mean(originalData)
-	medianValue := median(originalData)
-	stdDevValue := standardDeviation(originalData)
+	for _, item := range dataItems {
+		wg.Add(1)
+		go func(item DataItem) {
+			defer wg.Done()
+			migrateData(item, resultChan)
+		}(item)
+	}
 
-	fmt.Println("Mean:", meanValue)
-	fmt.Println("Median:", medianValue)
-	fmt.Println("Standard Deviation:", stdDevValue)
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
 
-	// Confirm that the original data remains unchanged
-	fmt.Println("Original data after calculations:", originalData)
+	migrationSuccesses := 0
+	var migrationErrors []error
+
+	for result := range resultChan {
+		if result.Err != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("failed to migrate item ID %d: %w", result.Item.ID, result.Err))
+		} else {
+			migrationSuccesses++
+		}
+	}
+
+	if len(migrationErrors) == 0 {
+		fmt.Printf("All %d data items migrated successfully.\n", migrationSuccesses)
+	} else {
+		fmt.Printf("%d data items migrated successfully, but the following %d errors occurred:\n", migrationSuccesses, len(migrationErrors))
+		for _, err := range migrationErrors {
+			fmt.Println(err)
+		}
+	}
 }

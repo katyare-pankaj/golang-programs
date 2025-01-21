@@ -2,68 +2,74 @@ package main
 
 import (
 	"fmt"
-	"math"
-	"sort"
+	"log"
+	"math/rand"
+	"sync"
+	"time"
 )
 
-// Mean calculates the mean of a slice of numbers.
-func Mean(data []float64) float64 {
-	sum := 0.0
-	for _, value := range data {
-		sum += value
-	}
-	return sum / float64(len(data))
+// Record represents a single unit of data to be migrated.
+type Record struct {
+	ID    int
+	Value string
 }
 
-// Median calculates the median of a slice of numbers.
-// Note: The original data slice is not modified.
-func Median(data []float64) float64 {
-	n := len(data)
-	if n == 0 {
-		panic("cannot calculate median of an empty slice")
+// simulateMigration simulates the processing of migrating a single Record.
+// It returns an error if the migration fails.
+func simulateMigration(record Record) error {
+	// Simulate a random migration failure
+	if rand.Intn(100) < 10 { // 10% chance of failure
+		return fmt.Errorf("migration failed for record ID %d", record.ID)
 	}
-
-	// Create a copy of the data to sort
-	sortedData := append([]float64(nil), data...)
-	sort.Float64s(sortedData)
-
-	// Calculate median
-	if n%2 == 1 {
-		return sortedData[n/2]
-	}
-	return (sortedData[n/2-1] + sortedData[n/2]) / 2
-}
-
-// StandardDeviation calculates the standard deviation of a slice of numbers.
-func StandardDeviation(data []float64) float64 {
-	if len(data) == 0 {
-		panic("cannot calculate standard deviation of an empty slice")
-	}
-
-	mean := Mean(data)
-	var sumSquares float64
-	for _, value := range data {
-		sumSquares += math.Pow(value-mean, 2)
-	}
-	variance := sumSquares / float64(len(data))
-	return math.Sqrt(variance)
+	// Simulate a random processing time
+	time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
+	fmt.Printf("Migrated record ID %d successfully.\n", record.ID)
+	return nil
 }
 
 func main() {
-	// Original immutable data slice
-	data := []float64{10, 20, 30, 40, 50}
+	rand.Seed(time.Now().UnixNano()) // Seed the random number generator for simulated behavior
 
-	// Calculate mean, median, and standard deviation
-	mean := Mean(data)
-	median := Median(data)
-	stdDev := StandardDeviation(data)
+	// Sample data records to migrate
+	records := []Record{
+		{ID: 1, Value: "Data1"},
+		{ID: 2, Value: "Data2"},
+		{ID: 3, Value: "Data3"},
+		{ID: 4, Value: "Data4"},
+		{ID: 5, Value: "Data5"},
+		// Add more records as needed
+	}
 
-	// Output the results
-	fmt.Printf("Data: %v\n", data)
-	fmt.Printf("Mean: %.2f\n", mean)
-	fmt.Printf("Median: %.2f\n", median)
-	fmt.Printf("Standard Deviation: %.2f\n", stdDev)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	errors := make([]error, 0)
 
-	// Check that the original data has not been modified
-	fmt.Printf("Original data (unchanged): %v\n", data)
+	// Iterate over each record and process them concurrently
+	for _, record := range records {
+		wg.Add(1) // Increment the WaitGroup counter
+
+		// Launch a goroutine to handle each record
+		go func(record Record) {
+			defer wg.Done() // Decrement the counter when the goroutine completes
+
+			if err := simulateMigration(record); err != nil {
+				mu.Lock()
+				errors = append(errors, err) // Safely handle errors using a mutex
+				mu.Unlock()
+			}
+		}(record)
+	}
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+
+	// Check and report any errors encountered during the migration
+	if len(errors) > 0 {
+		log.Println("Some migrations failed:")
+		for _, err := range errors {
+			log.Println(err)
+		}
+	} else {
+		fmt.Println("All records migrated successfully.")
+	}
 }
