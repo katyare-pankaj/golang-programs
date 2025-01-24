@@ -1,77 +1,50 @@
 package main
 
 import (
-	"bufio"
-	"errors"
+	"context"
 	"fmt"
-	"os"
-	"regexp"
-	"strings"
+	"sync"
+	"time"
 )
 
-// CustomError is a type that includes additional context about an error
-type CustomError struct {
-	Function string
-	Err      error
-}
+// simulateDatabaseQuery simulates executing a database query, respecting context cancellation.
+func simulateDatabaseQuery(ctx context.Context, id int, wg *sync.WaitGroup, ch chan<- string) {
+	defer wg.Done()
 
-func (e *CustomError) Error() string {
-	return fmt.Sprintf("error in %s: %v", e.Function, e.Err)
-}
+	// Simulate a query processing time
+	queryDuration := time.Duration(2+id%3) * time.Second
 
-// readInput prompts the user for input and returns the input along with any error
-func readInput() (string, error) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter a list of email addresses separated by commas: ")
-	text, err := reader.ReadString('\n')
-	if err != nil {
-		return "", &CustomError{Function: "readInput", Err: err}
+	select {
+	case <-time.After(queryDuration): // Simulate query taking some time
+		ch <- fmt.Sprintf("Query %d completed successfully", id)
+	case <-ctx.Done():
+		ch <- fmt.Sprintf("Query %d cancelled due to timeout", id)
 	}
-	text = strings.TrimSpace(text)
-	return text, nil
-}
-
-// validateEmails splits the input into emails and validates each email
-func validateEmails(input string) ([]string, error) {
-	if input == "" {
-		return nil, &CustomError{Function: "validateEmails", Err: errors.New("input is empty")}
-	}
-
-	emails := strings.Split(input, ",")
-	validEmails := []string{}
-	invalidEmails := []string{}
-
-	emailRegex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
-	re := regexp.MustCompile(emailRegex)
-
-	for _, email := range emails {
-		email = strings.TrimSpace(email)
-		if re.MatchString(email) {
-			validEmails = append(validEmails, email)
-		} else {
-			invalidEmails = append(invalidEmails, email)
-		}
-	}
-
-	if len(invalidEmails) > 0 {
-		return validEmails, &CustomError{Function: "validateEmails", Err: fmt.Errorf("invalid emails: %v", invalidEmails)}
-	}
-
-	return validEmails, nil
 }
 
 func main() {
-	input, err := readInput()
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
+	const timeout = 3 * time.Second
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Channel to capture results from each query
+	results := make(chan string, 5)
+
+	// Simulate 5 concurrent database queries
+	for i := 1; i <= 5; i++ {
+		wg.Add(1)
+		go simulateDatabaseQuery(ctx, i, &wg, results)
 	}
 
-	emails, err := validateEmails(input)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
+	// Wait for all queries to complete or be cancelled
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
 
-	fmt.Println("Valid emails:", emails)
+	// Collect and print results
+	for result := range results {
+		fmt.Println(result)
+	}
 }
