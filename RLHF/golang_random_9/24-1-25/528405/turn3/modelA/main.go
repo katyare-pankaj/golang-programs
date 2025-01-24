@@ -1,79 +1,77 @@
 package main
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
+	"os"
+	"regexp"
+	"strings"
 )
 
-// Product struct to represent a product in the warehouse
-type Product struct {
-	ID       int
-	Name     string
-	Quantity int
+// CustomError is a type that includes additional context about an error
+type CustomError struct {
+	Function string
+	Err      error
 }
 
-// Employee struct to represent each employee
-type Employee struct {
-	ID int
+func (e *CustomError) Error() string {
+	return fmt.Sprintf("error in %s: %v", e.Function, e.Err)
 }
 
-var products = []Product{
-	{ID: 1, Name: "Laptop", Quantity: 30},
-	{ID: 2, Name: "Smartphone", Quantity: 50},
-	{ID: 3, Name: "Headphones", Quantity: 100},
+// readInput prompts the user for input and returns the input along with any error
+func readInput() (string, error) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter a list of email addresses separated by commas: ")
+	text, err := reader.ReadString('\n')
+	if err != nil {
+		return "", &CustomError{Function: "readInput", Err: err}
+	}
+	text = strings.TrimSpace(text)
+	return text, nil
 }
 
-// Mutex for locking product list during updates
-var mutex = &sync.Mutex{}
+// validateEmails splits the input into emails and validates each email
+func validateEmails(input string) ([]string, error) {
+	if input == "" {
+		return nil, &CustomError{Function: "validateEmails", Err: errors.New("input is empty")}
+	}
 
-func (e Employee) restockProduct(productID, quantity int, wg *sync.WaitGroup) {
-	defer wg.Done()
+	emails := strings.Split(input, ",")
+	validEmails := []string{}
+	invalidEmails := []string{}
 
-	// Simulate restocking time
-	time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+	emailRegex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+	re := regexp.MustCompile(emailRegex)
 
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	for i, product := range products {
-		if product.ID == productID {
-			products[i].Quantity += quantity
-			fmt.Printf("EmployeeID: %d restocked ProductID: %d with Quantity: %d. New Quantity: %d\n", e.ID, productID, quantity, products[i].Quantity)
-			break
+	for _, email := range emails {
+		email = strings.TrimSpace(email)
+		if re.MatchString(email) {
+			validEmails = append(validEmails, email)
+		} else {
+			invalidEmails = append(invalidEmails, email)
 		}
 	}
+
+	if len(invalidEmails) > 0 {
+		return validEmails, &CustomError{Function: "validateEmails", Err: fmt.Errorf("invalid emails: %v", invalidEmails)}
+	}
+
+	return validEmails, nil
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-
-	var wg sync.WaitGroup
-
-	// Simulating different restocking tasks
-	restockingTasks := []struct {
-		employeeID int
-		productID  int
-		quantity   int
-	}{
-		{employeeID: 1, productID: 1, quantity: 10},
-		{employeeID: 2, productID: 2, quantity: 20},
-		{employeeID: 3, productID: 3, quantity: 5},
-		{employeeID: 4, productID: 1, quantity: 7},
-		{employeeID: 5, productID: 2, quantity: 10},
+	input, err := readInput()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
 	}
 
-	for _, task := range restockingTasks {
-		employee := Employee{ID: task.employeeID}
-		wg.Add(1)
-		go employee.restockProduct(task.productID, task.quantity, &wg)
+	emails, err := validateEmails(input)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
 	}
 
-	wg.Wait()
-
-	fmt.Println("\nAll restocking tasks completed.")
-	for _, product := range products {
-		fmt.Printf("ProductID: %d, ProductName: %s, Total Quantity: %d\n", product.ID, product.Name, product.Quantity)
-	}
+	fmt.Println("Valid emails:", emails)
 }
