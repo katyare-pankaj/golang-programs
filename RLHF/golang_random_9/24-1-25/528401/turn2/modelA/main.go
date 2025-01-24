@@ -1,68 +1,56 @@
 package main
 
 import (
-	"bufio"
-	"errors"
+	"context"
 	"fmt"
-	"os"
-	"strings"
+	"net/http"
+	"sync"
+	"time"
 )
 
-// CustomError is a struct that includes additional context about an error
-type CustomError struct {
-	Function string
-	Err      error
+// simulateRequest simulates processing a request that may take a while.
+// It will respect context cancellation when the request exceeds the timeout.
+func simulateRequest(ctx context.Context, id int, wg *sync.WaitGroup, ch chan<- string) {
+	defer wg.Done()
+
+	select {
+	case <-time.After(time.Duration(1+id) * time.Second): // Simulate varying processing time
+		ch <- fmt.Sprintf("Request %d processed", id)
+	case <-ctx.Done():
+		ch <- fmt.Sprintf("Request %d cancelled due to timeout", id)
+	}
 }
 
-func (e *CustomError) Error() string {
-	return fmt.Sprintf("error in %s: %v", e.Function, e.Err)
-}
+func apiHandler(w http.ResponseWriter, r *http.Request) {
+	const timeout = 3 * time.Second
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
-// readInput reads input from the console and returns an error if the input is empty
-func readInput() (string, error) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter some text: ")
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return "", &CustomError{Function: "readInput", Err: err}
+	results := make(chan string, 5) // Buffer for 5 requests
+
+	// Simulate processing 5 requests concurrently
+	for i := 1; i <= 5; i++ {
+		wg.Add(1)
+		go simulateRequest(ctx, i, &wg, results)
 	}
 
-	trimmedInput := strings.TrimSpace(input)
-	if trimmedInput == "" {
-		return "", &CustomError{Function: "readInput", Err: errors.New("input cannot be empty")}
+	// Wait for all requests to complete or be cancelled
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for result := range results {
+		fmt.Fprintln(w, result)
 	}
-
-	return trimmedInput, nil
-}
-
-// processInput converts the input to uppercase
-func processInput(input string) (string, error) {
-	if input == "" {
-		return "", &CustomError{Function: "processInput", Err: errors.New("empty input provided to processing")}
-	}
-	return strings.ToUpper(input), nil
-}
-
-// execute is the top-level function that chains the input reading and processing
-func execute() (string, error) {
-	input, err := readInput()
-	if err != nil {
-		return "", &CustomError{Function: "execute", Err: err}
-	}
-
-	processedInput, err := processInput(input)
-	if err != nil {
-		return "", &CustomError{Function: "execute", Err: err}
-	}
-
-	return processedInput, nil
 }
 
 func main() {
-	result, err := execute()
-	if err != nil {
-		fmt.Printf("An error occurred: %v\n", err)
-	} else {
-		fmt.Printf("Processed input: %s\n", result)
+	http.HandleFunc("/simulate", apiHandler)
+	port := ":8080"
+	fmt.Printf("Starting server on port %s\n", port)
+	if err := http.ListenAndServe(port, nil); err != nil {
+		fmt.Printf("Error starting server: %v\n", err)
 	}
 }

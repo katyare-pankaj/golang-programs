@@ -1,55 +1,42 @@
 package main
 
 import (
-	"bufio"
-	"errors"
+	"context"
 	"fmt"
-	"os"
-	"strings"
+	"sync"
+	"time"
 )
 
-// Function to read input from user
-func readInput() (string, error) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter your input: ")
-	text, err := reader.ReadString('\n')
-	if err != nil {
-		return "", &CustomError{Function: "readInput", Err: err}
+const (
+	numRequests    = 10
+	requestTimeout = 2 * time.Second
+)
+
+func processRequest(ctx context.Context, wg *sync.WaitGroup, requestID int) {
+	defer wg.Done()
+
+	// Simulate some work for the request
+	select {
+	case <-time.After(time.Duration((requestID+1)%4) * time.Second):
+		fmt.Printf("Request %d completed successfully\n", requestID)
+	case <-ctx.Done():
+		fmt.Printf("Request %d timed out\n", requestID)
 	}
-	text = strings.TrimSpace(text)
-	return text, nil
 }
 
-// Function to convert input to uppercase
-func convertToUppercase(input string) (string, error) {
-	if input == "" {
-		return "", &CustomError{Function: "convertToUppercase", Err: errors.New("input is empty")}
-	}
-	return strings.ToUpper(input), nil
-}
-
-// Custom error struct to track error origin
-type CustomError struct {
-	Function string
-	Err      error
-}
-
-func (e *CustomError) Error() string {
-	return fmt.Sprintf("error in %s: %v", e.Function, e.Err)
-}
-
-// Main function
 func main() {
-	input, err := readInput()
-	if err != nil {
-		fmt.Println("Error occurred while reading input:", err)
-		return
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+
+	// Start processing multiple requests concurrently
+	for i := 0; i < numRequests; i++ {
+		wg.Add(1)
+		go processRequest(ctx, &wg, i)
 	}
 
-	result, err := convertToUppercase(input)
-	if err != nil {
-		fmt.Println("Error occurred while converting input:", err)
-		return
-	}
-	fmt.Println("Converted input to uppercase:", result)
+	// Wait for all requests to complete or timeout
+	wg.Wait()
+
+	fmt.Println("All requests processed.")
 }
