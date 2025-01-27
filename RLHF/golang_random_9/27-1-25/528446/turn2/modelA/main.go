@@ -1,68 +1,67 @@
 package main
 
 import (
-	"bufio"
-	"errors"
-	"fmt"
 	"os"
-	"strings"
+	"sync"
+	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
-// CustomError is a struct that includes additional context about an error
-type CustomError struct {
-	Function string
-	Err      error
+// Task represents a unit of work to be processed by the worker pool.
+type Task struct {
+	ID int
 }
 
-func (e *CustomError) Error() string {
-	return fmt.Sprintf("error in %s: %v", e.Function, e.Err)
-}
+// worker is a function that processes tasks from the jobs channel and logs the output.
+func worker(id int, jobs <-chan Task, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-// readInput reads input from the console and returns an error if the input is empty
-func readInput() (string, error) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter some text: ")
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return "", &CustomError{Function: "readInput", Err: err}
+	for job := range jobs {
+		start := time.Now()
+		// Simulate some work with a sleep.
+		time.Sleep(time.Second)
+		log.Info().
+			Int("worker_id", id).
+			Int("task_id", job.ID).
+			Dur("duration", time.Since(start)).
+			Msg("Task completed")
 	}
-
-	trimmedInput := strings.TrimSpace(input)
-	if trimmedInput == "" {
-		return "", &CustomError{Function: "readInput", Err: errors.New("input cannot be empty")}
-	}
-
-	return trimmedInput, nil
-}
-
-// processInput converts the input to uppercase
-func processInput(input string) (string, error) {
-	if input == "" {
-		return "", &CustomError{Function: "processInput", Err: errors.New("empty input provided to processing")}
-	}
-	return strings.ToUpper(input), nil
-}
-
-// execute is the top-level function that chains the input reading and processing
-func execute() (string, error) {
-	input, err := readInput()
-	if err != nil {
-		return "", &CustomError{Function: "execute", Err: err}
-	}
-
-	processedInput, err := processInput(input)
-	if err != nil {
-		return "", &CustomError{Function: "execute", Err: err}
-	}
-
-	return processedInput, nil
 }
 
 func main() {
-	result, err := execute()
-	if err != nil {
-		fmt.Printf("An error occurred: %v\n", err)
-	} else {
-		fmt.Printf("Processed input: %s\n", result)
+	// Set up zerolog for structured logging.
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	// Create a WaitGroup for managing goroutines.
+	var wg sync.WaitGroup
+
+	// Number of workers and tasks.
+	numWorkers := 3
+	numTasks := 10
+
+	// Channel for tasks.
+	jobs := make(chan Task, numTasks)
+
+	// Start the workers.
+	for i := 1; i <= numWorkers; i++ {
+		wg.Add(1)
+		go worker(i, jobs, &wg)
 	}
+
+	// Send tasks to the workers.
+	for j := 1; j <= numTasks; j++ {
+		job := Task{ID: j}
+		log.Info().Int("task_id", j).Msg("Queueing task")
+		jobs <- job
+	}
+
+	// Close the jobs channel to indicate that no more tasks will be sent.
+	close(jobs)
+
+	// Wait for all workers to complete.
+	wg.Wait()
+
+	log.Info().Msg("All tasks completed")
 }
