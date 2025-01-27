@@ -1,94 +1,119 @@
 package main
 
 import (
-	"context"
-	"os"
-	"os/signal"
+	"fmt"
+	"net"
 	"sync"
-	"syscall"
 	"time"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
-// Task represents a unit of work to be processed by the worker pool.
-type Task struct {
-	ID int
+// ConnectionPool manages a fixed number of reusable connections.
+type ConnectionPool struct {
+	mu       sync.Mutex
+	cond     *sync.Cond
+	conns    []net.Conn
+	capacity int
+	active   int
 }
 
-// worker is a function that processes tasks from the jobs channel and logs the output.
-func worker(ctx context.Context, id int, jobs <-chan Task, wg *sync.WaitGroup) {
-	defer wg.Done()
+// NewConnectionPool initializes a ConnectionPool with a given capacity.
+func NewConnectionPool(capacity int) *ConnectionPool {
+	p := &ConnectionPool{
+		capacity: capacity,
+		conns:    make([]net.Conn, 0, capacity),
+		active:   0,
+	}
+	p.cond = sync.NewCond(&p.mu)
+	return p
+}
 
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info().Int("worker_id", id).Msg("Worker shutting down")
-			return
-		case job, ok := <-jobs:
-			if !ok {
-				log.Info().Int("worker_id", id).Msg("No more jobs, worker exiting")
+// Get retrieves a connection from the pool, or waits for one to become available.
+func (p *ConnectionPool) Get() (net.Conn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for len(p.conns) == 0 && p.active >= p.capacity {
+		p.cond.Wait() // Wait for a connection to be available.
+	}
+
+	// If there are available connections, reuse one
+	if len(p.conns) > 0 {
+		conn := p.conns[len(p.conns)-1]
+		p.conns = p.conns[:len(p.conns)-1]
+		return conn, nil
+	}
+
+	// Otherwise, create a new connection if under capacity
+	p.active++
+	return createConnection(), nil
+}
+
+// Put returns a connection to the pool, closing it if the pool is full or it is broken.
+func (p *ConnectionPool) Put(conn net.Conn) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if !isConnBroken(conn) && len(p.conns) < p.capacity {
+		p.conns = append(p.conns, conn)
+		p.cond.Signal() // Notify one waiting goroutine that a connection is available.
+	} else {
+		conn.Close() // Close broken connections or if pool is full.
+		p.active--
+	}
+}
+
+// isConnBroken checks if the connection is broken (dummy implementation).
+func isConnBroken(conn net.Conn) bool {
+	// Placeholder: Implement a proper check or monitoring logic
+	return false
+}
+
+// createConnection simulates establishing a new network connection (for demonstration).
+func createConnection() net.Conn {
+	return &dummyConn{id: time.Now().UnixNano()}
+}
+
+type dummyConn struct {
+	id int64
+}
+
+// Implement net.Conn interface for dummyConn struct
+func (d *dummyConn) Read(b []byte) (n int, err error)  { return 0, nil }
+func (d *dummyConn) Write(b []byte) (n int, err error) { return 0, nil }
+func (d *dummyConn) Close() error {
+	fmt.Printf("Closing connection %d\n", d.id)
+	return nil
+}
+func (d *dummyConn) LocalAddr() net.Addr                { return nil }
+func (d *dummyConn) RemoteAddr() net.Addr               { return nil }
+func (d *dummyConn) SetDeadline(t time.Time) error      { return nil }
+func (d *dummyConn) SetReadDeadline(t time.Time) error  { return nil }
+func (d *dummyConn) SetWriteDeadline(t time.Time) error { return nil }
+
+// Example usage
+func main() {
+	pool := NewConnectionPool(3)
+	wg := sync.WaitGroup{}
+
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+
+			conn, err := pool.Get()
+			if err != nil {
+				fmt.Printf("Goroutine %d failed to get a connection\n", id)
 				return
 			}
-			start := time.Now()
-			// Simulate some work with a sleep.
+			fmt.Printf("Goroutine %d using connection %d\n", id, conn.(*dummyConn).id)
+
+			// Simulate some work by sleeping
 			time.Sleep(time.Second)
-			log.Info().
-				Int("worker_id", id).
-				Int("task_id", job.ID).
-				Dur("duration", time.Since(start)).
-				Msg("Task completed")
-		}
-	}
-}
 
-func main() {
-	// Set up zerolog for structured logging.
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-
-	// Create a channel to listen for interrupt or terminate signals.
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-
-	// Create a context that will be canceled when a shutdown signal is received.
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Create a WaitGroup for managing goroutines.
-	var wg sync.WaitGroup
-
-	// Number of workers and tasks.
-	numWorkers := 3
-	numTasks := 10
-
-	// Channel for tasks.
-	jobs := make(chan Task, numTasks)
-
-	// Start the workers.
-	for i := 1; i <= numWorkers; i++ {
-		wg.Add(1)
-		go worker(ctx, i, jobs, &wg)
+			pool.Put(conn) // Return the connection to the pool
+		}(i)
 	}
 
-	// Send tasks to the workers.
-	for j := 1; j <= numTasks; j++ {
-		job := Task{ID: j}
-		log.Info().Int("task_id", j).Msg("Queueing task")
-		jobs <- job
-	}
-
-	// Wait for an interruption signal.
-	<-stop
-	log.Info().Msg("Shutdown signal received")
-
-	// Cancel the context to signal goroutines to stop.
-	cancel()
-
-	// Close the jobs channel to prevent any more tasks from being sent.
-	close(jobs)
-
-	// Wait for all workers to complete.
 	wg.Wait()
-
-	log.Info().Msg("All tasks completed and all workers shut down gracefully")
+	fmt.Println("All goroutines finished")
 }

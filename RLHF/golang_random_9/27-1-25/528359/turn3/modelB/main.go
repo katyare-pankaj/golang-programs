@@ -1,96 +1,108 @@
 package main
 
 import (
-	"context"
-	"os"
-	"os/signal"
+	"errors"
+	"fmt"
+	"net"
 	"sync"
-	"syscall"
-	"time"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
-// Task represents a unit of work to be processed by the worker pool.
-type Task struct {
-	ID int
+// ConnectionPool manages a pool of reusable connections.
+type ConnectionPool struct {
+	mu       sync.Mutex
+	cond     *sync.Cond
+	conns    []net.Conn
+	capacity int
+	closed   bool
 }
 
-// worker is a function that processes tasks from the jobs channel and logs the output.
-func worker(id int, jobs <-chan Task, ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
+// NewConnectionPool creates a new pool with the specified capacity.
+func NewConnectionPool(capacity int) *ConnectionPool {
+	p := &ConnectionPool{
+		capacity: capacity,
+		conns:    make([]net.Conn, 0, capacity),
+	}
+	p.cond = sync.NewCond(&p.mu)
+	return p
+}
 
-	for {
-		select {
-		case job, ok := <-jobs:
-			if !ok {
-				// Channel closed, exit worker.
+// Get retrieves a connection from the pool, waiting if necessary.
+func (p *ConnectionPool) Get() (net.Conn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for len(p.conns) == 0 && !p.closed {
+		p.cond.Wait() // Wait for a connection to be available or pool to close.
+	}
+
+	if p.closed {
+		return nil, errors.New("pool is closed")
+	}
+
+	// Take a connection from the slice (LIFO strategy)
+	conn := p.conns[len(p.conns)-1]
+	p.conns = p.conns[:len(p.conns)-1]
+
+	return conn, nil
+}
+
+// Put returns a connection to the pool.
+func (p *ConnectionPool) Put(conn net.Conn) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if len(p.conns) < p.capacity && !p.closed {
+		p.conns = append(p.conns, conn)
+		p.cond.Signal() // Notify one waiting goroutine that a connection is available.
+	} else {
+		conn.Close() // Can't add more or pool is closed, close the connection
+	}
+}
+
+// Close closes the pool and cleans up all connections.
+func (p *ConnectionPool) Close() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.closed = true
+
+	// Close all remaining connections in the pool
+	for _, conn := range p.conns {
+		conn.Close()
+	}
+	p.conns = nil
+
+	p.cond.Broadcast() // Notify all waiting goroutines that the pool is closed
+}
+
+// example usage:
+func main() {
+	pool := NewConnectionPool(5)
+	wg := sync.WaitGroup{}
+
+	// Simulate a task that requires connections
+	task := func(id int) {
+		defer wg.Done()
+		for i := 0; i < 3; i++ {
+			conn, err := pool.Get()
+			if err != nil {
+				fmt.Printf("Goroutine %d: %v\n", id, err)
 				return
 			}
+			fmt.Printf("Goroutine %d using connection %v\n", id, conn)
 
-			start := time.Now()
-			// Simulate some work with a sleep.
-			time.Sleep(time.Second)
-			log.Info().
-				Int("worker_id", id).
-				Int("task_id", job.ID).
-				Dur("duration", time.Since(start)).
-				Msg("Task completed")
-		case <-ctx.Done():
-			// Context canceled, exit worker gracefully.
-			log.Info().Int("worker_id", id).Msg("Received shutdown signal, exiting worker")
-			return
+			pool.Put(conn)
 		}
 	}
-}
 
-func main() {
-	// Set up zerolog for structured logging.
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-
-	// Create a context that can be canceled on a signal.
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Create a WaitGroup for managing goroutines.
-	var wg sync.WaitGroup
-
-	// Number of workers and tasks.
-	numWorkers := 3
-	numTasks := 10
-
-	// Channel for tasks.
-	jobs := make(chan Task, numTasks)
-
-	// Start the workers.
-	for i := 1; i <= numWorkers; i++ {
+	for i := 0; i < 5; i++ {
 		wg.Add(1)
-		go worker(i, jobs, ctx, &wg)
+		go task(i)
 	}
 
-	// Send tasks to the workers.
-	for j := 1; j <= numTasks; j++ {
-		job := Task{ID: j}
-		log.Info().Int("task_id", j).Msg("Queueing task")
-		jobs <- job
-	}
+	// After all tasks are done, close the pool
+	fmt.Println("Closing pool")
+	pool.Close()
 
-	// Close the jobs channel after sending all tasks.
-	close(jobs)
-
-	// Wait for Ctrl+C or SIGTERM signal to initiate shutdown.
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-
-	// Block until signal received.
-	<-c
-
-	// Signal the workers to exit.
-	log.Info().Msg("Received shutdown signal, initiating worker exit...")
-	cancel()
-
-	// Wait for all workers to complete their graceful shutdown.
 	wg.Wait()
-
-	log.Info().Msg("All workers exited gracefully. Application shutting down.")
 }
