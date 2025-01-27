@@ -1,77 +1,94 @@
 package main
 
 import (
-	"bufio"
-	"errors"
-	"fmt"
+	"context"
 	"os"
-	"regexp"
-	"strings"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
-// CustomError is a type that includes additional context about an error
-type CustomError struct {
-	Function string
-	Err      error
+// Task represents a unit of work to be processed by the worker pool.
+type Task struct {
+	ID int
 }
 
-func (e *CustomError) Error() string {
-	return fmt.Sprintf("error in %s: %v", e.Function, e.Err)
-}
+// worker is a function that processes tasks from the jobs channel and logs the output.
+func worker(ctx context.Context, id int, jobs <-chan Task, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-// readInput prompts the user for input and returns the input along with any error
-func readInput() (string, error) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter a list of email addresses separated by commas: ")
-	text, err := reader.ReadString('\n')
-	if err != nil {
-		return "", &CustomError{Function: "readInput", Err: err}
-	}
-	text = strings.TrimSpace(text)
-	return text, nil
-}
-
-// validateEmails splits the input into emails and validates each email
-func validateEmails(input string) ([]string, error) {
-	if input == "" {
-		return nil, &CustomError{Function: "validateEmails", Err: errors.New("input is empty")}
-	}
-
-	emails := strings.Split(input, ",")
-	validEmails := []string{}
-	invalidEmails := []string{}
-
-	emailRegex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
-	re := regexp.MustCompile(emailRegex)
-
-	for _, email := range emails {
-		email = strings.TrimSpace(email)
-		if re.MatchString(email) {
-			validEmails = append(validEmails, email)
-		} else {
-			invalidEmails = append(invalidEmails, email)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Info().Int("worker_id", id).Msg("Worker shutting down")
+			return
+		case job, ok := <-jobs:
+			if !ok {
+				log.Info().Int("worker_id", id).Msg("No more jobs, worker exiting")
+				return
+			}
+			start := time.Now()
+			// Simulate some work with a sleep.
+			time.Sleep(time.Second)
+			log.Info().
+				Int("worker_id", id).
+				Int("task_id", job.ID).
+				Dur("duration", time.Since(start)).
+				Msg("Task completed")
 		}
 	}
-
-	if len(invalidEmails) > 0 {
-		return validEmails, &CustomError{Function: "validateEmails", Err: fmt.Errorf("invalid emails: %v", invalidEmails)}
-	}
-
-	return validEmails, nil
 }
 
 func main() {
-	input, err := readInput()
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
+	// Set up zerolog for structured logging.
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	// Create a channel to listen for interrupt or terminate signals.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	// Create a context that will be canceled when a shutdown signal is received.
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Create a WaitGroup for managing goroutines.
+	var wg sync.WaitGroup
+
+	// Number of workers and tasks.
+	numWorkers := 3
+	numTasks := 10
+
+	// Channel for tasks.
+	jobs := make(chan Task, numTasks)
+
+	// Start the workers.
+	for i := 1; i <= numWorkers; i++ {
+		wg.Add(1)
+		go worker(ctx, i, jobs, &wg)
 	}
 
-	emails, err := validateEmails(input)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
+	// Send tasks to the workers.
+	for j := 1; j <= numTasks; j++ {
+		job := Task{ID: j}
+		log.Info().Int("task_id", j).Msg("Queueing task")
+		jobs <- job
 	}
 
-	fmt.Println("Valid emails:", emails)
+	// Wait for an interruption signal.
+	<-stop
+	log.Info().Msg("Shutdown signal received")
+
+	// Cancel the context to signal goroutines to stop.
+	cancel()
+
+	// Close the jobs channel to prevent any more tasks from being sent.
+	close(jobs)
+
+	// Wait for all workers to complete.
+	wg.Wait()
+
+	log.Info().Msg("All tasks completed and all workers shut down gracefully")
 }
