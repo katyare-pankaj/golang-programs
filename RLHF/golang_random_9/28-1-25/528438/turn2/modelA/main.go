@@ -1,67 +1,45 @@
 package main
 
 import (
-	"os"
+	"fmt"
+	"math/rand"
 	"sync"
 	"time"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
-// Task represents a unit of work to be processed by the worker pool.
-type Task struct {
-	ID int
-}
+// Worker function that processes tasks from the tasks channel
+func worker(id int, tasks <-chan int, wg *sync.WaitGroup) {
+	defer wg.Done() // Notify WaitGroup on completion of the worker
 
-// worker is a function that processes tasks from the jobs channel and logs the output.
-func worker(id int, jobs <-chan Task, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	for job := range jobs {
-		start := time.Now()
-		// Simulate some work with a sleep.
-		time.Sleep(time.Second)
-		log.Info().
-			Int("worker_id", id).
-			Int("task_id", job.ID).
-			Dur("duration", time.Since(start)).
-			Msg("Task completed")
+	for task := range tasks {
+		// Simulating task processing by sleeping for a random time
+		fmt.Printf("Worker %d started task %d\n", id, task)
+		time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
+		fmt.Printf("Worker %d finished task %d\n", id, task)
 	}
 }
 
 func main() {
-	// Set up zerolog for structured logging.
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	const numWorkers = 3
+	const numTasks = 10
 
-	// Create a WaitGroup for managing goroutines.
+	// Create a channel for tasks
+	tasks := make(chan int, numTasks)
 	var wg sync.WaitGroup
 
-	// Number of workers and tasks.
-	numWorkers := 3
-	numTasks := 10
-
-	// Channel for tasks.
-	jobs := make(chan Task, numTasks)
-
-	// Start the workers.
+	// Start a fixed number of workers
 	for i := 1; i <= numWorkers; i++ {
 		wg.Add(1)
-		go worker(i, jobs, &wg)
+		go worker(i, tasks, &wg)
 	}
 
-	// Send tasks to the workers.
-	for j := 1; j <= numTasks; j++ {
-		job := Task{ID: j}
-		log.Info().Int("task_id", j).Msg("Queueing task")
-		jobs <- job
+	// Generate tasks and send them to the workers
+	for i := 1; i <= numTasks; i++ {
+		tasks <- i
 	}
+	close(tasks) // Close the tasks channel to signal workers no more tasks are coming
 
-	// Close the jobs channel to indicate that no more tasks will be sent.
-	close(jobs)
-
-	// Wait for all workers to complete.
+	// Wait for all workers to complete
 	wg.Wait()
-
-	log.Info().Msg("All tasks completed")
+	fmt.Println("All tasks have been processed.")
 }
