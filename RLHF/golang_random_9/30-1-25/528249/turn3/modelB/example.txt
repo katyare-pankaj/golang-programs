@@ -1,0 +1,8 @@
+This line will be kept.
+The next line will also be kept.
+Appending this line.
+Adding another line.
+This line will be kept.
+The next line will also be kept.
+Appending this line.
+Adding another line.
