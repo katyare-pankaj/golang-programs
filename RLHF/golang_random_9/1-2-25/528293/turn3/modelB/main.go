@@ -2,104 +2,45 @@ package main
 
 import (
 	"fmt"
-	"sync"
+	"time"
 )
 
-// Define a callback function type
-type DataProcessor func(int) int
+func createCachedFunction(f func(int) int, cacheSize int) func(int) int {
+	cache := make(map[int]int)
+	nextKey := 0
 
-// Map to store dynamic callbacks
-var callbacks = map[string]DataProcessor{}
-var callbackMutex sync.RWMutex
-
-// ProcessData reads data from the input channel, applies the callback function,
-// and writes the result to the corresponding output channel. It runs concurrently using goroutines.
-func ProcessData(input <-chan int, output chan<- int, callbackName string, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for data := range input {
-		callbackMutex.RLock()
-		processor := callbacks[callbackName]
-		callbackMutex.RUnlock()
-		if processor == nil {
-			fmt.Println("Error: No callback function found for", callbackName)
-			continue
+	return func(n int) int {
+		if result, exists := cache[n]; exists {
+			return result
 		}
-		result := processor(data)
-		output <- result
+
+		result := f(n)
+		cache[n] = result
+
+		if len(cache) > cacheSize {
+			delete(cache, nextKey)
+			nextKey++
+		}
+
+		return result
 	}
 }
 
+func expensiveFunction(n int) int {
+	fmt.Printf("Computing %d^2...\n", n)
+	time.Sleep(1 * time.Second)
+	return n * n
+}
+
 func main() {
-	// Define input channel
-	input := make(chan int)
+	cachedFunc := createCachedFunction(expensiveFunction, 3) // Cache size of 3
 
-	// Define output channels for each transformation (no need for slice now)
-	outputDouble := make(chan int)
-	outputSquare := make(chan int)
-
-	// Number of worker goroutines
-	numWorkers := 2
-
-	// WaitGroup to wait for all goroutines to finish
-	var wg sync.WaitGroup
-	wg.Add(numWorkers)
-
-	// Register initial callbacks
-	registerCallback("double", double)
-	registerCallback("square", square)
-
-	// Start worker goroutines
-	go ProcessData(input, outputDouble, "double", &wg)
-	go ProcessData(input, outputSquare, "square", &wg)
-
-	// Generate some sample data to process
-	go func() {
-		defer close(input)
-		for i := 1; i <= 10; i++ {
-			input <- i
-		}
-	}()
-
-	// Start a goroutine to print results from each output channel
-	go func() {
-		for result := range outputDouble {
-			fmt.Println("Result:", result)
-		}
-	}()
-
-	go func() {
-		for result := range outputSquare {
-			fmt.Println("Result (Squared):", result)
-		}
-	}()
-
-	// Register a new callback at runtime
-	go func() {
-		callbacks["cube"] = cube
-	}()
-
-	// Wait for all processing to complete
-	wg.Wait()
-	close(outputDouble)
-	close(outputSquare)
-	fmt.Println("Processing completed.")
-}
-
-// Sample callback functions: doubling and squaring
-func double(data int) int {
-	return data * 2
-}
-
-func square(data int) int {
-	return data * data
-}
-
-func cube(data int) int {
-	return data * data * data
-}
-
-func registerCallback(name string, processor DataProcessor) {
-	callbackMutex.Lock()
-	defer callbackMutex.Unlock()
-	callbacks[name] = processor
+	fmt.Println(cachedFunc(5)) // Output: Computing 5^2... 25
+	fmt.Println(cachedFunc(3)) // Output: Computing 3^2... 9
+	fmt.Println(cachedFunc(5)) // Output: 25 (from cache)
+	fmt.Println(cachedFunc(4)) // Output: Computing 4^2... 16
+	fmt.Println(cachedFunc(2)) // Output: Computing 2^2... 4
+	fmt.Println(cachedFunc(4)) // Output: 16 (from cache)
+	fmt.Println(cachedFunc(6)) // Output: Computing 6^2... 36
+	fmt.Println(cachedFunc(5)) // Output: Computing 5^2... 25
 }
