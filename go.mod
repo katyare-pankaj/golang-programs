@@ -312,6 +312,7 @@ require (
 	github.com/go-playground/assert v1.2.1
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.11.5
+	github.com/go-resty/resty/v2 v2.16.5
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/gofrs/uuid v4.4.0+incompatible
