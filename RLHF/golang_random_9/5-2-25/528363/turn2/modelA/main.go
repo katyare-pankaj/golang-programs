@@ -1,83 +1,64 @@
+// main.go
 package main
 
 import (
 	"fmt"
+	"go-programs/RLHF/golang_random_9/5-2-25/528363/turn2/modelA/textprocessor"
+	"io/ioutil"
 	"log"
-	"net/http"
-	"sync"
-	"time"
+	"os"
+	"plugin"
 )
 
-const (
-	url         = "http://localhost:8080/benchmark" // Target URL
-	numRequests = 100                               // Total number of requests
-	concurrency = 10                                // Number of concurrent workers
-)
-
-func main() {
-	var wg sync.WaitGroup
-	responseTimes := make([]time.Duration, numRequests)
-	requestsPerWorker := numRequests / concurrency
-
-	// Channel for collecting response times
-	results := make(chan time.Duration, numRequests)
-
-	wg.Add(concurrency)
-	for i := 0; i < concurrency; i++ {
-		go func() {
-			defer wg.Done()
-			for j := 0; j < requestsPerWorker; j++ {
-				start := time.Now()
-				if err := sendRequest(); err != nil {
-					log.Printf("Request failed: %v", err)
-					continue
-				}
-				duration := time.Since(start)
-				results <- duration
-			}
-		}()
+// LoadPlugin dynamically loads a plugin by its path
+func LoadPlugin(pluginPath string) (textprocessor.TextProcessor, error) {
+	p, err := plugin.Open(pluginPath)
+	if err != nil {
+		return nil, fmt.Errorf("error opening plugin: %w", err)
 	}
 
-	// Wait for all goroutines to finish
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	// Collect all response times
-	i := 0
-	for duration := range results {
-		responseTimes[i] = duration
-		i++
+	symTextProcessor, err := p.Lookup("TextProcessorPlugin")
+	if err != nil {
+		return nil, fmt.Errorf("error looking up TextProcessorPlugin: %w", err)
 	}
 
-	// Calculate and display statistics
-	totalDuration := time.Duration(0)
-	for _, duration := range responseTimes {
-		totalDuration += duration
+	var processor textprocessor.TextProcessor
+	processor, ok := symTextProcessor.(textprocessor.TextProcessor)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type from module symbol")
 	}
-	averageDuration := totalDuration / time.Duration(len(responseTimes))
 
-	fmt.Printf("Total Requests: %d\n", numRequests)
-	fmt.Printf("Concurrency Level: %d\n", concurrency)
-	fmt.Printf("Average Response Time: %v\n", averageDuration)
+	return processor, nil
 }
 
-func sendRequest() error {
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return err
+func main() {
+	if len(os.Args) != 4 {
+		log.Fatalf("Usage: %s <plugin-path> <input-file> <output-file>\n", os.Args[0])
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+	pluginPath := os.Args[1]
+	inputFile := os.Args[2]
+	outputFile := os.Args[3]
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	processor, err := LoadPlugin(pluginPath)
+	if err != nil {
+		log.Fatalf("Failed to load plugin: %v", err)
 	}
-	return nil
+
+	inputData, err := ioutil.ReadFile(inputFile)
+	if err != nil {
+		log.Fatalf("Error reading input file: %v", err)
+	}
+
+	processedText, err := processor.Process(string(inputData))
+	if err != nil {
+		log.Fatalf("Error processing text: %v", err)
+	}
+
+	err = ioutil.WriteFile(outputFile, []byte(processedText), 0644)
+	if err != nil {
+		log.Fatalf("Error writing to output file: %v", err)
+	}
+
+	fmt.Println("Text processing completed successfully.")
 }
