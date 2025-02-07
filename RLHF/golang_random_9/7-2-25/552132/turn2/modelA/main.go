@@ -3,37 +3,78 @@ package main
 import (
 	"fmt"
 	"sync"
-	"time"
 )
 
-// Function that represents a task to be done by a goroutine
-func worker(id int, wg *sync.WaitGroup) {
-	defer wg.Done() // Decrements the counter when the goroutine completes
+// SafeMap encapsulates a map and uses a mutex to manage concurrent access.
+type SafeMap struct {
+	sync.Mutex
+	internalMap map[string]int
+}
 
-	fmt.Printf("Worker %d starting\n", id)
+// NewSafeMap initializes a SafeMap.
+func NewSafeMap() *SafeMap {
+	return &SafeMap{
+		internalMap: make(map[string]int),
+	}
+}
 
-	// Simulate some work with sleep
-	time.Sleep(time.Second)
+// Set safely sets a key-value pair in the map.
+func (sm *SafeMap) Set(key string, value int) {
+	sm.Lock()
+	defer sm.Unlock()
+	sm.internalMap[key] = value
+}
 
-	fmt.Printf("Worker %d done\n", id)
+// Get safely retrieves a value from the map by key.
+func (sm *SafeMap) Get(key string) (int, bool) {
+	sm.Lock()
+	defer sm.Unlock()
+	value, exists := sm.internalMap[key]
+	return value, exists
+}
+
+// Delete safely removes a key from the map.
+func (sm *SafeMap) Delete(key string) {
+	sm.Lock()
+	defer sm.Unlock()
+	delete(sm.internalMap, key)
 }
 
 func main() {
-	// Create a WaitGroup
 	var wg sync.WaitGroup
+	safeMap := NewSafeMap()
 
-	// Define the number of goroutines
-	numWorkers := 3
+	// Function to perform concurrent map operations
+	worker := func(id int) {
+		defer wg.Done()
+		key := fmt.Sprintf("key%d", id)
 
-	// Launch goroutines
-	for i := 1; i <= numWorkers; i++ {
-		wg.Add(1) // Increment the WaitGroup counter
+		// Set a value
+		safeMap.Set(key, id)
+		fmt.Printf("Worker %d set %s to %d\n", id, key, id)
 
-		// Start a worker goroutine
-		go worker(i, &wg)
+		// Get the value
+		if value, exists := safeMap.Get(key); exists {
+			fmt.Printf("Worker %d got %d for %s\n", id, value, key)
+		}
+
+		// Delete the key
+		safeMap.Delete(key)
+		fmt.Printf("Worker %d deleted %s\n", id, key)
 	}
 
-	// Wait for all goroutines to finish
+	// Start multiple goroutines to simulate concurrent access
+	numWorkers := 10
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go worker(i)
+	}
+
+	// Wait for all worker goroutines to finish
 	wg.Wait()
-	fmt.Println("All workers completed")
+
+	fmt.Println("Final map state:")
+	for key, value := range safeMap.internalMap {
+		fmt.Printf("%s: %d\n", key, value)
+	}
 }
