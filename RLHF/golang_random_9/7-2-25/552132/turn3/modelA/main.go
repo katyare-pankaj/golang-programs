@@ -6,26 +6,65 @@ import (
 	"time"
 )
 
-func worker(name string, duration time.Duration, wg *sync.WaitGroup) {
-	// Signal that the goroutine has finished executing
-	defer wg.Done()
+// SafeSlice encapsulates a slice and uses RWMutex for concurrent access.
+type SafeSlice struct {
+	sync.RWMutex
+	data []int
+}
 
-	fmt.Printf("%s starting\n", name)
-	time.Sleep(duration) // Simulate work by sleeping
-	fmt.Printf("%s finished\n", name)
+// Add safely appends a value to the slice.
+func (s *SafeSlice) Add(value int) {
+	s.Lock()
+	defer s.Unlock()
+	s.data = append(s.data, value)
+}
+
+// Get safely retrieves a copy of the slice's data.
+func (s *SafeSlice) Get() []int {
+	s.RLock()
+	defer s.RUnlock()
+	// Return a copy of the slice to avoid race conditions
+	copyData := make([]int, len(s.data))
+	copy(copyData, s.data)
+	return copyData
+}
+
+func writer(id int, wg *sync.WaitGroup, sharedSlice *SafeSlice) {
+	defer wg.Done()
+	for i := 0; i < 5; i++ {
+		sharedSlice.Add(id*10 + i)
+		fmt.Printf("Writer %d added value %d\n", id, id*10+i)
+		time.Sleep(time.Millisecond * 100) // Simulate work
+	}
+}
+
+func reader(id int, wg *sync.WaitGroup, sharedSlice *SafeSlice) {
+	defer wg.Done()
+	for i := 0; i < 5; i++ {
+		data := sharedSlice.Get()
+		fmt.Printf("Reader %d read data: %v\n", id, data)
+		time.Sleep(time.Millisecond * 150) // Simulate work
+	}
 }
 
 func main() {
 	var wg sync.WaitGroup
+	sharedSlice := &SafeSlice{data: []int{}}
 
-	// We have two goroutines to wait for
-	wg.Add(2)
+	// Launch writers
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go writer(i, &wg, sharedSlice)
+	}
 
-	go worker("Worker 1", 3*time.Second, &wg) // Task that takes 3 seconds
-	go worker("Worker 2", 1*time.Second, &wg) // Task that takes 1 second
+	// Launch readers
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go reader(i, &wg, sharedSlice)
+	}
 
-	// Wait for both goroutines to finish
+	// Wait for all goroutines to complete
 	wg.Wait()
 
-	fmt.Println("Both workers have completed their tasks.")
+	fmt.Println("Final slice contents:", sharedSlice.Get())
 }
