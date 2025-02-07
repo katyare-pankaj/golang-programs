@@ -2,30 +2,59 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
-	"time"
 )
 
+func ParallelMap[T any, U any](input []T, fn func(T) U, numWorkers int) []U {
+	output := make([]U, len(input))
+	chunks := make([][]T, numWorkers)
+	chunkSize := (len(input) + numWorkers - 1) / numWorkers
+	for i := 0; i < len(input); i += chunkSize {
+		end := i + chunkSize
+		if end > len(input) {
+			end = len(input)
+		}
+		chunks[i/chunkSize] = input[i:end]
+	}
+	resultCh := make(chan map[int]U, numWorkers)
+	wg := sync.WaitGroup{}
+	wg.Add(numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		go func(chunk []T, workerId int) {
+			defer wg.Done()
+			results := make(map[int]U)
+			for j, v := range chunk {
+				results[j+workerId*chunkSize] = fn(v)
+			}
+			resultCh <- results
+		}(chunks[i], i)
+	}
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+	for resultMap := range resultCh {
+		for k, v := range resultMap {
+			output[k] = v
+		}
+	}
+	return output
+}
+
 func main() {
-	var wg sync.WaitGroup
+	numWorkers := runtime.NumCPU()
+	fmt.Println("Using", numWorkers, "workers")
 
-	// Add a wait group for each goroutine we're starting.
-	wg.Add(2)
+	// Example usage with numbers.
+	nums := make([]int, 10000000)
+	for i := range nums {
+		nums[i] = i + 1
+	}
 
-	go func() {
-		defer wg.Done()
-		time.Sleep(2 * time.Second) // Simulate work
-		fmt.Println("Worker 1 completed.")
-	}()
+	squared := ParallelMap(nums, func(n int) int { return n * n }, numWorkers)
+	fmt.Println("First 10 squared values:", squared[:10])
 
-	go func() {
-		defer wg.Done()
-		time.Sleep(1 * time.Second) // Simulate work
-		fmt.Println("Worker 2 completed.")
-	}()
-
-	// Wait for all goroutines to finish before exiting the main function.
-	fmt.Println("Waiting for workers to complete...")
-	wg.Wait()
-	fmt.Println("All workers completed. Exiting main function.")
+	sum := Reduce(squared, 0, func(a, b int) int { return a + b })
+	fmt.Println("Sum of all squared values:", sum)
 }
