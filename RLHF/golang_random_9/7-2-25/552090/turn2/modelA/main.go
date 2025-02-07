@@ -1,69 +1,51 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
-	"os"
 	"sync"
+	"time"
 )
 
-// For demonstration we'd use a mutex for state
-var mu sync.Mutex
-
-type Request struct {
-	Message string `json:"message"`
+// DeliveryOrder represents a delivery order with an ID and a delivery distance.
+type DeliveryOrder struct {
+	ID       int
+	Distance int // in kilometers
 }
 
-type Response struct {
-	ProcessedMessage string `json:"processed_message"`
-}
+// ProcessOrder simulates processing a delivery order.
+func ProcessOrder(order DeliveryOrder, wg *sync.WaitGroup) {
+	defer wg.Done() // Signal that this goroutine is done
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	// Defer close of request body to ensure cleanup
-	defer r.Body.Close()
+	// Simulate processing time with sleep
+	time.Sleep(time.Millisecond * 100)
 
-	// Mutex to ensure state consistency if necessary
-	mu.Lock()
-	defer mu.Unlock()
-
-	var req Request
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		return
-	}
-
-	// Open a file to write the results
-	file, err := os.OpenFile("output.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		http.Error(w, "Could not open file", http.StatusInternalServerError)
-		return
-	}
-	// Defer file closing
-	defer file.Close()
-
-	processedMessage := fmt.Sprintf("Processed: %s", req.Message)
-	response := Response{ProcessedMessage: processedMessage}
-
-	// Write response to file
-	if _, err := file.WriteString(processedMessage + "\n"); err != nil {
-		http.Error(w, "Could not write to file", http.StatusInternalServerError)
-		return
-	}
-
-	// Respond with JSON
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	// Example processing: Just printing the order details
+	fmt.Printf("Processed order ID %d: Delivery distance %d km\n", order.ID, order.Distance)
 }
 
 func main() {
-	http.HandleFunc("/handler", handler)
-
-	port := "8080"
-	fmt.Printf("Server running locally on http://localhost:%s/handler\n", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	// Example list of delivery orders
+	deliveryOrders := []DeliveryOrder{
+		{ID: 1, Distance: 50},
+		{ID: 2, Distance: 75},
+		{ID: 3, Distance: 120},
+		{ID: 4, Distance: 30},
+		{ID: 5, Distance: 90},
 	}
+
+	// Create a WaitGroup
+	var wg sync.WaitGroup
+
+	// Add the number of orders to process to the WaitGroup's counter
+	wg.Add(len(deliveryOrders))
+
+	// Launch a goroutine to process each delivery order
+	for _, order := range deliveryOrders {
+		// Pass the WaitGroup by reference
+		go ProcessOrder(order, &wg)
+	}
+
+	// Wait for all goroutines to finish processing
+	wg.Wait()
+	fmt.Println("All delivery orders processed.")
 }
