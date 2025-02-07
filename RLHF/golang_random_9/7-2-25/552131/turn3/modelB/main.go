@@ -2,31 +2,74 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
-	"time"
 )
 
-func task1(wg *sync.WaitGroup) {
-	fmt.Println("Task 1 started...")
-	time.Sleep(3 * time.Second) // Simulate longer task
-	fmt.Println("Task 1 completed.")
-	wg.Done()
-}
+// ConcurrentMap applies a transformation function to each element of a slice concurrently.
+func ConcurrentMap[T any, U any](input []T, fn func(T) U) []U {
+	numCPUs := runtime.NumCPU()
+	inputLen := len(input)
+	output := make([]U, inputLen)
+	chunkSize := (inputLen + numCPUs - 1) / numCPUs // Calculate chunk size
+	results := make(chan U, inputLen)
 
-func task2(wg *sync.WaitGroup) {
-	fmt.Println("Task 2 started...")
-	time.Sleep(2 * time.Second) // Simulate shorter task
-	fmt.Println("Task 2 completed.")
-	wg.Done()
+	var wg sync.WaitGroup
+
+	// Worker function to process chunks
+	worker := func(start, end int) {
+		defer wg.Done()
+		for i := start; i < end; i++ {
+			results <- fn(input[i])
+		}
+	}
+
+	// Launch workers
+	for i := 0; i < numCPUs; i++ {
+		start := i * chunkSize
+		end := start + chunkSize
+		if end > inputLen {
+			end = inputLen
+		}
+		wg.Add(1)
+		go worker(start, end)
+	}
+
+	// Collect results from workers
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for i := range results {
+		output[i] = i
+	}
+
+	return output
 }
 
 func main() {
-	var wg sync.WaitGroup
-	wg.Add(2)
+	// Example usage
+	nums := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
-	go task1(&wg)
-	go task2(&wg)
+	// Concurrently square each number
+	squared := ConcurrentMap(nums, func(n int) int { return n * n })
+	fmt.Println("Squared:", squared)
 
-	wg.Wait() // Main goroutine will wait here until both tasks finish
-	fmt.Println("All tasks completed.")
+	// Verify the result
+	expected := []int{1, 4, 9, 16, 25, 36, 49, 64, 81, 100}
+	fmt.Println("Correctness:", equal(squared, expected))
+}
+
+// Helper function to check equality of two slices of integers
+func equal(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
